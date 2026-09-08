@@ -18,6 +18,32 @@ data class Holding(val id: String, val name: String, val category: String, val i
 /** A grant from `visa_benefits`: what a [holding] document confers at [destination]. */
 data class Benefit(val holding: String, val destination: String, val type: String, val days: Int?)
 
+/** A per-destination stay/entry rule from `stay_rules`: the window and entry type. */
+data class StayRule(
+    val zoneName: String,
+    val countries: Set<String>,
+    val windowType: String, // "rolling" | "per-entry"
+    val windowDays: Int?,
+    val windowPeriodDays: Int?,
+    val multipleEntry: Boolean,
+    val nationalities: Set<String>, // "*" or an ISO2 or a bloc code (e.g. "EU-EEA")
+    val note: String?,
+) {
+    /** Human summary, e.g. "Multiple entry - 90 in 180 (rolling)". */
+    fun summary(): String {
+        val entry = if (multipleEntry) "Multiple entry" else "Single entry"
+        val window = when (windowType) {
+            "rolling" -> when {
+                windowDays != null && windowPeriodDays != null -> "$windowDays in $windowPeriodDays (rolling)"
+                windowDays != null -> "$windowDays (rolling)"
+                else -> "rolling"
+            }
+            else -> if (windowDays != null) "$windowDays per entry" else "per entry"
+        }
+        return "$entry - $window"
+    }
+}
+
 /** In-memory snapshot of the whole VisaDB, loaded once and read by the pure [com.example.visa_vole.domain.AccessModel]. */
 data class WorldData(
     val countries: Map<String, Country>,
@@ -25,6 +51,7 @@ data class WorldData(
     val regimes: List<Regime>,
     val holdings: Map<String, Holding>,
     val benefits: Map<String, List<Benefit>>,
+    val stayRules: List<StayRule> = emptyList(),
 ) {
     /**
      * The best mobility bloc for the given [isos]: a bloc containing every selected country,
@@ -56,8 +83,7 @@ data class WorldData(
     fun holdingFor(countries: Collection<String>, kind: String): String? {
         val cats = when (kind) {
             "residence" -> setOf("residency", "long_term_visa")
-            "visa" -> setOf("short_term_visa", "long_term_visa")
-            else -> setOf("special_permit", "long_term_visa") // permit
+            else -> setOf("short_term_visa", "long_term_visa", "special_permit") // "visa" + the APEC card
         }
         val coverage = { h: Holding ->
             blocHoldings[h.issuingCountry]
@@ -69,5 +95,32 @@ data class WorldData(
             .sortedByDescending { coverage(it).count { c -> c in countries } }
             .firstOrNull { coverage(it).any { c -> c in countries } }
             ?.id
+    }
+
+    /** Members of the EU/EEA/EFTA freedom bloc — the "EU-EEA" nationality code used in `stay_rules`. */
+    val euEeaMembers: Set<String> by lazy {
+        regimes.firstOrNull { it.id == "eu-eea-efta" }?.members?.toSet() ?: emptySet()
+    }
+
+    /**
+     * The best-matching stay/entry rule for [dest] given the traveller's [passports].
+     *
+     * A rule applies to a destination when [dest] is in its [StayRule.countries]. Among those, the
+     * most specific nationality match wins: a named passport (3) beats the EU-EEA bloc code (2),
+     * which beats the "any" wildcard (1). Returns null when no rule names the destination or none
+     * matches the traveller's nationality.
+     */
+    fun stayRuleFor(dest: String, passports: Set<String>): StayRule? {
+        val cands = stayRules.filter { dest in it.countries }
+        if (cands.isEmpty()) return null
+        val hasEuEea = passports.any { it in euEeaMembers }
+        fun score(nats: Set<String>): Int = when {
+            passports.any { it in nats } -> 3 // a named passport
+            "EU-EEA" in nats && hasEuEea -> 2 // the EU-EEA bloc code
+            "*" in nats -> 1 // any nationality
+            else -> 0
+        }
+        return cands.maxByOrNull { score(it.nationalities) }
+            ?.takeIf { score(it.nationalities) > 0 }
     }
 }

@@ -18,6 +18,7 @@ class VisaRepository(private val db: VisaDb) {
             regimes = loadRegimes(conn),
             holdings = loadHoldings(conn),
             benefits = loadBenefits(conn),
+            stayRules = loadStayRules(conn),
         )
     }
 
@@ -74,5 +75,35 @@ class VisaRepository(private val db: VisaDb) {
             }
         }
         return out
+    }
+
+    private fun loadStayRules(c: android.database.sqlite.SQLiteDatabase): List<StayRule> {
+        val out = mutableListOf<StayRule>()
+        c.rawQuery(
+            "SELECT zone_name, countries, window_type, window_days, window_period_days, multiple_entry, nationalities, note FROM stay_rules",
+            null,
+        ).use { cur ->
+            while (cur.moveToNext()) {
+                out.add(
+                    StayRule(
+                        zoneName = cur.getString(0) ?: "",
+                        countries = jsonSet(cur.getString(1)),
+                        windowType = cur.getString(2) ?: "",
+                        windowDays = if (cur.isNull(3)) null else cur.getInt(3),
+                        windowPeriodDays = if (cur.isNull(4)) null else cur.getInt(4),
+                        multipleEntry = cur.getInt(5) != 0,
+                        nationalities = jsonSet(cur.getString(6)),
+                        note = cur.getString(7),
+                    ),
+                )
+            }
+        }
+        return out
+    }
+
+    private fun jsonSet(json: String?): Set<String> {
+        if (json == null) return emptySet()
+        val arr = JSONArray(json)
+        return (0 until arr.length()).map { arr.getString(it) }.toSet()
     }
 }

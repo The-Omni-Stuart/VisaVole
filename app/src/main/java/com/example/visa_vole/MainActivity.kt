@@ -209,9 +209,12 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
                     access = s.access[selected],
                     breakdown = AccessModel.breakdownFor(selected, s.docs, s.world),
                     onDismiss = { pick(null) },
+                    isHome = selected in s.homeCountries,
+                    homePassport = if (selected in s.homeCountries) s.world.countries[selected]?.name else null,
+                    staySummary = if (selected in s.homeCountries) null else s.world.stayRuleFor(selected, s.homeCountries)?.summary(),
                 )
             } else {
-                LegendRow(s.access.values.groupBy { it.level }.mapValues { it.value.size })
+                LegendRow(s.access.values.groupBy { it.level }.mapValues { it.value.size }, s.homeCountries.size)
             }
         }
         if (query.isNotBlank() && matches.isNotEmpty()) {
@@ -260,7 +263,7 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit) {
 }
 
 @Composable
-private fun LegendRow(counts: Map<AccessLevel, Int>) {
+private fun LegendRow(counts: Map<AccessLevel, Int>, homeCount: Int = 1) {
     val levels = listOf(
         AccessLevel.FREEDOM, AccessLevel.RESIDENCE, AccessLevel.VISA_FREE, AccessLevel.COVERED,
         AccessLevel.ETA, AccessLevel.E_VISA, AccessLevel.VISA_REQUIRED, AccessLevel.REFUSED,
@@ -281,7 +284,10 @@ private fun LegendRow(counts: Map<AccessLevel, Int>) {
                         .background(HOME),
                 )
                 Spacer(Modifier.width(4.dp))
-                Text("Your country", style = MaterialTheme.typography.labelSmall)
+                Text(
+                    if (homeCount > 1) "Your countries $homeCount" else "Your country",
+                    style = MaterialTheme.typography.labelSmall,
+                )
             }
             levels.forEach { lvl ->
                 Row(verticalAlignment = Alignment.CenterVertically) {

@@ -60,7 +60,8 @@ private fun Document.summary(regimes: List<Regime>): String = when (val k = kind
     is DocKind.Holding -> k.holdingId
     is DocKind.Custom -> {
         val bloc = k.blocId?.let { id -> " · bloc ${regimes.firstOrNull { it.id == id }?.name ?: id}" } ?: ""
-        "${k.kind} · ${k.countries.size} countries$bloc"
+        val entry = k.entryType?.let { " · ${if (it == "single") "single" else "multiple"} entry" } ?: ""
+        "${k.kind} · ${k.countries.size} countries$bloc$entry"
     }
 }
 
@@ -103,7 +104,9 @@ fun DocumentsScreen(
                         Column(Modifier.weight(1f)) {
                             Text(doc.label, style = MaterialTheme.typography.titleSmall)
                             Text(
-                                doc.summary(ready.world.regimes) + (doc.expiry?.let { " · exp $it" } ?: ""),
+                                doc.summary(ready.world.regimes) +
+                                    (doc.validFrom?.let { " · from $it" } ?: "") +
+                                    (doc.expiry?.let { " · to $it" } ?: ""),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -129,7 +132,6 @@ private enum class Mode { PASSPORT, CUSTOM }
 private enum class CustomKind(val label: String, val kind: String) {
     RESIDENCE("Residence", "residence"),
     VISA("Visa", "visa"),
-    PERMIT("Permit", "permit"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -147,7 +149,9 @@ fun AddDocumentDialog(
     var customIso by remember { mutableStateOf<Set<String>>(emptySet()) }
     var customBlocChoice by remember { mutableStateOf<String?>(null) } // null=auto, ""=none, else regime id
     var holdingChoice by remember { mutableStateOf<String?>(null) } // null=auto, ""=none, else holding id
+    var entryType by remember { mutableStateOf("multiple") } // "single" | "multiple" (visa only)
     var expiryDate by remember { mutableStateOf<Long?>(null) }
+    var validFromDate by remember { mutableStateOf<Long?>(null) }
 
     val inferredBloc = world.mobilityBlocFor(customIso)
     val effectiveBloc: String? = when (customBlocChoice) {
@@ -172,18 +176,21 @@ fun AddDocumentDialog(
         Mode.CUSTOM -> customIso.isNotEmpty()
     }
     val expiryOrNull = expiryDate?.let { it.toUtcIsoDate() }
+    val validFromOrNull = validFromDate?.let { it.toUtcIsoDate() }
 
     fun build(): Document {
         val exp = expiryOrNull
+        val vfrom = validFromOrNull
         return when (mode) {
             Mode.PASSPORT -> {
                 val iso = passportIso!!
-                Document(UUID.randomUUID().toString(), "Passport · ${countries[iso]?.name ?: iso}", DocKind.Passport(iso), null, exp)
+                Document(UUID.randomUUID().toString(), "Passport · ${countries[iso]?.name ?: iso}", DocKind.Passport(iso), null, exp, vfrom)
             }
             Mode.CUSTOM -> {
                 val names = customIso.joinToString(", ") { countries[it]?.name ?: it }.take(80)
                 val typeSuffix = effectiveHolding?.let { id -> " (${world.holdings[id]?.name ?: id})" } ?: ""
-                Document(UUID.randomUUID().toString(), "${customKind.label}: $names$typeSuffix", DocKind.Custom(customIso, effectiveBloc, customKind.kind, effectiveHolding), null, exp)
+                val entry = if (customKind.kind == "visa") entryType else null
+                Document(UUID.randomUUID().toString(), "${customKind.label}: $names$typeSuffix", DocKind.Custom(customIso, effectiveBloc, customKind.kind, effectiveHolding, entry), null, exp, vfrom)
             }
         }
     }
@@ -278,15 +285,43 @@ fun AddDocumentDialog(
                                 )
                             }
                         }
+                        if (customKind == CustomKind.VISA) {
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilterChip(selected = entryType == "single", onClick = { entryType = "single" }, label = { Text("Single entry") })
+                                FilterChip(selected = entryType == "multiple", onClick = { entryType = "multiple" }, label = { Text("Multiple entry") })
+                            }
+                        }
                     }
                 }
 
                 Spacer(Modifier.height(16.dp))
+                var showValidFromPicker by remember { mutableStateOf(false) }
+                OutlinedButton(onClick = { showValidFromPicker = true }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.DateRange, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(validFromDate?.let { it.toUtcIsoDate() } ?: "Valid from (optional)")
+                }
+                if (showValidFromPicker) {
+                    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = validFromDate)
+                    DatePickerDialog(
+                        onDismissRequest = { showValidFromPicker = false },
+                        confirmButton = {
+                            TextButton(onClick = { validFromDate = datePickerState.selectedDateMillis; showValidFromPicker = false }) { Text("OK") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { validFromDate = null; showValidFromPicker = false }) { Text("Clear") }
+                        },
+                    ) {
+                        DatePicker(state = datePickerState)
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
                 var showDatePicker by remember { mutableStateOf(false) }
                 OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Filled.DateRange, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text(expiryDate?.let { it.toUtcIsoDate() } ?: "Expiry (optional)")
+                    Text(expiryDate?.let { it.toUtcIsoDate() } ?: "Valid to (optional)")
                 }
                 if (showDatePicker) {
                     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = expiryDate)

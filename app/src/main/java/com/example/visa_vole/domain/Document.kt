@@ -12,14 +12,15 @@ sealed class DocKind {
      * A fully custom document. [countries] are ISO2 codes it unlocks; [blocId] optionally adds a
      * whole bloc's members; [holdingId] optionally ties it to a known holding so that holding's
      * travel perks also apply (e.g. a Czech residence typed as `schengen-residence`). [kind] is
-     * "residence" | "visa" | "permit" (a residence gives its country FREEDOM and the bloc VISA_FREE
-     * short-stay; a visa/permit gives COVERED).
+     * "residence" | "visa" (legacy "permit" docs are treated as a visa). A residence gives its
+     * country FREEDOM and the bloc VISA_FREE short-stay; a visa/permit gives COVERED.
      */
     data class Custom(
         val countries: Set<String>,
         val blocId: String? = null,
         val kind: String = "visa",
         val holdingId: String? = null,
+        val entryType: String? = null, // "single" | "multiple" (visa docs only)
     ) : DocKind()
 }
 
@@ -29,5 +30,6 @@ data class Document(
     val label: String,
     val kind: DocKind,
     val countryNumber: String? = null,
-    val expiry: String? = null, // ISO-8601 date (YYYY-MM-DD)
+    val expiry: String? = null, // valid to — ISO-8601 date (YYYY-MM-DD)
+    val validFrom: String? = null, // valid from — ISO-8601 date (YYYY-MM-DD)
 )

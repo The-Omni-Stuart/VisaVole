@@ -4,6 +4,7 @@ import com.example.visa_vole.data.Benefit
 import com.example.visa_vole.data.Corridor
 import com.example.visa_vole.data.JdbcRepository
 import com.example.visa_vole.data.Regime
+import com.example.visa_vole.data.StayRule
 import com.example.visa_vole.data.WorldData
 import com.example.visa_vole.data.Holding as DataHolding
 import com.example.visa_vole.domain.AccessLevel.COVERED
@@ -32,7 +33,8 @@ class AccessModelTest {
         regimes: List<Regime> = emptyList(),
         holdings: Map<String, DataHolding> = emptyMap(),
         benefits: Map<String, List<Benefit>> = emptyMap(),
-    ) = WorldData(emptyMap(), baseline, regimes, holdings, benefits)
+        stayRules: List<StayRule> = emptyList(),
+    ) = WorldData(emptyMap(), baseline, regimes, holdings, benefits, stayRules)
 
     @Test fun ownCountryIsFreedom() {
         val w = world(baseline = mapOf("CZ" to listOf(corridor("CZ", "DE", "visa-free", 90))))
@@ -184,6 +186,12 @@ class AccessModelTest {
         // GB + a real Schengen visa: must not worsen the already visa-free baseline to Germany
         val gbSchengen = AccessModel.compute(listOf(doc("p", Passport("GB")), doc("s", Holding("schengen-visa"))), w)
         assertTrue(gbSchengen["DE"]!!.level.rank >= gb["DE"]!!.level.rank)
+
+        // stay_rules: Schengen is multiple-entry, 90 in 180 rolling, and DE is in its countries.
+        assertTrue(w.stayRules.isNotEmpty())
+        val de = w.stayRuleFor("DE", setOf("GB"))
+        assertEquals(true, de?.multipleEntry)
+        assertEquals("Multiple entry - 90 in 180 (rolling)", de?.summary())
     }
 
     // ---- multi-passport "stronger above stronger" (a refusal never overrides a good passport) ----
@@ -281,5 +289,41 @@ class AccessModelTest {
         )
         assertEquals(RESIDENCE, acc["CZ"]!!.level)
         assertEquals(VISA_FREE, acc["MX"]!!.level) // perk from the known holding, beyond the bloc
+    }
+
+    // ---- stay_rules: per-destination entry window + single/multiple entry ----
+
+    @Test fun stayRuleForPicksMostSpecificNationality() {
+        val al = StayRule("Western Balkans", setOf("AL"), "rolling", 90, 180, false, setOf("EU-EEA", "GB"), null)
+        val ar = StayRule("Argentina", setOf("AR"), "per-entry", 90, null, true, setOf("US"), null)
+        val w = world(
+            regimes = listOf(regime("eu-eea-efta", "EU", "freedom-of-movement", "FR", "DE")),
+            stayRules = listOf(al, ar),
+        )
+        assertEquals("Western Balkans", w.stayRuleFor("AL", setOf("GB"))?.zoneName) // named passport
+        assertEquals("Western Balkans", w.stayRuleFor("AL", setOf("FR"))?.zoneName) // EU-EEA bloc code
+        assertEquals(null, w.stayRuleFor("AL", setOf("IN"))) // no matching nationality
+        assertEquals("Argentina", w.stayRuleFor("AR", setOf("US"))?.zoneName)
+        assertEquals(null, w.stayRuleFor("AR", setOf("GB")))
+        assertEquals(null, w.stayRuleFor("XX", setOf("GB"))) // no rule names this destination
+    }
+
+    @Test fun stayRuleNamedBeatsWildcard() {
+        val any = StayRule("Any", setOf("DE"), "rolling", 90, 180, true, setOf("*"), null)
+        val named = StayRule("Named", setOf("DE"), "per-entry", 180, null, true, setOf("IN"), null)
+        val w = world(stayRules = listOf(any, named))
+        assertEquals("Named", w.stayRuleFor("DE", setOf("IN"))?.zoneName) // IN beats the wildcard
+        assertEquals("Any", w.stayRuleFor("DE", setOf("GB"))?.zoneName) // falls back to the wildcard
+    }
+
+    @Test fun stayRuleSummaryFormats() {
+        assertEquals(
+            "Multiple entry - 90 in 180 (rolling)",
+            StayRule("Z", setOf("DE"), "rolling", 90, 180, true, setOf("*"), null).summary(),
+        )
+        assertEquals(
+            "Single entry - 90 per entry",
+            StayRule("Z", setOf("AR"), "per-entry", 90, null, false, setOf("*"), null).summary(),
+        )
     }
 }

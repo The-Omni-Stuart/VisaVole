@@ -37,6 +37,9 @@ fun CountryDetailCard(
     breakdown: List<DocAccess> = emptyList(),
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
+    isHome: Boolean = false,
+    homePassport: String? = null,
+    staySummary: String? = null,
 ) {
     val level = access?.level ?: AccessLevel.UNKNOWN
     Surface(
@@ -55,29 +58,34 @@ fun CountryDetailCard(
             }
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val c = colorFor(level)
                 Column(
                     Modifier
-                        .background(c, CircleShape)
+                        .background(if (isHome) HOME else colorFor(level), CircleShape)
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                 ) {
-                    Text(level.label(), color = Color.White, style = MaterialTheme.typography.labelLarge)
-                }
-                Spacer(Modifier.width(12.dp))
-                if (access?.days != null) {
                     Text(
-                        "${access?.days} days",
-                        style = MaterialTheme.typography.titleMedium,
+                        if (isHome) "Your country" else level.label(),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge,
                     )
                 }
+                if (access?.days != null) {
+                    Spacer(Modifier.width(12.dp))
+                    Text("${access?.days} days", style = MaterialTheme.typography.titleMedium)
+                }
             }
-            if (!access?.reason.isNullOrBlank()) {
+            val subtext = if (isHome) "Passport: ${homePassport.orEmpty()}" else access?.reason.orEmpty()
+            if (subtext.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    access?.reason.orEmpty(),
+                    subtext,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            if (!staySummary.isNullOrBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(staySummary.orEmpty(), style = MaterialTheme.typography.bodyMedium)
             }
             if (breakdown.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))

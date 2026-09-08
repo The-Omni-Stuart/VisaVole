@@ -156,6 +156,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         put("id", d.id)
         put("label", d.label)
         put("expiry", d.expiry ?: JSONObject.NULL)
+        put("validFrom", d.validFrom ?: JSONObject.NULL)
         when (val k = d.kind) {
             is DocKind.Passport -> {
                 put("kind", "passport"); put("iso2", k.iso2)
@@ -167,9 +168,16 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
                 put("kind", "custom"); put("ckind", k.kind)
                 put("bloc", k.blocId ?: JSONObject.NULL)
                 put("holding", k.holdingId ?: JSONObject.NULL)
+                put("entryType", k.entryType ?: JSONObject.NULL)
                 put("countries", JSONArray(k.countries.toList()))
             }
         }
+    }
+
+    /** Read a nullable string field: missing, JSON null, empty, or the literal "null" → null. */
+    private fun JSONObject.strOrNull(key: String): String? {
+        if (!has(key) || isNull(key)) return null
+        return optString(key).takeIf { it.isNotEmpty() && it != "null" }
     }
 
     private fun jsonToDoc(o: JSONObject): Document {
@@ -182,13 +190,15 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
                 for (i in 0 until arr.length()) set.add(arr.getString(i))
                 DocKind.Custom(
                     set,
-                    o.optString("bloc").ifEmpty { null },
-                    o.optString("ckind", "visa"),
-                    o.optString("holding").ifEmpty { null },
+                    o.strOrNull("bloc"),
+                    o.strOrNull("ckind") ?: "visa",
+                    o.strOrNull("holding"),
+                    o.strOrNull("entryType"),
                 )
             }
         }
-        val expiry = if (o.isNull("expiry")) null else o.optString("expiry").ifEmpty { null }
-        return Document(o.getString("id"), o.getString("label"), kind, null, expiry)
+        val expiry = o.strOrNull("expiry")
+        val validFrom = o.strOrNull("validFrom")
+        return Document(o.getString("id"), o.getString("label"), kind, null, expiry, validFrom)
     }
 }

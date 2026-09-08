@@ -45,6 +45,15 @@ import com.example.visa_vole.domain.Access
 private const val MIN_ZOOM = 1f
 private const val MAX_ZOOM = 20f
 
+/**
+ * Per-country focus margin as a fraction of the world width (default 7%). A small mainland would
+ * otherwise pull a nearby-but-separate territory into the tap-to-zoom focus: the UK's Gibraltar sits
+ * only ~4% of the world width south of Great Britain, while its immediate islands (Hebrides, Orkney,
+ * Shetland) are all within ~2%. Tightening GB to 3% keeps those islands and drops Gibraltar, so
+ * tapping the UK centres on the home islands instead of zooming out over the Mediterranean.
+ */
+private val FOCUS_MARGIN_OVERRIDE: Map<String, Float> = mapOf("GB" to 0.03f)
+
 private data class IsoShape(
     val iso: String,
     val rings: List<List<Offset>>,
@@ -104,8 +113,8 @@ fun WorldMapCanvas(
     // a colonial power's distant holdings (e.g. the UK's Cyprus bases) don't drag the view out with
     // them; those bits stay highlighted on the map, they just don't drive the zoom.
     val focus: Map<String, Focus> = remember(geometry) {
-        val margin = geometry.width * 0.07f
-        geometry.countries.mapValues { (_, shape) ->
+        geometry.countries.mapValues { (iso, shape) ->
+            val margin = (FOCUS_MARGIN_OVERRIDE[iso] ?: 0.07f) * geometry.width
             val core = shape.rings.maxByOrNull { ring -> polygonArea(ring) } ?: shape.rings.first()
             val cb = bboxOf(listOf(core))
             val exMinX = cb.minX - margin
