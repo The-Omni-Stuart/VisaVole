@@ -26,12 +26,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -123,24 +120,6 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
         topBar = {
             TopAppBar(
                 title = { Text("VisaVole") },
-                actions = {
-                    var menu by remember { mutableStateOf(false) }
-                    Box {
-                        IconButton(onClick = { menu = true }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "Menu")
-                        }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Change passport") },
-                                onClick = {
-                                    menu = false
-                                    selected = null
-                                    vm.changePassport()
-                                },
-                            )
-                        }
-                    }
-                },
             )
         },
         bottomBar = {
@@ -211,7 +190,11 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
                     onDismiss = { pick(null) },
                     isHome = selected in s.homeCountries,
                     homePassport = if (selected in s.homeCountries) s.world.countries[selected]?.name else null,
-                    staySummary = if (selected in s.homeCountries) null else s.world.stayRuleFor(selected, s.homeCountries)?.summary(),
+                    staySummary = when {
+                        selected in s.homeCountries -> null
+                        s.access[selected]?.level == AccessLevel.RESIDENCE -> null // you live here — no short-stay limit
+                        else -> s.world.stayRuleFor(selected, s.homeCountries)?.summary()
+                    },
                 )
             } else {
                 LegendRow(s.access.values.groupBy { it.level }.mapValues { it.value.size }, s.homeCountries.size)

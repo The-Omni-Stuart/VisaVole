@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -39,15 +40,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.example.visa_vole.data.Country
-import com.example.visa_vole.data.Regime
 import com.example.visa_vole.data.WorldData
 import com.example.visa_vole.domain.Document
 import com.example.visa_vole.domain.DocKind
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 private fun Long.toUtcIsoDate(): String {
@@ -55,14 +62,56 @@ private fun Long.toUtcIsoDate(): String {
     return "%04d-%02d-%02d".format(d.year, d.monthValue, d.dayOfMonth)
 }
 
-private fun Document.summary(regimes: List<Regime>): String = when (val k = kind) {
-    is DocKind.Passport -> "Passport"
-    is DocKind.Holding -> k.holdingId
-    is DocKind.Custom -> {
-        val bloc = k.blocId?.let { id -> " · bloc ${regimes.firstOrNull { it.id == id }?.name ?: id}" } ?: ""
-        val entry = k.entryType?.let { " · ${if (it == "single") "single" else "multiple"} entry" } ?: ""
-        "${k.kind} · ${k.countries.size} countries$bloc$entry"
+private val STATUS_ORANGE = Color(0xFFEF6C00)
+private val STATUS_GREEN = Color(0xFF2E7D32)
+
+/** Days from [today] until the ISO date in [iso]; null when unset or unparsable. */
+private fun daysUntil(iso: String?, today: LocalDate): Long? =
+    iso?.let { runCatching { ChronoUnit.DAYS.between(today, LocalDate.parse(it)) }.getOrNull() }
+
+/** True when the document has an expiry and it is already past. */
+private fun isExpired(doc: Document, today: LocalDate): Boolean =
+    daysUntil(doc.expiry, today)?.let { it < 0 } ?: false
+
+/**
+ * The document subtitle: kind/summary and the valid-from / valid-to dates in the neutral base
+ * colour; only the entry type is tinted (orange for single, green for multiple). The expiry
+ * status itself is carried by a separate pill in the row.
+ */
+private fun docSubtitle(
+    doc: Document,
+    world: WorldData,
+    base: Color,
+    orange: Color,
+    green: Color,
+): AnnotatedString {
+    val k = doc.kind
+    val regime = (k as? DocKind.Custom)?.blocId?.let { id -> world.regimes.firstOrNull { r -> r.id == id }?.name }
+    val entryType = (k as? DocKind.Custom)?.entryType
+
+    val b = AnnotatedString.Builder()
+    fun styled(text: String, color: Color) {
+        val s = b.length
+        b.append(text)
+        b.addStyle(SpanStyle(color = color), s, b.length)
     }
+    styled(
+        when (k) {
+            is DocKind.Passport -> "Passport"
+            is DocKind.Holding -> k.holdingId
+            is DocKind.Custom -> {
+                val bloc = regime?.let { " · bloc $it" } ?: ""
+                "${k.kind} · ${k.countries.size} countries$bloc"
+            }
+        },
+        base,
+    )
+    entryType?.let { type ->
+        styled(" · ${if (type == "single") "single" else "multiple"} entry", if (type == "single") orange else green)
+    }
+    doc.validFrom?.let { from -> styled(" · from $from", base) }
+    doc.expiry?.let { exp -> styled(" · to $exp", base) }
+    return b.toAnnotatedString()
 }
 
 @Composable
@@ -96,24 +145,21 @@ fun DocumentsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 16.dp),
             )
-        }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(ready.docs, key = { it.id }) { doc ->
-                ElevatedCard(Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(doc.label, style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                doc.summary(ready.world.regimes) +
-                                    (doc.validFrom?.let { " · from $it" } ?: "") +
-                                    (doc.expiry?.let { " · to $it" } ?: ""),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        IconButton(onClick = { vm.removeDocument(doc.id) }) {
-                            Icon(Icons.Filled.Close, contentDescription = "Remove")
-                        }
+        } else {
+            val today = LocalDate.now(ZoneOffset.UTC)
+            val active = ready.docs.filter { !isExpired(it, today) }
+            val archived = ready.docs.filter { isExpired(it, today) }
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (active.isNotEmpty()) {
+                    item(key = "header-active") { SectionLabel("Active") }
+                    items(active, key = { it.id }) { doc ->
+                        DocCard(doc, ready.world, today, onRemove = { vm.removeDocument(doc.id) })
+                    }
+                }
+                if (archived.isNotEmpty()) {
+                    item(key = "header-archive") { SectionLabel("Archive") }
+                    items(archived, key = { it.id }) { doc ->
+                        DocCard(doc, ready.world, today, onRemove = { vm.removeDocument(doc.id) })
                     }
                 }
             }
@@ -128,8 +174,64 @@ fun DocumentsScreen(
     }
 }
 
-private enum class Mode { PASSPORT, CUSTOM }
-private enum class CustomKind(val label: String, val kind: String) {
+@Composable
+private fun SectionLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
+    )
+}
+
+@Composable
+private fun ExpiryStatusPill(doc: Document, today: LocalDate) {
+    val days = daysUntil(doc.expiry, today) ?: return
+    val (text, color, bold) = when {
+        days < 0 -> Triple("Expired", MaterialTheme.colorScheme.error, true)
+        days <= 7 -> Triple("Expiring soon ($days days)", STATUS_ORANGE, false)
+        else -> Triple("Valid for $days days", STATUS_GREEN, false)
+    }
+    Surface(shape = RoundedCornerShape(50), color = color.copy(alpha = 0.15f)) {
+        Text(
+            text,
+            color = color,
+            fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+        )
+    }
+}
+
+@Composable
+private fun DocCard(
+    doc: Document,
+    world: WorldData,
+    today: LocalDate,
+    onRemove: () -> Unit,
+) {
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(doc.label, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    docSubtitle(doc, world, MaterialTheme.colorScheme.onSurfaceVariant, STATUS_ORANGE, STATUS_GREEN),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (doc.expiry != null) {
+                Spacer(Modifier.width(8.dp))
+                ExpiryStatusPill(doc, today)
+            }
+            IconButton(onClick = onRemove) {
+                Icon(Icons.Filled.Close, contentDescription = "Remove")
+            }
+        }
+    }
+}
+
+private enum class DocType(val label: String, val kind: String) {
+    PASSPORT("Passport", "passport"),
     RESIDENCE("Residence", "residence"),
     VISA("Visa", "visa"),
 }
@@ -142,10 +244,9 @@ fun AddDocumentDialog(
     onDismiss: () -> Unit,
 ) {
     val countries = world.countries
-    var mode by remember { mutableStateOf(Mode.CUSTOM) }
+    var docType by remember { mutableStateOf(DocType.RESIDENCE) }
     var query by remember { mutableStateOf("") }
     var passportIso by remember { mutableStateOf<String?>(null) }
-    var customKind by remember { mutableStateOf(CustomKind.RESIDENCE) }
     var customIso by remember { mutableStateOf<Set<String>>(emptySet()) }
     var customBlocChoice by remember { mutableStateOf<String?>(null) } // null=auto, ""=none, else regime id
     var holdingChoice by remember { mutableStateOf<String?>(null) } // null=auto, ""=none, else holding id
@@ -159,7 +260,7 @@ fun AddDocumentDialog(
         "" -> null
         else -> customBlocChoice
     }
-    val inferredHolding = world.holdingFor(customIso, customKind.kind)
+    val inferredHolding = world.holdingFor(customIso, docType.kind)
     val effectiveHolding: String? = when (holdingChoice) {
         null -> inferredHolding
         "" -> null
@@ -171,9 +272,9 @@ fun AddDocumentDialog(
         customIso = emptySet(); customBlocChoice = null; holdingChoice = null
     }
 
-    val valid = when (mode) {
-        Mode.PASSPORT -> passportIso != null
-        Mode.CUSTOM -> customIso.isNotEmpty()
+    val valid = when (docType) {
+        DocType.PASSPORT -> passportIso != null
+        DocType.RESIDENCE, DocType.VISA -> customIso.isNotEmpty()
     }
     val expiryOrNull = expiryDate?.let { it.toUtcIsoDate() }
     val validFromOrNull = validFromDate?.let { it.toUtcIsoDate() }
@@ -181,16 +282,16 @@ fun AddDocumentDialog(
     fun build(): Document {
         val exp = expiryOrNull
         val vfrom = validFromOrNull
-        return when (mode) {
-            Mode.PASSPORT -> {
+        return when (docType) {
+            DocType.PASSPORT -> {
                 val iso = passportIso!!
                 Document(UUID.randomUUID().toString(), "Passport · ${countries[iso]?.name ?: iso}", DocKind.Passport(iso), null, exp, vfrom)
             }
-            Mode.CUSTOM -> {
+            DocType.RESIDENCE, DocType.VISA -> {
                 val names = customIso.joinToString(", ") { countries[it]?.name ?: it }.take(80)
                 val typeSuffix = effectiveHolding?.let { id -> " (${world.holdings[id]?.name ?: id})" } ?: ""
-                val entry = if (customKind.kind == "visa") entryType else null
-                Document(UUID.randomUUID().toString(), "${customKind.label}: $names$typeSuffix", DocKind.Custom(customIso, effectiveBloc, customKind.kind, effectiveHolding, entry), null, exp, vfrom)
+                val entry = if (docType == DocType.VISA) entryType else null
+                Document(UUID.randomUUID().toString(), "${docType.label}: $names$typeSuffix", DocKind.Custom(customIso, effectiveBloc, docType.kind, effectiveHolding, entry), null, exp, vfrom)
             }
         }
     }
@@ -205,23 +306,18 @@ fun AddDocumentDialog(
                 Text("Add document", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = mode == Mode.PASSPORT, onClick = { mode = Mode.PASSPORT; resetFields() }, label = { Text("Passport") })
-                    FilterChip(selected = mode == Mode.CUSTOM, onClick = { mode = Mode.CUSTOM; resetFields() }, label = { Text("Custom") })
+                    DocType.entries.forEach { t ->
+                        FilterChip(selected = docType == t, onClick = { docType = t; resetFields() }, label = { Text(t.label) })
+                    }
                 }
                 Spacer(Modifier.height(16.dp))
 
-                when (mode) {
-                    Mode.PASSPORT -> CountryPicker(
+                when (docType) {
+                    DocType.PASSPORT -> CountryPicker(
                         countries, query, { query = it }, setOfNotNull(passportIso),
                         onToggle = { passportIso = it }, single = true,
                     )
-                    Mode.CUSTOM -> {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            CustomKind.entries.forEach { ck ->
-                                FilterChip(selected = customKind == ck, onClick = { customKind = ck }, label = { Text(ck.label) })
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
+                    DocType.RESIDENCE, DocType.VISA -> {
                         CountryPicker(
                             countries, query, { query = it }, customIso,
                             onToggle = { customIso = if (customIso.contains(it)) customIso - it else customIso + it },
@@ -285,7 +381,7 @@ fun AddDocumentDialog(
                                 )
                             }
                         }
-                        if (customKind == CustomKind.VISA) {
+                        if (docType == DocType.VISA) {
                             Spacer(Modifier.height(8.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 FilterChip(selected = entryType == "single", onClick = { entryType = "single" }, label = { Text("Single entry") })

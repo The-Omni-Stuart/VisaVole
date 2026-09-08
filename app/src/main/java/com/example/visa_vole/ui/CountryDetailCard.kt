@@ -102,9 +102,10 @@ fun CountryDetailCard(
                 ) {
                     breakdown.forEachIndexed { i, entry ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            val isYourCountry = entry.access.reason == "Your country"
                             Text(
-                                entry.access.level.label(),
-                                color = colorFor(entry.access.level),
+                                if (isYourCountry) "Your country" else entry.access.level.label(),
+                                color = if (isYourCountry) HOME else colorFor(entry.access.level),
                                 style = MaterialTheme.typography.labelMedium,
                             )
                             Spacer(Modifier.width(10.dp))

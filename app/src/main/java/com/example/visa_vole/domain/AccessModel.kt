@@ -51,7 +51,8 @@ object AccessModel {
                 for (m in r.members) merge(map, m, Access(level, null, reason))
             }
         }
-        merge(map, home, Access(FREEDOM, null, "Your country"))
+        // Your own country always beats any bloc's freedom of movement.
+        map[home] = Access(FREEDOM, null, "Your country")
         return map
     }
 

@@ -94,13 +94,6 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         publish()
     }
 
-    /** "Change passport" from the menu: drop the home and re-run onboarding. */
-    fun changePassport() {
-        docs = docs.filterNot { it.id == HOME_DOC_ID }.toMutableList()
-        persist()
-        publish()
-    }
-
     fun addDocument(doc: Document) {
         docs = (docs.filterNot { it.id == doc.id } + doc).toMutableList()
         persist()
