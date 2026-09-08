@@ -66,6 +66,20 @@ data class WorldData(
     }
 
     /**
+     * The mobility bloc a residence/visa should use as its short-stay travel area: the largest
+     * visa-free bloc covering the selected countries. A paper you hold earns short-stay visa-free
+     * travel, not freedom of movement — so an EU residence maps to the Schengen visa-free bloc, not
+     * the EU/EEA/EFTA freedom bloc (which wrongly grants non-Schengen states such as Ireland).
+     * Returns null when no visa-free bloc covers the selected countries.
+     */
+    fun travelBlocFor(isos: Collection<String>): Regime? {
+        if (isos.isEmpty()) return null
+        val vf = regimes.filter { it.level == "visa-free" }
+        return vf.filter { r -> isos.all { it in r.members } }.maxByOrNull { it.members.size }
+            ?: vf.filter { r -> isos.any { it in r.members } }.maxByOrNull { it.members.size }
+    }
+
+    /**
      * Known holdings whose mobility area spans a whole bloc — their [Holding.issuingCountry] is a
      * pseudo-code or a representative member rather than the whole area. Any other holding covers
      * exactly its issuing country.

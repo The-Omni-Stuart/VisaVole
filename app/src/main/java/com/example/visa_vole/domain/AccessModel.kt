@@ -1,5 +1,6 @@
 package com.example.visa_vole.domain
 
+import com.example.visa_vole.data.Regime
 import com.example.visa_vole.data.WorldData
 import com.example.visa_vole.domain.AccessLevel.COVERED
 import com.example.visa_vole.domain.AccessLevel.FREEDOM
@@ -10,6 +11,8 @@ import com.example.visa_vole.domain.AccessLevel.VISA_FREE
 import com.example.visa_vole.domain.DocKind.Custom
 import com.example.visa_vole.domain.DocKind.Holding
 import com.example.visa_vole.domain.DocKind.Passport
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 /**
  * Pure access model: given the user's held documents (each passport counts as a nationality) and
@@ -38,18 +41,30 @@ object AccessModel {
         map[dest] = best(map[dest], candidate)
     }
 
-    /** Candidates from a passport: baseline corridors + bloc freedom/visa-free + own country. */
-    private fun passportCandidates(home: String, world: WorldData): Map<String, Access> {
+    /** True when [doc] carries an expiry date already in the past (relative to [today]). */
+    private fun isExpired(doc: Document, today: LocalDate): Boolean {
+        val iso = doc.expiry ?: return false
+        return runCatching { LocalDate.parse(iso) }.getOrNull()?.let { it.isBefore(today) } ?: false
+    }
+
+    /**
+     * Candidates from a passport: baseline corridors + bloc freedom/visa-free + own country.
+     * An [expired] passport keeps its home country and freedom-of-movement bloc(s) but drops its
+     * baseline visa corridors and its visa-free blocs.
+     */
+    private fun passportCandidates(home: String, world: WorldData, expired: Boolean): Map<String, Access> {
         val map = LinkedHashMap<String, Access>()
-        for (c in world.baseline[home].orEmpty()) {
-            merge(map, c.destination, Access(AccessLevel.fromBaselineType(c.type), c.days, "Passport rule"))
+        if (!expired) {
+            for (c in world.baseline[home].orEmpty()) {
+                merge(map, c.destination, Access(AccessLevel.fromBaselineType(c.type), c.days, "Passport rule"))
+            }
         }
         for (r in world.regimes) {
-            if (home in r.members) {
-                val level = if (r.level == "freedom-of-movement") FREEDOM else VISA_FREE
-                val reason = if (r.level == "freedom-of-movement") "Bloc: ${r.name}" else "Bloc visa-free: ${r.name}"
-                for (m in r.members) merge(map, m, Access(level, null, reason))
-            }
+            if (home !in r.members) continue
+            if (expired && r.level != "freedom-of-movement") continue
+            val level = if (r.level == "freedom-of-movement") FREEDOM else VISA_FREE
+            val reason = if (r.level == "freedom-of-movement") "Bloc: ${r.name}" else "Bloc visa-free: ${r.name}"
+            for (m in r.members) merge(map, m, Access(level, null, reason))
         }
         // Your own country always beats any bloc's freedom of movement.
         map[home] = Access(FREEDOM, null, "Your country")
@@ -77,7 +92,18 @@ object AccessModel {
             is Custom -> {
                 val targets = LinkedHashSet<String>()
                 targets += k.countries
-                if (k.blocId != null) world.regimes.firstOrNull { it.id == k.blocId }?.let { targets += it.members }
+                // Resolve the travel-area bloc. A document earns short-stay travel, not freedom of
+                // movement — so if the stored bloc is a freedom-of-movement bloc but a visa-free bloc
+                // covers the same countries, use the visa-free one. This fixes legacy EU/Schengen
+                // residence docs auto-assigned the EU/EEA/EFTA freedom bloc (which over-granted
+                // non-Schengen states such as Ireland). An explicit visa-free choice is respected.
+                val storedBloc = k.blocId?.let { id -> world.regimes.firstOrNull { it.id == id } }
+                val travelBloc: Regime? = when {
+                    storedBloc == null -> world.travelBlocFor(k.countries)
+                    storedBloc.level == "visa-free" -> storedBloc
+                    else -> world.travelBlocFor(k.countries) ?: storedBloc
+                }
+                travelBloc?.let { targets += it.members }
                 val isResidence = k.kind == "residence"
                 val residenceCountry = k.countries.firstOrNull()
                 for (c in targets) {
@@ -110,11 +136,16 @@ object AccessModel {
      * Per-document access to [dest], strongest first, for the "enter with" breakdown in the detail
      * card — so the user sees exactly which passport/document unlocks entry.
      */
-    fun breakdownFor(dest: String, docs: List<Document>, world: WorldData): List<DocAccess> =
+    fun breakdownFor(
+        dest: String,
+        docs: List<Document>,
+        world: WorldData,
+        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+    ): List<DocAccess> =
         docs.map { d ->
             val candidates = when (val k = d.kind) {
-                is Passport -> passportCandidates(k.iso2, world)
-                else -> documentCandidates(d, world)
+                is Passport -> passportCandidates(k.iso2, world, isExpired(d, today))
+                else -> if (isExpired(d, today)) emptyMap() else documentCandidates(d, world)
             }
             val label = when (val k = d.kind) {
                 is Passport -> world.countries[k.iso2]?.name ?: k.iso2
@@ -124,18 +155,31 @@ object AccessModel {
             DocAccess(label, candidates[dest] ?: Access(UNKNOWN, null))
         }.sortedByDescending { it.access.level.rank }
 
-    /** Effective access for every destination, given the held [docs] (passports included). */
-    fun compute(docs: List<Document>, world: WorldData): Map<String, Access> {
+    /**
+     * Effective access for every destination, given the held [docs] (passports included). [today]
+     * drives expiry: a lapsed visa/residence/permit grants nothing, and an expired passport keeps
+     * only its home country + freedom-of-movement bloc(s).
+     */
+    fun compute(
+        docs: List<Document>,
+        world: WorldData,
+        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+    ): Map<String, Access> {
         val result = LinkedHashMap<String, Access>()
-        // Tier 1: every passport, pure best-of (a single refusal never overrides a good passport).
-        for (p in homeCountries(docs)) {
-            for ((dest, access) in passportCandidates(p, world)) merge(result, dest, access)
-        }
-        // Tier 2: documents, best-of — a paper you hold unlocks its destinations even if your
-        // passport is refused there (e.g. a CZ residence grants EU short-stay despite a refusal).
         for (doc in docs) {
-            if (doc.kind is Passport) continue
-            for ((dest, access) in documentCandidates(doc, world)) merge(result, dest, access)
+            when (val k = doc.kind) {
+                is Passport -> {
+                    // Pure best-of across passports; an expired one still grants home + freedom blocs.
+                    for ((dest, access) in passportCandidates(k.iso2, world, isExpired(doc, today))) {
+                        merge(result, dest, access)
+                    }
+                }
+                else -> {
+                    // A lapsed document (visa / residence / permit) no longer unlocks anything.
+                    if (isExpired(doc, today)) continue
+                    for ((dest, access) in documentCandidates(doc, world)) merge(result, dest, access)
+                }
+            }
         }
         return result
     }

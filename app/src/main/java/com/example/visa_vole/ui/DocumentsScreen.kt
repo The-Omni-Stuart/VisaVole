@@ -254,7 +254,9 @@ fun AddDocumentDialog(
     var expiryDate by remember { mutableStateOf<Long?>(null) }
     var validFromDate by remember { mutableStateOf<Long?>(null) }
 
-    val inferredBloc = world.mobilityBlocFor(customIso)
+    // A residence/visa earns short-stay travel, not freedom of movement — infer the visa-free
+    // travel bloc (e.g. Schengen for an EU residence) rather than the freedom-of-movement bloc.
+    val inferredBloc = world.travelBlocFor(customIso)
     val effectiveBloc: String? = when (customBlocChoice) {
         null -> inferredBloc?.id
         "" -> null

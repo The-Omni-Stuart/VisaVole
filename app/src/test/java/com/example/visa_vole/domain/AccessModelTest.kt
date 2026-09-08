@@ -13,6 +13,7 @@ import com.example.visa_vole.domain.AccessLevel.E_VISA
 import com.example.visa_vole.domain.AccessLevel.FREEDOM
 import com.example.visa_vole.domain.AccessLevel.REFUSED
 import com.example.visa_vole.domain.AccessLevel.RESIDENCE
+import com.example.visa_vole.domain.AccessLevel.UNKNOWN
 import com.example.visa_vole.domain.AccessLevel.VISA_FREE
 import com.example.visa_vole.domain.AccessLevel.VISA_REQUIRED
 import com.example.visa_vole.domain.DocKind.Custom
@@ -22,6 +23,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.time.LocalDate
 
 class AccessModelTest {
 
@@ -325,5 +327,101 @@ class AccessModelTest {
             "Single entry - 90 per entry",
             StayRule("Z", setOf("AR"), "per-entry", 90, null, false, setOf("*"), null).summary(),
         )
+    }
+
+    // ---- expiry + Schengen travel-area (Bug A/B/C fixes) ----
+
+    private fun docEx(id: String, kind: DocKind, expiry: String?) = Document(id, id, kind, null, expiry, null)
+
+    @Test fun travelBlocForPrefersVisaFreeOverFreedom() {
+        val w = world(
+            regimes = listOf(
+                regime("eu", "EU", "freedom-of-movement", "CZ", "DE", "FR", "IE"),
+                regime("schengen", "Schengen", "visa-free", "CZ", "DE", "FR"),
+            ),
+        )
+        // A residence/visa travel area should be the visa-free bloc, not the freedom bloc.
+        assertEquals("schengen", w.travelBlocFor(setOf("CZ"))?.id)
+        assertEquals(null, w.travelBlocFor(setOf("XX"))?.id)
+    }
+
+    @Test fun legacyFreedomBlocResidenceUsesVisaFreeTravelArea() {
+        // A CZ residence stored with the freedom bloc must grant the visa-free (Schengen) travel
+        // area, not the freedom bloc's extra non-Schengen states (e.g. Ireland).
+        val w = world(
+            regimes = listOf(
+                regime("eu-eea-efta", "EU", "freedom-of-movement", "CZ", "DE", "IE"),
+                regime("schengen", "Schengen", "visa-free", "CZ", "DE"),
+            ),
+        )
+        val acc = AccessModel.compute(listOf(doc("d", Custom(setOf("CZ"), "eu-eea-efta", "residence"))), w)
+        assertEquals(RESIDENCE, acc["CZ"]!!.level)
+        assertEquals(VISA_FREE, acc["DE"]!!.level)
+        assertEquals(null, acc["IE"])
+    }
+
+    @Test fun expiredPassportKeepsHomeAndFreedomButDropsBaseline() {
+        val w = world(
+            baseline = mapOf("CZ" to listOf(corridor("CZ", "JP", "visa-free", 90))),
+            regimes = listOf(regime("eu", "EU", "freedom-of-movement", "CZ", "DE", "FR")),
+        )
+        val today = LocalDate.of(2026, 9, 8)
+        val expired = AccessModel.compute(listOf(docEx("p", Passport("CZ"), "2020-01-01")), w, today)
+        assertEquals(FREEDOM, expired["CZ"]!!.level) // home
+        assertEquals(FREEDOM, expired["DE"]!!.level) // freedom bloc
+        assertEquals(null, expired["JP"]) // baseline corridor gone
+        val valid = AccessModel.compute(listOf(docEx("p", Passport("CZ"), "2030-01-01")), w, today)
+        assertEquals(VISA_FREE, valid["JP"]!!.level)
+    }
+
+    @Test fun expiredDocumentGrantsNothing() {
+        val w = world(
+            holdings = mapOf("x" to DataHolding("x", "X Visa", "short_term_visa", "SY")),
+            benefits = mapOf("x" to listOf(Benefit("x", "SY", "visa-free", 90))),
+        )
+        val today = LocalDate.of(2026, 9, 8)
+        assertEquals(null, AccessModel.compute(listOf(docEx("d", Holding("x"), "2020-01-01")), w, today)["SY"])
+        assertEquals(COVERED, AccessModel.compute(listOf(docEx("d", Holding("x"), "2030-01-01")), w, today)["SY"]!!.level)
+    }
+
+    @Test fun breakdownShowsExpiredDocumentAsNoAccess() {
+        val w = world(
+            holdings = mapOf("x" to DataHolding("x", "X Visa", "short_term_visa", "SY")),
+            benefits = mapOf("x" to listOf(Benefit("x", "SY", "visa-free", 90))),
+        )
+        val today = LocalDate.of(2026, 9, 8)
+        val bd = AccessModel.breakdownFor("SY", listOf(docEx("d", Holding("x"), "2020-01-01")), w, today)
+        assertEquals(1, bd.size)
+        assertEquals(UNKNOWN, bd[0].access.level)
+    }
+
+    @Test fun realDatabaseGbpPassportIranIsEVisaNotVisaFree() {
+        val w = JdbcRepository.load(File("src/main/assets/visa_data.db"))
+        val ir = AccessModel.compute(listOf(doc("p", Passport("GB"))), w)["IR"]!!
+        assertEquals(E_VISA, ir.level)
+        assertEquals(30, ir.days)
+    }
+
+    @Test fun realDatabaseSchengaVisaDoesNotGrantIrelandButGrantsSchenga() {
+        val w = JdbcRepository.load(File("src/main/assets/visa_data.db"))
+        val acc = AccessModel.compute(listOf(doc("s", Holding("schengen-visa"))), w)
+        assertTrue(acc.containsKey("DE")) // Germany is in Schengen
+        assertEquals(null, acc["IE"])
+        assertEquals(null, acc["CY"])
+        assertEquals(null, acc["BG"])
+    }
+
+    @Test fun realDatabaseSchengaResidenceLegacyFreedomBlocDoesNotGrantIreland() {
+        val w = JdbcRepository.load(File("src/main/assets/visa_data.db"))
+        // A legacy CZ residence stored with the EU/EEA/EFTA freedom bloc must still only grant the
+        // Schengen travel area (not Ireland/Cyprus/Bulgaria).
+        val acc = AccessModel.compute(
+            listOf(doc("d", Custom(setOf("CZ"), "eu-eea-efta", "residence", "schengen-residence"))), w,
+        )
+        assertEquals(RESIDENCE, acc["CZ"]!!.level)
+        assertTrue(acc.containsKey("DE"))
+        assertEquals(null, acc["IE"])
+        assertEquals(null, acc["CY"])
+        assertEquals(null, acc["BG"])
     }
 }
