@@ -2,8 +2,10 @@ import shapefile, json, math, os, sys
 from shapely.geometry import Polygon, MultiPolygon, Point, box
 from shapely.ops import unary_union
 
+BASE = os.path.dirname(os.path.abspath(__file__))
+DATA = os.path.join(BASE, "data")
 EPS = float(sys.argv[1]) if len(sys.argv) > 1 else 0.25
-OUT = sys.argv[2] if len(sys.argv) > 2 else "/tmp/opencode/world_robinson_new.json"
+OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.normpath(os.path.join(BASE, "..", "app/src/main/assets/world_robinson.json"))
 
 W, H = 1000, 512
 MX, MY = 14.0, 16.0
@@ -52,7 +54,7 @@ def dp(points, eps):
             stack.append((s, idx)); stack.append((idx, e))
     return [p for p, k in zip(points, keep) if k]
 
-r = shapefile.Reader("ne/ne_10m_admin_0_countries.shp")
+r = shapefile.Reader(os.path.join(DATA, "admin0", "ne_10m_admin_0_countries.shp"))
 recs = r.records()
 shapes = r.shapes()
 
@@ -95,7 +97,7 @@ for f in feats:
         name_exact[f["name"]] = f
 
 db = []
-for line in open("/tmp/opencode/db_countries.txt"):
+for line in open(os.path.join(DATA, "db_countries.txt")):
     line = line.rstrip("\n")
     if line:
         iso, name = line.split("\t")
@@ -164,46 +166,23 @@ md_geom = ne_geom("MD")
 il_geom = ne_geom("IL")
 ps_geom = ne_geom("PS")
 
-# de facto breakaway regions (used to clip the REAL Natural Earth coastline)
-def ne_admin1_polygon(name):
-    r1 = shapefile.Reader("ne/ne_10m_admin_1_states_provinces.shp")
-    flds = [f[0] for f in r1.fields[1:]]
-    for rec, shp in zip(r1.records(), r1.shapes()):
-        if str(dict(zip(flds, rec)).get("name", "")).strip() == name:
-            pts = shp.points
-            parts = list(getattr(shp, 'parts', [len(pts)])) + [len(pts)]
-            rings = []
-            for k in range(len(parts)-1):
-                ring = [(pts[j][0], pts[j][1]) for j in range(parts[k], parts[k+1])]
-                if len(ring) >= 3:
-                    rings.append(ring)
-            rings.sort(key=len, reverse=True)
-            return Polygon(rings[0], rings[1:])
-    return None
+# de facto breakaway regions (all from the Natural Earth "disputed_areas" dataset)
+def load_region_geojson(path):
+    if not os.path.exists(path):
+        sys.exit(f"ERROR: missing required geometry file: {path}")
+    with open(path) as fh:
+        g = json.load(fh)["geometry"]
+    rings = g["coordinates"] if g["type"] == "Polygon" else [r for p in g["coordinates"] for r in p]
+    rings = [ring for ring in rings if len(ring) >= 3]
+    if not rings:
+        sys.exit(f"ERROR: no valid rings in {path}")
+    rings.sort(key=len, reverse=True)
+    return Polygon(rings[0], rings[1:])
 
-_ab_official = ne_admin1_polygon("Abkhazia")
-ab_region = (_ab_official if _ab_official is not None
-             else Polygon([(39.9,43.55),(41.0,43.55),(41.2,43.2),(41.3,43.0),(41.4,42.85),(41.5,42.7),(41.55,42.5),(39.9,42.5)]))
-
-def osm_south_ossetia():
-    try:
-        with open("osm_south_ossetia.geojson") as fh:
-            g = json.load(fh)["geometry"]
-        rings = g["coordinates"] if g["type"] == "Polygon" else [r for p in g["coordinates"] for r in p]
-        rings = [ring for ring in rings if len(ring) >= 3]
-        rings.sort(key=len, reverse=True)
-        return Polygon(rings[0], rings[1:])
-    except Exception as e:
-        print("  OS OSM load error:", e)
-        return None
-_os_official = osm_south_ossetia()
-os_region = (_os_official if _os_official is not None
-             else Polygon([(43.58,42.72),(43.95,42.74),(44.35,42.62),(44.62,42.45),
-                           (44.55,42.15),(44.20,42.02),(43.85,42.05),(43.60,42.28),(43.58,42.55)]))
-ts_region = Polygon([(28.10,46.30),(29.70,46.30),(29.70,46.95),(28.10,46.95)])
-
-print("  AB source: official NE admin_1 polygon" if _ab_official is not None else "  AB source: FALLBACK hand-drawn box")
-print("  OS source: official OSM de facto boundary (rel 1152717)" if _os_official is not None else "  OS source: FALLBACK hand-drawn box")
+ab_region = load_region_geojson(os.path.join(DATA, "ab_abkhazia.geojson"))
+os_region = load_region_geojson(os.path.join(DATA, "os_south_ossetia.geojson"))
+ts_region = load_region_geojson(os.path.join(DATA, "ts_transnistria.geojson"))
+print("  breakaway source: NE admin_0 disputed_areas (AB=B35, OS=B37, TS=B36)")
 ab_geom = ge_geom.intersection(ab_region)
 os_geom = ge_geom.intersection(os_region)
 ge_geom2 = ge_geom.difference(ab_region).difference(os_region)
