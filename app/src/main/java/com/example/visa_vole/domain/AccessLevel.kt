@@ -4,7 +4,7 @@ package com.example.visa_vole.domain
  * The effective ability to enter a destination, best-to-worst.
  *
  * FREEDOM       — own country, or a passport freedom-of-movement bloc (bloc citizenship).
- * RESIDENCE     — a residence country: permanent residency (live/work rights) in that country.
+ * RESIDENCE     — a residence country: a residence permit (live/work rights) in that country.
  * VISA_FREE     — no step needed: visa-free / visa-on-arrival, or a residence grants short-stay.
  * COVERED       — baseline needs a visa but the user already holds a document for it.
  * ETA           — quick online pre-authorisation (eTA / ESTA / ETIAS), approved almost instantly.
@@ -26,7 +26,7 @@ enum class AccessLevel(val rank: Int) {
 
     fun label(): String = when (this) {
         FREEDOM -> "Freedom of movement"
-        RESIDENCE -> "Permanent residence"
+        RESIDENCE -> "Residence permit"
         VISA_FREE -> "Visa free / On arrival"
         COVERED -> "Covered by a document"
         ETA -> "ETA (pre-authorisation)"

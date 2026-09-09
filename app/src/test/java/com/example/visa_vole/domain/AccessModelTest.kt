@@ -299,6 +299,31 @@ class AccessModelTest {
         assertEquals(null, w.holdingFor(setOf("LB"), "visa")) // no known holding covers Lebanon
     }
 
+    @Test fun residenceLevelIsLabelledAsResidencePermit() {
+        assertEquals("Residence permit", RESIDENCE.label())
+    }
+
+    @Test fun visaAndResidenceHoldingPickersAreDisjoint() {
+        val w = world(
+            regimes = listOf(
+                regime("eu-eea-efta", "EU", "freedom-of-movement", "CZ", "DE"),
+            ),
+            holdings = mapOf(
+                "schengen-residence" to DataHolding("schengen-residence", "Schengen/EU Residence", "residency", "EU"),
+                "schengen-visa" to DataHolding("schengen-visa", "Schengen Visa", "short_term_visa", "EU"),
+                "sg-visa" to DataHolding("sg-visa", "Singapore Work/Residence Permit", "long_term_visa", "SG"),
+                "apec-card" to DataHolding("apec-card", "APEC Business Travel Card", "special_permit", "AU"),
+            ),
+        )
+
+        assertEquals(listOf("schengen-residence", "sg-visa"), w.holdingsForKind("residence").map { it.id })
+        assertEquals(listOf("apec-card", "schengen-visa"), w.holdingsForKind("visa").map { it.id })
+        assertEquals("sg-visa", w.holdingFor(setOf("SG"), "residence"))
+        assertNull(w.holdingFor(setOf("SG"), "visa"))
+        assertEquals("schengen-visa", w.holdingFor(setOf("DE"), "visa"))
+        assertEquals("apec-card", w.holdingFor(setOf("AU"), "visa"))
+    }
+
     @Test fun customResidenceAppliesKnownHoldingPerks() {
         // A Czech residence typed as a Schengen/EU residence unlocks e.g. Mexico, beyond the bloc.
         val w = world(

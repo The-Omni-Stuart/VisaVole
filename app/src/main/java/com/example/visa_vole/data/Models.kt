@@ -115,11 +115,18 @@ data class WorldData(
      * travel perks apply automatically (e.g. a Czech residence → `schengen-residence`). Returns null
      * when no known holding covers the selected area.
      */
+    private val holdingCategoriesByKind: Map<String, Set<String>> = mapOf(
+        "residence" to setOf("residency", "long_term_visa"),
+        "visa" to setOf("short_term_visa", "special_permit"),
+    )
+
+    fun holdingsForKind(kind: String): List<Holding> =
+        holdings.values
+            .filter { it.category in holdingCategoriesByKind[kind].orEmpty() }
+            .sortedBy { it.name }
+
     fun holdingFor(countries: Collection<String>, kind: String): String? {
-        val cats = when (kind) {
-            "residence" -> setOf("residency", "long_term_visa")
-            else -> setOf("short_term_visa", "long_term_visa", "special_permit") // "visa" + the APEC card
-        }
+        val cats = holdingCategoriesByKind[kind].orEmpty()
         val coverage = { h: Holding ->
             blocHoldings[h.issuingCountry]
                 ?.let { id -> regimes.firstOrNull { it.id == id }?.members ?: emptySet() }

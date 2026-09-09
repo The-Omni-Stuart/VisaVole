@@ -360,9 +360,9 @@ fun AddDocumentDialog(
                                 text = { Text("No known type (custom only)") },
                                 onClick = { holdingChoice = ""; typeOpen.value = false },
                             )
-                            world.holdings.values.sortedBy { it.name }.forEach { h ->
+                            world.holdingsForKind(docType.kind).forEach { h ->
                                 DropdownMenuItem(
-                                    text = { Text("${h.name} (${h.category})") },
+                                    text = { Text(h.name) },
                                     onClick = { holdingChoice = h.id; typeOpen.value = false },
                                 )
                             }
