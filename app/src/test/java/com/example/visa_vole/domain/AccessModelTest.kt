@@ -13,13 +13,13 @@ import com.example.visa_vole.domain.AccessLevel.E_VISA
 import com.example.visa_vole.domain.AccessLevel.FREEDOM
 import com.example.visa_vole.domain.AccessLevel.REFUSED
 import com.example.visa_vole.domain.AccessLevel.RESIDENCE
-import com.example.visa_vole.domain.AccessLevel.UNKNOWN
 import com.example.visa_vole.domain.AccessLevel.VISA_FREE
 import com.example.visa_vole.domain.AccessLevel.VISA_REQUIRED
 import com.example.visa_vole.domain.DocKind.Custom
 import com.example.visa_vole.domain.DocKind.Holding
 import com.example.visa_vole.domain.DocKind.Passport
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -114,6 +114,7 @@ class AccessModelTest {
         val acc = AccessModel.compute(listOf(doc("p", Passport("GB")), doc("d", Holding("x"))), w)["AD"]!!
         assertEquals(VISA_FREE, acc.level)
         assertEquals(90, acc.days)
+        assertFalse(acc.fromDocument) // the stronger passport rule still wins, so the stay rule is not a document override
     }
 
     @Test fun documentOverridesPassportRefusal() {
@@ -123,7 +124,27 @@ class AccessModelTest {
             holdings = mapOf("x" to DataHolding("x", "X Visa", "short_term_visa", "SY")),
             benefits = mapOf("x" to listOf(Benefit("x", "SY", "visa-free", 90))),
         )
-        assertEquals(COVERED, AccessModel.compute(listOf(doc("p", Passport("GB")), doc("d", Holding("x"))), w)["SY"]!!.level)
+        val sy = AccessModel.compute(listOf(doc("p", Passport("GB")), doc("d", Holding("x"))), w)["SY"]!!
+        assertEquals(COVERED, sy.level)
+        assertTrue(sy.fromDocument)
+    }
+
+    @Test fun documentDaysAreFlaggedWhenPassportHasNoDays() {
+        val w = world(
+            baseline = mapOf("GB" to listOf(corridor("GB", "SY", "visa-required"))),
+            holdings = mapOf("x" to DataHolding("x", "X Visa", "short_term_visa", "SY")),
+            benefits = mapOf("x" to listOf(Benefit("x", "SY", "visa-free", 90))),
+        )
+        val acc = AccessModel.compute(listOf(doc("p", Passport("GB")), doc("d", Holding("x"))), w)["SY"]!!
+        assertEquals(90, acc.days)
+        assertTrue(acc.fromDocument)
+    }
+
+    @Test fun passportAccessIsNotFlaggedAsDocument() {
+        val w = world(baseline = mapOf("GB" to listOf(corridor("GB", "AD", "visa-free", 90))))
+        val acc = AccessModel.compute(listOf(doc("p", Passport("GB"))), w)["AD"]!!
+        assertEquals(90, acc.days)
+        assertFalse(acc.fromDocument)
     }
 
     @Test fun residenceOverridesPassportRefusalInBloc() {
@@ -328,6 +349,11 @@ class AccessModelTest {
             "Single entry - 90 per entry",
             StayRule("Z", setOf("AR"), "per-entry", 90, null, false, setOf("*"), null).summary(),
         )
+        // A rolling rule with multipleEntry=false has no confirmed entry count, so don't claim "Single entry".
+        assertEquals(
+            "90 in 180 (rolling)",
+            StayRule("Z", setOf("BA"), "rolling", 90, 180, false, setOf("*"), null).summary(),
+        )
     }
 
     // ---- expiry + Schengen travel-area (Bug A/B/C fixes) ----
@@ -385,15 +411,40 @@ class AccessModelTest {
         assertEquals(COVERED, AccessModel.compute(listOf(docEx("d", Holding("x"), "2030-01-01")), w, today)["SY"]!!.level)
     }
 
-    @Test fun breakdownShowsExpiredDocumentAsNoAccess() {
+    @Test fun breakdownExcludesExpiredDocuments() {
         val w = world(
             holdings = mapOf("x" to DataHolding("x", "X Visa", "short_term_visa", "SY")),
             benefits = mapOf("x" to listOf(Benefit("x", "SY", "visa-free", 90))),
         )
         val today = LocalDate.of(2026, 9, 8)
-        val bd = AccessModel.breakdownFor("SY", listOf(docEx("d", Holding("x"), "2020-01-01")), w, today)
+        val expired = AccessModel.breakdownFor("SY", listOf(docEx("d", Holding("x"), "2020-01-01")), w, today)
+        assertTrue(expired.isEmpty())
+        val valid = AccessModel.breakdownFor("SY", listOf(docEx("d", Holding("x"), "2030-01-01")), w, today)
+        assertEquals(1, valid.size)
+        assertEquals(COVERED, valid[0].access.level)
+    }
+
+    @Test fun breakdownOmitsDocumentsWithNoDocumentedRule() {
+        val w = world(baseline = mapOf("GB" to listOf(corridor("GB", "XX", "visa-required"))))
+        val bd = AccessModel.breakdownFor("XX", listOf(doc("p", Passport("GB")), doc("d", Holding("missing"))), w)
         assertEquals(1, bd.size)
-        assertEquals(UNKNOWN, bd[0].access.level)
+        assertEquals(VISA_REQUIRED, bd[0].access.level)
+    }
+
+    @Test fun stayLabelForUsesMatchingStayRule() {
+        val rolling = StayRule("Western Balkans", setOf("BA"), "rolling", 90, 180, false, setOf("*"), null)
+        val passport90 = Access(VISA_FREE, 90, "Passport rule")
+        val document30 = Access(VISA_FREE, 30, "Schengen Residence (visa-free)", fromDocument = true)
+        val document90 = Access(VISA_FREE, 90, "Schengen Residence (visa-free)", fromDocument = true)
+        val freedomNull = Access(FREEDOM, null, "Bloc: EU")
+        val visaRequired = Access(VISA_REQUIRED, null, "Passport rule")
+
+        assertEquals("90 in 180 (rolling)", AccessModel.stayLabelFor(passport90, rolling))
+        assertEquals("30 days", AccessModel.stayLabelFor(document30, rolling))
+        assertEquals("90 in 180 (rolling)", AccessModel.stayLabelFor(document90, rolling))
+        assertEquals("90 in 180 (rolling)", AccessModel.stayLabelFor(freedomNull, rolling))
+        assertEquals(null, AccessModel.stayLabelFor(visaRequired, rolling))
+        assertEquals("30 days", AccessModel.stayLabelFor(document30, null))
     }
 
     @Test fun realDatabaseGbpPassportIranIsVisaRequired() {
@@ -446,5 +497,20 @@ class AccessModelTest {
         assertEquals(COVERED, multi["CY"]!!.level) // multiple entry -> Cyprus perk
         // The rest of Schengen is covered regardless (the perk only gates Cyprus).
         assertEquals(COVERED, single["DE"]!!.level)
+    }
+
+    @Test fun realDatabaseBosniaSchengenResidenceFlagsDocumentDays() {
+        val w = JdbcRepository.load(File("src/main/assets/visa_data.db"))
+        // IN passport is visa-required for Bosnia, but a Schengen/EU residence grants 30 days.
+        val acc = AccessModel.compute(
+            listOf(doc("p", Passport("IN")), doc("d", Holding("schengen-residence"))),
+            w,
+        )
+        val ba = acc["BA"]!!
+        assertEquals(VISA_FREE, ba.level)
+        assertEquals(30, ba.days)
+        assertTrue(ba.fromDocument)
+        // The generic Western-Balkans passport rule is still available for the card to label.
+        assertTrue(w.stayRuleFor("BA", setOf("IN")) != null)
     }
 }

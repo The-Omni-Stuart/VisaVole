@@ -39,8 +39,7 @@ fun CountryDetailCard(
     modifier: Modifier = Modifier,
     isHome: Boolean = false,
     homePassport: String? = null,
-    staySummary: String? = null,
-    stayNote: String? = null,
+    daysLabel: String? = null,
 ) {
     val level = access?.level ?: AccessLevel.UNKNOWN
     Surface(
@@ -70,9 +69,10 @@ fun CountryDetailCard(
                         style = MaterialTheme.typography.labelLarge,
                     )
                 }
-                if (access?.days != null) {
+                val shownDays = daysLabel ?: access?.days?.let { "$it days" }
+                if (!shownDays.isNullOrBlank()) {
                     Spacer(Modifier.width(12.dp))
-                    Text("${access?.days} days", style = MaterialTheme.typography.titleMedium)
+                    Text(shownDays, style = MaterialTheme.typography.titleMedium)
                 }
             }
             val subtext = if (isHome) "Passport: ${homePassport.orEmpty()}" else access?.reason.orEmpty()
@@ -80,18 +80,6 @@ fun CountryDetailCard(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     subtext,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (!staySummary.isNullOrBlank()) {
-                Spacer(Modifier.height(8.dp))
-                Text(staySummary.orEmpty(), style = MaterialTheme.typography.bodyMedium)
-            }
-            if (!stayNote.isNullOrBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    stayNote.orEmpty(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

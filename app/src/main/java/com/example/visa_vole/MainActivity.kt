@@ -184,20 +184,20 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
             )
             val selName = selected?.let { s.world.countries[it]?.name }
             if (selected != null && selName != null) {
+                val selectedAccess = s.access[selected]
                 val stayRule = when {
                     selected in s.homeCountries -> null
-                    s.access[selected]?.level == AccessLevel.RESIDENCE -> null // you live here — no short-stay limit
+                    selectedAccess?.level == AccessLevel.RESIDENCE -> null // you live here — no short-stay limit
                     else -> s.world.stayRuleFor(selected, s.homeCountries)
                 }
                 CountryDetailCard(
                     countryName = selName,
-                    access = s.access[selected],
+                    access = selectedAccess,
                     breakdown = AccessModel.breakdownFor(selected, s.docs, s.world),
                     onDismiss = { pick(null) },
                     isHome = selected in s.homeCountries,
                     homePassport = if (selected in s.homeCountries) s.world.countries[selected]?.name else null,
-                    staySummary = stayRule?.summary(),
-                    stayNote = stayRule?.note,
+                    daysLabel = AccessModel.stayLabelFor(selectedAccess, stayRule),
                 )
             } else {
                 LegendRow(s.access.values.groupBy { it.level }.mapValues { it.value.size }, s.homeCountries.size)

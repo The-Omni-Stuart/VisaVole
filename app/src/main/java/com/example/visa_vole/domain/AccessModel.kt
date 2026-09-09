@@ -1,8 +1,11 @@
 package com.example.visa_vole.domain
 
 import com.example.visa_vole.data.Regime
+import com.example.visa_vole.data.StayRule
 import com.example.visa_vole.data.WorldData
 import com.example.visa_vole.domain.AccessLevel.COVERED
+import com.example.visa_vole.domain.AccessLevel.E_VISA
+import com.example.visa_vole.domain.AccessLevel.ETA
 import com.example.visa_vole.domain.AccessLevel.FREEDOM
 import com.example.visa_vole.domain.AccessLevel.REFUSED
 import com.example.visa_vole.domain.AccessLevel.RESIDENCE
@@ -87,13 +90,13 @@ object AccessModel {
                 val isResidence = h.category == "residency"
                 merge(
                     map, h.issuingCountry,
-                    Access(if (isResidence) RESIDENCE else COVERED, null, if (isResidence) "Residence: ${h.name}" else "You hold: ${h.name}"),
+                    Access(if (isResidence) RESIDENCE else COVERED, null, if (isResidence) "Residence: ${h.name}" else "You hold: ${h.name}", true),
                 )
                 val benefitLevel = if (isResidence) VISA_FREE else COVERED
                 for (b in world.benefits[k.holdingId].orEmpty()) {
                     if (!AccessLevel.isEntryBenefit(b.type)) continue // skip transit-only rows
                     if (!entryTypeSatisfied(b.entryTypes, null)) continue // a bare Holding has no entry type
-                    merge(map, b.destination, Access(benefitLevel, b.days, "${h.name} (${b.type})"))
+                    merge(map, b.destination, Access(benefitLevel, b.days, "${h.name} (${b.type})", true))
                 }
             }
             is Custom -> {
@@ -119,7 +122,7 @@ object AccessModel {
                         isResidence -> VISA_FREE
                         else -> COVERED
                     }
-                    merge(map, c, Access(level, null, "Your ${k.kind}"))
+                    merge(map, c, Access(level, null, "Your ${k.kind}", true))
                 }
                 // A known holding tied to this document also applies its travel perks (entry benefits only).
                 k.holdingId?.let { hid ->
@@ -128,7 +131,7 @@ object AccessModel {
                     for (b in world.benefits[hid].orEmpty()) {
                         if (!AccessLevel.isEntryBenefit(b.type)) continue
                         if (!entryTypeSatisfied(b.entryTypes, k.entryType)) continue
-                        merge(map, b.destination, Access(perkLevel, b.days, "${h.name} (${b.type})"))
+                        merge(map, b.destination, Access(perkLevel, b.days, "${h.name} (${b.type})", true))
                     }
                 }
             }
@@ -165,7 +168,8 @@ object AccessModel {
 
     /**
      * Per-document access to [dest], strongest first, for the "enter with" breakdown in the detail
-     * card — so the user sees exactly which passport/document unlocks entry.
+     * card — so the user sees exactly which passport/document unlocks entry. Expired non-passport
+     * documents and documents with no documented rule are omitted.
      */
     fun breakdownFor(
         dest: String,
@@ -173,18 +177,22 @@ object AccessModel {
         world: WorldData,
         today: LocalDate = LocalDate.now(ZoneOffset.UTC),
     ): List<DocAccess> =
-        docs.map { d ->
-            val candidates = when (val k = d.kind) {
-                is Passport -> passportCandidates(k.iso2, world, isExpired(d, today))
-                else -> if (isExpired(d, today)) emptyMap() else documentCandidates(d, world)
+        docs
+            .filter { d -> d.kind is Passport || !isExpired(d, today) }
+            .map { d ->
+                val candidates = when (val k = d.kind) {
+                    is Passport -> passportCandidates(k.iso2, world, isExpired(d, today))
+                    else -> documentCandidates(d, world)
+                }
+                val label = when (val k = d.kind) {
+                    is Passport -> world.countries[k.iso2]?.name ?: k.iso2
+                    is Holding -> world.holdings[k.holdingId]?.name ?: d.label
+                    is Custom -> d.label
+                }
+                DocAccess(label, candidates[dest] ?: Access(UNKNOWN, null))
             }
-            val label = when (val k = d.kind) {
-                is Passport -> world.countries[k.iso2]?.name ?: k.iso2
-                is Holding -> world.holdings[k.holdingId]?.name ?: d.label
-                is Custom -> d.label
-            }
-            DocAccess(label, candidates[dest] ?: Access(UNKNOWN, null))
-        }.sortedByDescending { it.access.level.rank }
+            .filter { it.access.level != UNKNOWN }
+            .sortedByDescending { it.access.level.rank }
 
     /**
      * Effective access for every destination, given the held [docs] (passports included). [today]
@@ -217,4 +225,21 @@ object AccessModel {
 
     fun accessFor(dest: String, docs: List<Document>, world: WorldData): Access =
         compute(docs, world)[dest] ?: Access(UNKNOWN, null, "No data for $dest")
+
+    /**
+     * The primary days label for the detail card. A [StayRule] is only shown when it matches the
+     * effective access: either its window matches the access's explicit day limit, or the access is
+     * a passport/bloc entry grant with no explicit day limit. This keeps a document-specific 30-day
+     * grant from being mixed with an unrelated generic 90/180 passport rule.
+     */
+    fun stayLabelFor(access: Access?, stayRule: StayRule?): String? {
+        val daysLabel = access?.days?.let { "$it days" }
+        if (stayRule == null || access == null) return daysLabel
+        val matches = when {
+            access.days != null -> stayRule.windowDays == access.days
+            !access.fromDocument -> access.level in setOf(FREEDOM, RESIDENCE, VISA_FREE, COVERED, ETA, E_VISA)
+            else -> false
+        }
+        return if (matches) stayRule.windowSummary() else daysLabel
+    }
 }

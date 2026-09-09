@@ -37,18 +37,31 @@ data class StayRule(
     val nationalities: Set<String>, // "*" or an ISO2 or a bloc code (e.g. "EU-EEA")
     val note: String?,
 ) {
-    /** Human summary, e.g. "Multiple entry - 90 in 180 (rolling)". */
-    fun summary(): String {
-        val entry = if (multipleEntry) "Multiple entry" else "Single entry"
-        val window = when (windowType) {
-            "rolling" -> when {
-                windowDays != null && windowPeriodDays != null -> "$windowDays in $windowPeriodDays (rolling)"
-                windowDays != null -> "$windowDays (rolling)"
-                else -> "rolling"
-            }
-            else -> if (windowDays != null) "$windowDays per entry" else "per entry"
+    /** Compact window text for the primary days display, e.g. "90 in 180 (rolling)" or "90 per entry". */
+    fun windowSummary(): String = when (windowType) {
+        "rolling" -> when {
+            windowDays != null && windowPeriodDays != null -> "$windowDays in $windowPeriodDays (rolling)"
+            windowDays != null -> "$windowDays (rolling)"
+            else -> "rolling"
         }
-        return "$entry - $window"
+        else -> if (windowDays != null) "$windowDays per entry" else "per entry"
+    }
+
+    /**
+     * Full human summary, e.g. "Multiple entry - 90 in 180 (rolling)".
+     *
+     * `multipleEntry` is a confirmed-fact flag: for rolling windows, `false` means the source did
+     * not confirm multiple entry, so the summary omits the entry count rather than claiming
+     * "Single entry".
+     */
+    fun summary(): String {
+        val window = windowSummary()
+        val entry = when {
+            multipleEntry -> "Multiple entry"
+            windowType == "per-entry" -> "Single entry"
+            else -> ""
+        }
+        return if (entry.isEmpty()) window else "$entry - $window"
     }
 }
 
