@@ -41,6 +41,12 @@ object AccessModel {
         map[dest] = best(map[dest], candidate)
     }
 
+    /** A benefit with no [Benefit.entryTypes] applies to any document; otherwise the document's
+     *  entry type must be one of the listed types. A doc with no entry type (e.g. a bare
+     *  [Holding]) never satisfies a restricted grant. */
+    private fun entryTypeSatisfied(benefitTypes: Set<String>, docEntryType: String?): Boolean =
+        benefitTypes.isEmpty() || (docEntryType != null && docEntryType in benefitTypes)
+
     /** True when [doc] carries an expiry date already in the past (relative to [today]). */
     private fun isExpired(doc: Document, today: LocalDate): Boolean {
         val iso = doc.expiry ?: return false
@@ -86,6 +92,7 @@ object AccessModel {
                 val benefitLevel = if (isResidence) VISA_FREE else COVERED
                 for (b in world.benefits[k.holdingId].orEmpty()) {
                     if (!AccessLevel.isEntryBenefit(b.type)) continue // skip transit-only rows
+                    if (!entryTypeSatisfied(b.entryTypes, null)) continue // a bare Holding has no entry type
                     merge(map, b.destination, Access(benefitLevel, b.days, "${h.name} (${b.type})"))
                 }
             }
@@ -120,6 +127,7 @@ object AccessModel {
                     val perkLevel = if (isResidence) VISA_FREE else COVERED
                     for (b in world.benefits[hid].orEmpty()) {
                         if (!AccessLevel.isEntryBenefit(b.type)) continue
+                        if (!entryTypeSatisfied(b.entryTypes, k.entryType)) continue
                         merge(map, b.destination, Access(perkLevel, b.days, "${h.name} (${b.type})"))
                     }
                 }

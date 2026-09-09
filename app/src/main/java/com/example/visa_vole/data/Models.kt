@@ -15,8 +15,16 @@ data class Regime(val id: String, val name: String, val level: String, val membe
 /** A held-document category from `visa_holdings`; [category] is residency / short_term_visa / long_term_visa / special_permit. */
 data class Holding(val id: String, val name: String, val category: String, val issuingCountry: String)
 
-/** A grant from `visa_benefits`: what a [holding] document confers at [destination]. */
-data class Benefit(val holding: String, val destination: String, val type: String, val days: Int?)
+/** A grant from `visa_benefits`: what a [holding] document confers at [destination].
+ *  [entryTypes] restricts the grant to documents with one of these entry types
+ *  ("single"/"double"/"multiple"); empty = applies to every entry type. */
+data class Benefit(
+    val holding: String,
+    val destination: String,
+    val type: String,
+    val days: Int?,
+    val entryTypes: Set<String> = emptySet(),
+)
 
 /** A per-destination stay/entry rule from `stay_rules`: the window and entry type. */
 data class StayRule(

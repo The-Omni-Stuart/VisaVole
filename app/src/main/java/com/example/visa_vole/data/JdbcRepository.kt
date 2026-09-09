@@ -74,12 +74,13 @@ object JdbcRepository {
     private fun loadBenefits(c: Connection): Map<String, List<Benefit>> {
         val out = HashMap<String, MutableList<Benefit>>()
         c.createStatement().use { st ->
-            st.executeQuery("SELECT holding, destination, type, days FROM visa_benefits").use { rs ->
+            st.executeQuery("SELECT holding, destination, type, days, entry_type FROM visa_benefits").use { rs ->
                 while (rs.next()) {
                     val h = rs.getString("holding")
                     val d = rs.getInt("days")
                     val days = if (rs.wasNull()) null else d
-                    out.getOrPut(h) { mutableListOf() }.add(Benefit(h, rs.getString("destination"), rs.getString("type"), days))
+                    out.getOrPut(h) { mutableListOf() }
+                        .add(Benefit(h, rs.getString("destination"), rs.getString("type"), days, parseEntryTypes(rs.getString("entry_type"))))
                 }
             }
         }
@@ -122,5 +123,11 @@ object JdbcRepository {
         val inner = json.trim().removePrefix("[").removeSuffix("]")
         if (inner.isBlank()) return emptyList()
         return inner.split(",").map { it.trim().trim('"') }.filter { it.isNotEmpty() }
+    }
+
+    /** Parse a comma list of entry types like `double,multiple`; null/blank = no restriction. */
+    private fun parseEntryTypes(csv: String?): Set<String> {
+        if (csv == null) return emptySet()
+        return csv.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
     }
 }

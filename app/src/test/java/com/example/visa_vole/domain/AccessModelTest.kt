@@ -431,4 +431,20 @@ class AccessModelTest {
         assertEquals(null, acc["IE"])
         assertEquals(null, acc["CY"])
     }
+
+    @Test fun schengenVisaCyprusRequiresDoubleOrMultipleEntry() {
+        val w = JdbcRepository.load(File("src/main/assets/visa_data.db"))
+        val schengen = w.regimes.first { it.id == "schengen" }.members
+        fun visa(entry: String) = Custom(schengen.toSet(), "schengen", "visa", "schengen-visa", entry)
+        // IN does not itself grant Cyprus (visa-required), so Cyprus can only come from the
+        // Schengen-visa perk, which is gated on the visa's entry type.
+        val single = AccessModel.compute(listOf(doc("p", Passport("IN")), doc("v1", visa("single"))), w)
+        assertEquals(VISA_REQUIRED, single["CY"]!!.level) // single entry -> no Cyprus perk
+        val dbl = AccessModel.compute(listOf(doc("p", Passport("IN")), doc("v2", visa("double"))), w)
+        assertEquals(COVERED, dbl["CY"]!!.level) // double entry -> Cyprus perk
+        val multi = AccessModel.compute(listOf(doc("p", Passport("IN")), doc("v3", visa("multiple"))), w)
+        assertEquals(COVERED, multi["CY"]!!.level) // multiple entry -> Cyprus perk
+        // The rest of Schengen is covered regardless (the perk only gates Cyprus).
+        assertEquals(COVERED, single["DE"]!!.level)
+    }
 }

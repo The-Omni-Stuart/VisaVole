@@ -27,7 +27,11 @@ class VisaDb(context: Context) {
         }
 
     private fun ensureCopied() {
-        if (dbFile.exists()) return
+        // Re-copy when the bundled asset has changed size (a schema/data refresh in an app update),
+        // so an existing install never keeps a stale copy that lacks new columns.
+        val assetLen = appContext.assets.openFd(ASSET_NAME).use { it.length }
+        if (dbFile.exists() && dbFile.length() == assetLen) return
+        if (dbFile.exists()) dbFile.delete()
         appContext.assets.open(ASSET_NAME).use { input ->
             dbFile.outputStream().use { input.copyTo(it) }
         }

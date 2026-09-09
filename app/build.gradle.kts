@@ -33,6 +33,11 @@ android {
     buildFeatures {
         compose = true
     }
+    aaptOptions {
+        // Keep the bundled SQLite DB stored (uncompressed) so it can be opened via a file
+        // descriptor and its size compared on launch to detect bundled-data refreshes.
+        noCompress("db")
+    }
 }
 
 dependencies {

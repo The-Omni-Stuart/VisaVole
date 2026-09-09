@@ -8,10 +8,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -45,6 +48,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.example.visa_vole.data.Country
@@ -309,9 +313,11 @@ fun AddDocumentDialog(
         Surface(
             shape = MaterialTheme.shapes.large,
             tonalElevation = 6.dp,
-            modifier = Modifier.width(400.dp),
+            modifier = Modifier
+                .width(400.dp)
+                .heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp),
         ) {
-            Column(Modifier.padding(20.dp)) {
+            Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState())) {
                 Text("Add document", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -392,10 +398,30 @@ fun AddDocumentDialog(
                         }
                         if (docType == DocType.VISA) {
                             Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilterChip(selected = entryType == "single", onClick = { entryType = "single" }, label = { Text("Single entry") })
-                                FilterChip(selected = entryType == "double", onClick = { entryType = "double" }, label = { Text("Double entry") })
-                                FilterChip(selected = entryType == "multiple", onClick = { entryType = "multiple" }, label = { Text("Multiple entry") })
+                            val entryOpen = remember { mutableStateOf(false) }
+                            val entryLabel = when (entryType) {
+                                "single" -> "Single entry"
+                                "double" -> "Double entry"
+                                else -> "Multiple entry"
+                            }
+                            Row(Modifier.fillMaxWidth()) {
+                                OutlinedButton(onClick = { entryOpen.value = true }, modifier = Modifier.fillMaxWidth()) {
+                                    Text("Entry type: $entryLabel")
+                                }
+                            }
+                            DropdownMenu(expanded = entryOpen.value, onDismissRequest = { entryOpen.value = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Single entry") },
+                                    onClick = { entryType = "single"; entryOpen.value = false },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Double entry") },
+                                    onClick = { entryType = "double"; entryOpen.value = false },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Multiple entry") },
+                                    onClick = { entryType = "multiple"; entryOpen.value = false },
+                                )
                             }
                         }
                     }

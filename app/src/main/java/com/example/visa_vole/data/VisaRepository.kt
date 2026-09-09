@@ -67,11 +67,12 @@ class VisaRepository(private val db: VisaDb) {
 
     private fun loadBenefits(c: android.database.sqlite.SQLiteDatabase): Map<String, List<Benefit>> {
         val out = HashMap<String, MutableList<Benefit>>()
-        c.rawQuery("SELECT holding, destination, type, days FROM visa_benefits", null).use { cur ->
+        c.rawQuery("SELECT holding, destination, type, days, entry_type FROM visa_benefits", null).use { cur ->
             while (cur.moveToNext()) {
                 val h = cur.getString(0)
                 val days = if (cur.isNull(3)) null else cur.getInt(3)
-                out.getOrPut(h) { mutableListOf() }.add(Benefit(h, cur.getString(1), cur.getString(2), days))
+                val entryTypes = parseEntryTypes(cur.getString(4))
+                out.getOrPut(h) { mutableListOf() }.add(Benefit(h, cur.getString(1), cur.getString(2), days, entryTypes))
             }
         }
         return out
@@ -105,5 +106,11 @@ class VisaRepository(private val db: VisaDb) {
         if (json == null) return emptySet()
         val arr = JSONArray(json)
         return (0 until arr.length()).map { arr.getString(it) }.toSet()
+    }
+
+    /** Parse a comma list of entry types like `double,multiple`; null/blank = no restriction. */
+    private fun parseEntryTypes(csv: String?): Set<String> {
+        if (csv == null) return emptySet()
+        return csv.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
     }
 }
