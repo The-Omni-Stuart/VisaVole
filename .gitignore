@@ -15,3 +15,6 @@
 local.properties
 
 .kotlin/
+
+# Local working notes / bug tracker (not committed)
+issues.md
