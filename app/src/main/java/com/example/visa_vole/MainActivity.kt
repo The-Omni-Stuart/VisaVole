@@ -179,10 +179,16 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
                 selected = selected,
                 onCountryTap = pick,
                 homeCountries = s.homeCountries,
+                ownVisaCountries = s.ownVisaCountries,
                 modifier = Modifier.fillMaxWidth().weight(1f),
             )
             val selName = selected?.let { s.world.countries[it]?.name }
             if (selected != null && selName != null) {
+                val stayRule = when {
+                    selected in s.homeCountries -> null
+                    s.access[selected]?.level == AccessLevel.RESIDENCE -> null // you live here — no short-stay limit
+                    else -> s.world.stayRuleFor(selected, s.homeCountries)
+                }
                 CountryDetailCard(
                     countryName = selName,
                     access = s.access[selected],
@@ -190,11 +196,8 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
                     onDismiss = { pick(null) },
                     isHome = selected in s.homeCountries,
                     homePassport = if (selected in s.homeCountries) s.world.countries[selected]?.name else null,
-                    staySummary = when {
-                        selected in s.homeCountries -> null
-                        s.access[selected]?.level == AccessLevel.RESIDENCE -> null // you live here — no short-stay limit
-                        else -> s.world.stayRuleFor(selected, s.homeCountries)?.summary()
-                    },
+                    staySummary = stayRule?.summary(),
+                    stayNote = stayRule?.note,
                 )
             } else {
                 LegendRow(s.access.values.groupBy { it.level }.mapValues { it.value.size }, s.homeCountries.size)

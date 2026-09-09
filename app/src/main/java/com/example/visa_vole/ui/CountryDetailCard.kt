@@ -40,6 +40,7 @@ fun CountryDetailCard(
     isHome: Boolean = false,
     homePassport: String? = null,
     staySummary: String? = null,
+    stayNote: String? = null,
 ) {
     val level = access?.level ?: AccessLevel.UNKNOWN
     Surface(
@@ -86,6 +87,14 @@ fun CountryDetailCard(
             if (!staySummary.isNullOrBlank()) {
                 Spacer(Modifier.height(8.dp))
                 Text(staySummary.orEmpty(), style = MaterialTheme.typography.bodyMedium)
+            }
+            if (!stayNote.isNullOrBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    stayNote.orEmpty(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             if (breakdown.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))

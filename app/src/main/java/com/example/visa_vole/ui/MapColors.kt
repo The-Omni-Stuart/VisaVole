@@ -12,12 +12,16 @@ val LAND_STROKE = Color(0xFF0B1F2A)
 // The traveller's home country (citizenship) — special-cased on the map, not a map level.
 val HOME = Color(0xFF3B82F6)
 
+// A short-term visa's own country (the doc's home / issuing country) — darker than the lighter
+// purple of the rest of the bloc the visa unlocks, so the primary destination stands out.
+val COVERED_OWN = Color(0xFF7C3AED)
+
 // Choropleth palette, best (blue / teal / green) -> worst (red). Home is drawn separately.
 fun colorFor(level: AccessLevel?): Color = when (level) {
     AccessLevel.FREEDOM -> Color(0xFF93C5FD)       // light blue — bloc citizenship
     AccessLevel.RESIDENCE -> Color(0xFF2DD4BF)     // teal — residence permit
     AccessLevel.VISA_FREE -> Color(0xFF4ADE80)     // green — visa-free / on arrival, no step needed
-    AccessLevel.COVERED -> Color(0xFFA78BFA)       // purple — you hold a visa / doc
+    AccessLevel.COVERED -> Color(0xFFC4B5FD)       // light purple — covered via a visa's travel bloc
     AccessLevel.ETA -> Color(0xFFFACC15)           // yellow — quick pre-authorisation (eTA/ESTA/ETIAS)
     AccessLevel.E_VISA -> Color(0xFFF59E0B)        // orange — e-visa, apply online
     AccessLevel.VISA_REQUIRED -> Color(0xFF94A3B8) // gray — embassy visit

@@ -20,7 +20,7 @@ sealed class DocKind {
         val blocId: String? = null,
         val kind: String = "visa",
         val holdingId: String? = null,
-        val entryType: String? = null, // "single" | "multiple" (visa docs only)
+        val entryType: String? = null, // "single" | "double" | "multiple" (visa docs only)
     ) : DocKind()
 }
 

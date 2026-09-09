@@ -64,6 +64,7 @@ private fun Long.toUtcIsoDate(): String {
 
 private val STATUS_ORANGE = Color(0xFFEF6C00)
 private val STATUS_GREEN = Color(0xFF2E7D32)
+private val STATUS_RED = Color(0xFFC62828)
 
 /** Days from [today] until the ISO date in [iso]; null when unset or unparsable. */
 private fun daysUntil(iso: String?, today: LocalDate): Long? =
@@ -84,6 +85,7 @@ private fun docSubtitle(
     base: Color,
     orange: Color,
     green: Color,
+    red: Color,
 ): AnnotatedString {
     val k = doc.kind
     val regime = (k as? DocKind.Custom)?.blocId?.let { id -> world.regimes.firstOrNull { r -> r.id == id }?.name }
@@ -107,7 +109,12 @@ private fun docSubtitle(
         base,
     )
     entryType?.let { type ->
-        styled(" · ${if (type == "single") "single" else "multiple"} entry", if (type == "single") orange else green)
+        val (label, color) = when (type) {
+            "single" -> "single" to red
+            "double" -> "double" to orange
+            else -> "multiple" to green
+        }
+        styled(" · $label entry", color)
     }
     doc.validFrom?.let { from -> styled(" · from $from", base) }
     doc.expiry?.let { exp -> styled(" · to $exp", base) }
@@ -215,7 +222,7 @@ private fun DocCard(
             Column(Modifier.weight(1f)) {
                 Text(doc.label, style = MaterialTheme.typography.titleSmall)
                 Text(
-                    docSubtitle(doc, world, MaterialTheme.colorScheme.onSurfaceVariant, STATUS_ORANGE, STATUS_GREEN),
+                    docSubtitle(doc, world, MaterialTheme.colorScheme.onSurfaceVariant, STATUS_ORANGE, STATUS_GREEN, STATUS_RED),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -250,7 +257,7 @@ fun AddDocumentDialog(
     var customIso by remember { mutableStateOf<Set<String>>(emptySet()) }
     var customBlocChoice by remember { mutableStateOf<String?>(null) } // null=auto, ""=none, else regime id
     var holdingChoice by remember { mutableStateOf<String?>(null) } // null=auto, ""=none, else holding id
-    var entryType by remember { mutableStateOf("multiple") } // "single" | "multiple" (visa only)
+    var entryType by remember { mutableStateOf("multiple") } // "single" | "double" | "multiple" (visa only)
     var expiryDate by remember { mutableStateOf<Long?>(null) }
     var validFromDate by remember { mutableStateOf<Long?>(null) }
 
@@ -387,6 +394,7 @@ fun AddDocumentDialog(
                             Spacer(Modifier.height(8.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 FilterChip(selected = entryType == "single", onClick = { entryType = "single" }, label = { Text("Single entry") })
+                                FilterChip(selected = entryType == "double", onClick = { entryType = "double" }, label = { Text("Double entry") })
                                 FilterChip(selected = entryType == "multiple", onClick = { entryType = "multiple" }, label = { Text("Multiple entry") })
                             }
                         }

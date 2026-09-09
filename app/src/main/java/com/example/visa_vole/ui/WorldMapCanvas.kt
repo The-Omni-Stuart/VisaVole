@@ -41,6 +41,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import com.example.visa_vole.data.WorldMapData
 import com.example.visa_vole.domain.Access
+import com.example.visa_vole.domain.AccessLevel
 
 private const val MIN_ZOOM = 1f
 private const val MAX_ZOOM = 20f
@@ -92,6 +93,7 @@ fun WorldMapCanvas(
     selected: String?,
     onCountryTap: (String?) -> Unit,
     homeCountries: Set<String> = emptySet(),
+    ownVisaCountries: Set<String> = emptySet(),
     modifier: Modifier = Modifier,
 ) {
     val shapes: List<IsoShape> = remember(geometry) {
@@ -236,7 +238,12 @@ fun WorldMapCanvas(
                     // Pass 1: fills. Pass 2: borders on top of every fill so shared borders are
                     // crisp (not overdrawn by a neighbour's fill). Width is constant on screen.
                     for (s in shapes) {
-                        val fill = if (s.iso in homeCountries) HOME else colorFor(access[s.iso]?.level)
+                        val lvl = access[s.iso]?.level
+                        val fill = when {
+                            s.iso in homeCountries -> HOME
+                            lvl == AccessLevel.COVERED && s.iso in ownVisaCountries -> COVERED_OWN
+                            else -> colorFor(lvl)
+                        }
                         drawPath(s.path, fill)
                     }
                     for (s in shapes) {

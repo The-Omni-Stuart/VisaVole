@@ -30,6 +30,7 @@ sealed interface AppState {
     data object Loading : AppState
     data class Ready(
         val homeCountries: Set<String>,
+        val ownVisaCountries: Set<String>,
         val docs: List<Document>,
         val access: Map<String, Access>,
         val world: WorldData,
@@ -83,8 +84,9 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun publish() {
         val homeCountries = AccessModel.homeCountries(docs)
+        val ownVisaCountries = if (homeCountries.isNotEmpty()) AccessModel.ownVisaCountries(docs, world) else emptySet()
         val access = if (homeCountries.isNotEmpty()) AccessModel.compute(docs, world) else emptyMap()
-        _state.value = AppState.Ready(homeCountries, docs.toList(), access, world, geometry)
+        _state.value = AppState.Ready(homeCountries, ownVisaCountries, docs.toList(), access, world, geometry)
     }
 
     fun setHome(iso2: String) {

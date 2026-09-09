@@ -133,6 +133,29 @@ object AccessModel {
         docs.mapNotNull { (it.kind as? Passport)?.iso2 }.toSet()
 
     /**
+     * The "own" countries of every non-expired short-term visa the traveller holds — the visa's
+     * home / issuing country ([Holding]) or the specific countries it was made for ([Custom]). On the
+     * map these render the darker purple; the rest of the bloc a visa unlocks is the lighter shade.
+     * Residences are excluded (they render teal, not purple).
+     */
+    fun ownVisaCountries(
+        docs: List<Document>,
+        world: WorldData,
+        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+    ): Set<String> =
+        docs.flatMap { d ->
+            if (isExpired(d, today)) return@flatMap emptyList()
+            when (val k = d.kind) {
+                is Passport -> emptyList()
+                is Holding -> {
+                    val h = world.holdings[k.holdingId] ?: return@flatMap emptyList()
+                    if (h.category == "residency") emptyList() else listOf(h.issuingCountry)
+                }
+                is Custom -> if (k.kind == "residence") emptyList() else k.countries.toList()
+            }
+        }.toSet()
+
+    /**
      * Per-document access to [dest], strongest first, for the "enter with" breakdown in the detail
      * card — so the user sees exactly which passport/document unlocks entry.
      */
