@@ -20,6 +20,7 @@ import com.example.visa_vole.domain.DocKind.Custom
 import com.example.visa_vole.domain.DocKind.Holding
 import com.example.visa_vole.domain.DocKind.Passport
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -395,33 +396,39 @@ class AccessModelTest {
         assertEquals(UNKNOWN, bd[0].access.level)
     }
 
-    @Test fun realDatabaseGbpPassportIranIsEVisaNotVisaFree() {
+    @Test fun realDatabaseGbpPassportIranIsVisaRequired() {
         val w = JdbcRepository.load(File("src/main/assets/visa_data.db"))
         val ir = AccessModel.compute(listOf(doc("p", Passport("GB"))), w)["IR"]!!
-        assertEquals(E_VISA, ir.level)
-        assertEquals(30, ir.days)
+        // GB->IR is visa-required. The old "e-visa" was a scrape bug: a Kish Island sub-row on the
+        // British-citizens page overwrote Iran's main row. Fixed at the VisaDB source (wikipedia
+        // parser first-occurrence-wins) + a manual override; the app just reads the corrected DB.
+        assertEquals(VISA_REQUIRED, ir.level)
+        assertNull(ir.days)
     }
 
-    @Test fun realDatabaseSchengaVisaDoesNotGrantIrelandButGrantsSchenga() {
+    @Test fun realDatabaseSchengaVisaGrantsSchengenInclBulgariaNotIrelandCyprus() {
         val w = JdbcRepository.load(File("src/main/assets/visa_data.db"))
         val acc = AccessModel.compute(listOf(doc("s", Holding("schengen-visa"))), w)
         assertTrue(acc.containsKey("DE")) // Germany is in Schengen
+        // Bulgaria is in the Schengen travel area (current product definition) -> granted.
+        assertEquals(COVERED, acc["BG"]!!.level)
+        // Ireland and Cyprus are EU but non-Schengen -> not granted by a Schengen visa.
         assertEquals(null, acc["IE"])
         assertEquals(null, acc["CY"])
-        assertEquals(null, acc["BG"])
     }
 
-    @Test fun realDatabaseSchengaResidenceLegacyFreedomBlocDoesNotGrantIreland() {
+    @Test fun realDatabaseSchengaResidenceLegacyFreedomBlocGrantsSchengenNotIrelandCyprus() {
         val w = JdbcRepository.load(File("src/main/assets/visa_data.db"))
-        // A legacy CZ residence stored with the EU/EEA/EFTA freedom bloc must still only grant the
-        // Schengen travel area (not Ireland/Cyprus/Bulgaria).
+        // A legacy CZ residence stored with the EU/EEA/EFTA freedom bloc must grant the Schengen
+        // travel area (which now includes Bulgaria) but NOT the non-Schengen EU states
+        // Ireland/Cyprus.
         val acc = AccessModel.compute(
             listOf(doc("d", Custom(setOf("CZ"), "eu-eea-efta", "residence", "schengen-residence"))), w,
         )
         assertEquals(RESIDENCE, acc["CZ"]!!.level)
         assertTrue(acc.containsKey("DE"))
+        assertEquals(VISA_FREE, acc["BG"]!!.level)
         assertEquals(null, acc["IE"])
         assertEquals(null, acc["CY"])
-        assertEquals(null, acc["BG"])
     }
 }
