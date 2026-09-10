@@ -6,11 +6,11 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.visa_vole.data.WorldMapData
 import com.example.visa_vole.domain.Access
@@ -94,6 +95,7 @@ fun WorldMapCanvas(
     onCountryTap: (String?) -> Unit,
     homeCountries: Set<String> = emptySet(),
     ownVisaCountries: Set<String> = emptySet(),
+    controlsBottomPadding: Dp = 24.dp,
     modifier: Modifier = Modifier,
 ) {
     val shapes: List<IsoShape> = remember(geometry) {
@@ -262,13 +264,16 @@ fun WorldMapCanvas(
 
         Surface(
             tonalElevation = 6.dp,
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
+            shape = MaterialTheme.shapes.large,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(horizontal = 12.dp)
+                .padding(top = 12.dp, bottom = controlsBottomPadding),
         ) {
             val cx = canvasSize.width / 2f
             val cy = canvasSize.height / 2f
-            Column(
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
                 modifier = Modifier.padding(4.dp),
             ) {
                 IconButton(

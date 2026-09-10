@@ -7,12 +7,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -45,11 +46,11 @@ fun CountryDetailCard(
     val level = access?.level ?: AccessLevel.UNKNOWN
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 3.dp,
     ) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(20.dp).padding(bottom = 20.dp).verticalScroll(rememberScrollState())) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(countryName, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.weight(1f))
@@ -57,7 +58,7 @@ fun CountryDetailCard(
                     Icon(Icons.Filled.Close, contentDescription = "Close")
                 }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(
                     Modifier
@@ -93,18 +94,14 @@ fun CountryDetailCard(
                 )
             }
             if (breakdown.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(20.dp))
                 Text(
                     "Enter with",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(6.dp))
-                Column(
-                    Modifier
-                        .heightIn(max = 200.dp)
-                        .verticalScroll(rememberScrollState()),
-                ) {
+                Spacer(Modifier.height(8.dp))
+                Column {
                     breakdown.forEachIndexed { i, entry ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             val isYourCountry = entry.access.reason == "Your country"
@@ -114,6 +111,7 @@ fun CountryDetailCard(
                                     else if (entry.access.level == AccessLevel.COVERED && entry.isOwn) COVERED_OWN
                                     else colorFor(entry.access.level),
                                 style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.widthIn(min = 72.dp),
                             )
                             Spacer(Modifier.width(10.dp))
                             Text(
@@ -129,7 +127,7 @@ fun CountryDetailCard(
                                 )
                             }
                         }
-                        if (i < breakdown.size - 1) Spacer(Modifier.height(6.dp))
+                        if (i < breakdown.size - 1) Spacer(Modifier.height(8.dp))
                     }
                 }
             }

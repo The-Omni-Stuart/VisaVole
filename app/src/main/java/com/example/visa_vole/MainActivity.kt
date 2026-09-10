@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -162,51 +163,68 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
     val pick: (String?) -> Unit = { iso -> query = ""; onSelect(iso) }
     val density = LocalDensity.current
     var searchBarH by remember { mutableStateOf(0.dp) }
+    var cardH by remember { mutableStateOf(0.dp) }
+    var legendH by remember { mutableStateOf(0.dp) }
+    val mapBottomPadding = if (selected != null) (cardH - 16.dp).coerceAtLeast(0.dp) else 0.dp
+    val controlsBottomPadding = if (selected != null) 24.dp else legendH + 8.dp
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize()) {
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 2.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onSizeChanged { searchBarH = Dp(it.height / density.density) },
-            ) {
-                SearchBar(query, { query = it })
+        WorldMapCanvas(
+            geometry = s.geometry,
+            access = s.access,
+            selected = selected,
+            onCountryTap = pick,
+            homeCountries = s.homeCountries,
+            ownVisaCountries = s.ownVisaCountries,
+            controlsBottomPadding = controlsBottomPadding,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(bottom = mapBottomPadding),
+        )
+        SearchBar(
+            query = query,
+            onQuery = { query = it },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .onSizeChanged { searchBarH = Dp(it.height / density.density) },
+        )
+        val selName = selected?.let { s.world.countries[it]?.name }
+        if (selected != null && selName != null) {
+            val selectedAccess = s.access[selected]
+            val stayRule = when {
+                selected in s.homeCountries -> null
+                selectedAccess?.level == AccessLevel.RESIDENCE -> null // you live here — no short-stay limit
+                else -> s.world.stayRuleFor(selected, s.homeCountries)
             }
-            WorldMapCanvas(
-                geometry = s.geometry,
-                access = s.access,
-                selected = selected,
-                onCountryTap = pick,
-                homeCountries = s.homeCountries,
-                ownVisaCountries = s.ownVisaCountries,
-                modifier = Modifier.fillMaxWidth().weight(1f),
+            CountryDetailCard(
+                countryName = selName,
+                access = selectedAccess,
+                breakdown = AccessModel.breakdownFor(selected, s.docs, s.world),
+                onDismiss = { pick(null) },
+                isHome = selected in s.homeCountries,
+                isOwnCovered = selected in s.ownVisaCountries,
+                homePassport = if (selected in s.homeCountries) s.world.countries[selected]?.name else null,
+                daysLabel = AccessModel.stayLabelFor(selectedAccess, stayRule),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .onSizeChanged { cardH = Dp(it.height / density.density) },
             )
-            val selName = selected?.let { s.world.countries[it]?.name }
-            if (selected != null && selName != null) {
-                val selectedAccess = s.access[selected]
-                val stayRule = when {
-                    selected in s.homeCountries -> null
-                    selectedAccess?.level == AccessLevel.RESIDENCE -> null // you live here — no short-stay limit
-                    else -> s.world.stayRuleFor(selected, s.homeCountries)
-                }
-                CountryDetailCard(
-                    countryName = selName,
-                    access = selectedAccess,
-                    breakdown = AccessModel.breakdownFor(selected, s.docs, s.world),
-                    onDismiss = { pick(null) },
-                    isHome = selected in s.homeCountries,
-                    isOwnCovered = selected in s.ownVisaCountries,
-                    homePassport = if (selected in s.homeCountries) s.world.countries[selected]?.name else null,
-                    daysLabel = AccessModel.stayLabelFor(selectedAccess, stayRule),
-                )
-            } else {
+        } else {
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .onSizeChanged { legendH = Dp(it.height / density.density) },
+            ) {
                 LegendRow(s.access.values.groupBy { it.level }.mapValues { it.value.size }, s.homeCountries.size)
             }
         }
         if (query.isNotBlank() && matches.isNotEmpty()) {
             Surface(
                 tonalElevation = 8.dp,
+                shape = MaterialTheme.shapes.large,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .fillMaxWidth()
@@ -220,7 +238,7 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { pick(c.iso2) }
-                                .padding(vertical = 10.dp),
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(c.name, style = MaterialTheme.typography.bodyMedium)
@@ -233,7 +251,7 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
 }
 
 @Composable
-private fun SearchBar(query: String, onQuery: (String) -> Unit) {
+private fun SearchBar(query: String, onQuery: (String) -> Unit, modifier: Modifier = Modifier) {
     OutlinedTextField(
         value = query,
         onValueChange = onQuery,
@@ -245,7 +263,12 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit) {
             }
         },
         singleLine = true,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+        shape = MaterialTheme.shapes.large,
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 8.dp, bottom = 4.dp),
     )
 }
 
