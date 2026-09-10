@@ -66,16 +66,28 @@ class VisaRepository(private val db: VisaDb) {
     }
 
     private fun loadBenefits(c: android.database.sqlite.SQLiteDatabase): Map<String, List<Benefit>> {
+        val hasResidenceMin = hasColumn(c, "visa_benefits", "residence_min")
+        val sql = "SELECT holding, destination, type, days, entry_type" +
+            if (hasResidenceMin) ", residence_min FROM visa_benefits" else " FROM visa_benefits"
         val out = HashMap<String, MutableList<Benefit>>()
-        c.rawQuery("SELECT holding, destination, type, days, entry_type FROM visa_benefits", null).use { cur ->
+        c.rawQuery(sql, null).use { cur ->
             while (cur.moveToNext()) {
                 val h = cur.getString(0)
                 val days = if (cur.isNull(3)) null else cur.getInt(3)
                 val entryTypes = parseEntryTypes(cur.getString(4))
-                out.getOrPut(h) { mutableListOf() }.add(Benefit(h, cur.getString(1), cur.getString(2), days, entryTypes))
+                val residenceMin = if (hasResidenceMin) cur.getString(5) else null
+                out.getOrPut(h) { mutableListOf() }.add(Benefit(h, cur.getString(1), cur.getString(2), days, entryTypes, residenceMin))
             }
         }
         return out
+    }
+
+    /** True when [column] exists on [table] — optional columns may be absent from older bundled DBs. */
+    private fun hasColumn(c: android.database.sqlite.SQLiteDatabase, table: String, column: String): Boolean {
+        c.rawQuery("PRAGMA table_info($table)", null).use { cur ->
+            while (cur.moveToNext()) if (cur.getString(1) == column) return true
+        }
+        return false
     }
 
     private fun loadStayRules(c: android.database.sqlite.SQLiteDatabase): List<StayRule> {

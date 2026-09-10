@@ -238,10 +238,12 @@ fun WorldMapCanvas(
                     // Pass 1: fills. Pass 2: borders on top of every fill so shared borders are
                     // crisp (not overdrawn by a neighbour's fill). Width is constant on screen.
                     for (s in shapes) {
-                        val lvl = access[s.iso]?.level
+                        val a = access[s.iso]
+                        val lvl = a?.level
                         val fill = when {
                             s.iso in homeCountries -> HOME
                             lvl == AccessLevel.COVERED && s.iso in ownVisaCountries -> COVERED_OWN
+                            lvl == AccessLevel.RESIDENCE -> residenceColor(a?.residenceClass)
                             else -> colorFor(lvl)
                         }
                         drawPath(s.path, fill)

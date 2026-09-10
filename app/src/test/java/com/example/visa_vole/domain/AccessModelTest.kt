@@ -538,4 +538,151 @@ class AccessModelTest {
         // The generic Western-Balkans passport rule is still available for the card to label.
         assertTrue(w.stayRuleFor("BA", setOf("IN")) != null)
     }
+
+    // ---- residence classes + benefit residence-minimum gating ----
+
+    private fun residenceDoc(id: String, cls: ResidenceClass?) =
+        Document(id, id, Holding("schengen-residence"), null, null, null, cls)
+
+    private fun schengenWorld() = world(
+        holdings = mapOf("schengen-residence" to DataHolding("schengen-residence", "Schengen/EU Residence", "residency", "EU")),
+        benefits = mapOf("schengen-residence" to listOf(
+            Benefit("schengen-residence", "BA", "visa-free", 30, emptySet(), "permanent"),
+            Benefit("schengen-residence", "AL", "visa-free", 90, emptySet(), "long_term"),
+            Benefit("schengen-residence", "DE", "visa-free", 90),
+        )),
+    )
+
+    @Test fun temporaryResidenceFailsHigherResidenceMinimums() {
+        // No stored class: a Schengen residence defaults to TEMPORARY.
+        val acc = AccessModel.compute(listOf(doc("d", Holding("schengen-residence"))), schengenWorld())
+        assertEquals(null, acc["BA"]) // temporary < permanent
+        assertEquals(null, acc["AL"]) // temporary < long_term
+        assertEquals(VISA_FREE, acc["DE"]!!.level) // null minimum passes
+    }
+
+    @Test fun permanentResidenceSatisfiesPermanentMinimum() {
+        val acc = AccessModel.compute(listOf(residenceDoc("d", ResidenceClass.PERMANENT)), schengenWorld())
+        assertEquals(VISA_FREE, acc["BA"]!!.level)
+        assertEquals(VISA_FREE, acc["AL"]!!.level)
+        assertEquals(VISA_FREE, acc["DE"]!!.level)
+    }
+
+    @Test fun longTermResidenceSatisfiesLongTermButNotPermanent() {
+        val acc = AccessModel.compute(listOf(residenceDoc("d", ResidenceClass.LONG_TERM)), schengenWorld())
+        assertEquals(VISA_FREE, acc["AL"]!!.level) // long_term >= long_term
+        assertEquals(null, acc["BA"]) // long_term < permanent
+    }
+
+    @Test fun nullResidenceMinPassesForAllClasses() {
+        val w = schengenWorld()
+        for (cls in ResidenceClass.entries) {
+            val acc = AccessModel.compute(listOf(residenceDoc("d", cls)), w)
+            assertEquals(VISA_FREE, acc["DE"]!!.level)
+        }
+        assertEquals(VISA_FREE, AccessModel.compute(listOf(doc("d", Holding("schengen-residence"))), w)["DE"]!!.level)
+    }
+
+    @Test fun nonResidenceDocumentFailsResidenceMinimum() {
+        val w = world(
+            holdings = mapOf("jp-visa" to DataHolding("jp-visa", "Valid Japanese Visa", "short_term_visa", "JP")),
+            benefits = mapOf("jp-visa" to listOf(Benefit("jp-visa", "KR", "visa-free", 90, emptySet(), "long_term"))),
+        )
+        assertEquals(null, AccessModel.compute(listOf(doc("d", Holding("jp-visa"))), w)["KR"])
+        // The same grant without a minimum still applies to a visa.
+        val w2 = world(
+            holdings = mapOf("jp-visa" to DataHolding("jp-visa", "Valid Japanese Visa", "short_term_visa", "JP")),
+            benefits = mapOf("jp-visa" to listOf(Benefit("jp-visa", "KR", "visa-free", 90))),
+        )
+        assertEquals(COVERED, AccessModel.compute(listOf(doc("d", Holding("jp-visa"))), w2)["KR"]!!.level)
+    }
+
+    @Test fun customResidenceGatedByResidenceMinimum() {
+        val w = world(
+            holdings = mapOf("schengen-residence" to DataHolding("schengen-residence", "Schengen/EU Residence", "residency", "EU")),
+            benefits = mapOf("schengen-residence" to listOf(Benefit("schengen-residence", "BA", "visa-free", 30, emptySet(), "permanent"))),
+        )
+        val temp = AccessModel.compute(listOf(doc("d", Custom(setOf("CZ"), "eu", "residence", "schengen-residence"))), w)
+        assertEquals(null, temp["BA"]) // default temporary < permanent
+        val perm = AccessModel.compute(
+            listOf(Document("d", "d", Custom(setOf("CZ"), "eu", "residence", "schengen-residence"), null, null, null, ResidenceClass.PERMANENT)),
+            w,
+        )
+        assertEquals(VISA_FREE, perm["BA"]!!.level)
+    }
+
+    @Test fun residenceAccessCarriesEffectiveClass() {
+        val w = world(
+            holdings = mapOf(
+                "us-green-card" to DataHolding("us-green-card", "US Green Card", "residency", "US"),
+                "schengen-residence" to DataHolding("schengen-residence", "Schengen/EU Residence", "residency", "EU"),
+                "sg-visa" to DataHolding("sg-visa", "Singapore Work/Residence Permit", "long_term_visa", "SG"),
+            ),
+        )
+        // Default for a green card is permanent; a bare Schengen residence defaults to temporary.
+        val gc = AccessModel.compute(listOf(doc("d", Holding("us-green-card"))), w)["US"]!!
+        assertEquals(RESIDENCE, gc.level)
+        assertEquals(ResidenceClass.PERMANENT, gc.residenceClass)
+        val cz = AccessModel.compute(listOf(doc("d", Holding("schengen-residence"))), w)["EU"]!!
+        assertEquals(RESIDENCE, cz.level)
+        assertEquals(ResidenceClass.TEMPORARY, cz.residenceClass)
+        val sgDoc = doc("d", Holding("sg-visa"))
+        val sg = AccessModel.compute(listOf(sgDoc), w)["SG"]!!
+        assertEquals(RESIDENCE, sg.level)
+        assertEquals(ResidenceClass.LONG_TERM, sg.residenceClass)
+        assertFalse("SG" in AccessModel.ownVisaCountries(listOf(sgDoc), w))
+    }
+
+    @Test fun strongerResidenceClassWinsOnTie() {
+        val w = world(
+            holdings = mapOf("schengen-residence" to DataHolding("schengen-residence", "Schengen/EU Residence", "residency", "EU")),
+        )
+        val tempFirst = AccessModel.compute(
+            listOf(residenceDoc("temp", ResidenceClass.TEMPORARY), residenceDoc("perm", ResidenceClass.PERMANENT)),
+            w,
+        )["EU"]!!
+        assertEquals(RESIDENCE, tempFirst.level)
+        assertEquals(ResidenceClass.PERMANENT, tempFirst.residenceClass)
+
+        val permFirst = AccessModel.compute(
+            listOf(residenceDoc("perm", ResidenceClass.PERMANENT), residenceDoc("temp", ResidenceClass.TEMPORARY)),
+            w,
+        )["EU"]!!
+        assertEquals(ResidenceClass.PERMANENT, permFirst.residenceClass)
+    }
+
+    @Test fun residenceClassFromId() {
+        assertEquals(ResidenceClass.TEMPORARY, ResidenceClass.fromId("temporary"))
+        assertEquals(ResidenceClass.LONG_TERM, ResidenceClass.fromId("long_term"))
+        assertEquals(ResidenceClass.PERMANENT, ResidenceClass.fromId("permanent"))
+        assertNull(ResidenceClass.fromId(null))
+        assertNull(ResidenceClass.fromId("bogus"))
+    }
+
+    @Test fun defaultResidenceClassByHolding() {
+        assertEquals(ResidenceClass.PERMANENT, defaultResidenceClassFor("us-green-card", false))
+        assertEquals(ResidenceClass.PERMANENT, defaultResidenceClassFor("ca-pr", false))
+        assertEquals(ResidenceClass.PERMANENT, defaultResidenceClassFor("au-pr", false))
+        assertEquals(ResidenceClass.LONG_TERM, defaultResidenceClassFor("sg-visa", false))
+        assertEquals(ResidenceClass.TEMPORARY, defaultResidenceClassFor("schengen-residence", false))
+        assertEquals(ResidenceClass.TEMPORARY, defaultResidenceClassFor(null, true))
+    }
+
+    @Test fun residenceClassForDocuments() {
+        val w = world(
+            holdings = mapOf(
+                "schengen-residence" to DataHolding("schengen-residence", "Schengen/EU Residence", "residency", "EU"),
+                "sg-visa" to DataHolding("sg-visa", "Singapore Work/Residence Permit", "long_term_visa", "SG"),
+                "jp-visa" to DataHolding("jp-visa", "Valid Japanese Visa", "short_term_visa", "JP"),
+            ),
+        )
+        assertNull(Document("p", "p", Passport("GB")).residenceClassFor(w))
+        assertNull(Document("v", "v", Holding("jp-visa")).residenceClassFor(w))
+        assertEquals(ResidenceClass.TEMPORARY, Document("d", "d", Holding("schengen-residence")).residenceClassFor(w))
+        assertEquals(ResidenceClass.PERMANENT, residenceDoc("d", ResidenceClass.PERMANENT).residenceClassFor(w))
+        assertEquals(ResidenceClass.LONG_TERM, Document("s", "s", Holding("sg-visa")).residenceClassFor(w))
+        assertEquals(ResidenceClass.TEMPORARY, Document("c", "c", Custom(setOf("CZ"), null, "residence")).residenceClassFor(w))
+        assertEquals(ResidenceClass.LONG_TERM, Document("c", "c", Custom(setOf("SG"), null, "residence"), null, null, null, ResidenceClass.LONG_TERM).residenceClassFor(w))
+        assertNull(Document("c", "c", Custom(setOf("CZ"), null, "visa")).residenceClassFor(w))
+    }
 }

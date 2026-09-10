@@ -13,6 +13,8 @@ import com.example.visa_vole.domain.Access
 import com.example.visa_vole.domain.AccessModel
 import com.example.visa_vole.domain.Document
 import com.example.visa_vole.domain.DocKind
+import com.example.visa_vole.domain.ResidenceClass
+import com.example.visa_vole.domain.residenceClassFor
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -66,9 +68,23 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
                 world; geometry // one-time asset copy + load
+                normalizeResidenceClasses()
                 migrateHomeDoc()
             }
             publish()
+        }
+    }
+
+    /** Fill in the residence class of residence documents saved before the field existed
+     *  (inferred from their known holding); passport/visa documents stay null. */
+    private fun normalizeResidenceClasses() {
+        val normalized = docs.map { d ->
+            if (d.residenceClass == null) d.residenceClassFor(world)?.let { d.copy(residenceClass = it) } ?: d
+            else d
+        }
+        if (normalized != docs) {
+            docs = normalized.toMutableList()
+            persist()
         }
     }
 
@@ -152,6 +168,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         put("label", d.label)
         put("expiry", d.expiry ?: JSONObject.NULL)
         put("validFrom", d.validFrom ?: JSONObject.NULL)
+        put("residenceClass", d.residenceClass?.id ?: JSONObject.NULL)
         when (val k = d.kind) {
             is DocKind.Passport -> {
                 put("kind", "passport"); put("iso2", k.iso2)
@@ -194,6 +211,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         }
         val expiry = o.strOrNull("expiry")
         val validFrom = o.strOrNull("validFrom")
-        return Document(o.getString("id"), o.getString("label"), kind, null, expiry, validFrom)
+        val residenceClass = ResidenceClass.fromId(o.strOrNull("residenceClass"))
+        return Document(o.getString("id"), o.getString("label"), kind, null, expiry, validFrom, residenceClass)
     }
 }

@@ -38,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +56,9 @@ import com.example.visa_vole.data.Country
 import com.example.visa_vole.data.WorldData
 import com.example.visa_vole.domain.Document
 import com.example.visa_vole.domain.DocKind
+import com.example.visa_vole.domain.ResidenceClass
+import com.example.visa_vole.domain.defaultResidenceClassFor
+import com.example.visa_vole.domain.residenceClassFor
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -94,6 +98,7 @@ private fun docSubtitle(
     val k = doc.kind
     val regime = (k as? DocKind.Custom)?.blocId?.let { id -> world.regimes.firstOrNull { r -> r.id == id }?.name }
     val entryType = (k as? DocKind.Custom)?.entryType
+    val classSuffix = doc.residenceClassFor(world)?.let { " · ${it.label}" } ?: ""
 
     val b = AnnotatedString.Builder()
     fun styled(text: String, color: Color) {
@@ -104,10 +109,10 @@ private fun docSubtitle(
     styled(
         when (k) {
             is DocKind.Passport -> "Passport"
-            is DocKind.Holding -> k.holdingId
+            is DocKind.Holding -> k.holdingId + classSuffix
             is DocKind.Custom -> {
                 val bloc = regime?.let { " · bloc $it" } ?: ""
-                "${k.kind} · ${k.countries.size} countries$bloc"
+                "${k.kind} · ${k.countries.size} countries$bloc$classSuffix"
             }
         },
         base,
@@ -262,6 +267,7 @@ fun AddDocumentDialog(
     var customBlocChoice by remember { mutableStateOf<String?>(null) } // null=auto, ""=none, else regime id
     var holdingChoice by remember { mutableStateOf<String?>(null) } // null=auto, ""=none, else holding id
     var entryType by remember { mutableStateOf("multiple") } // "single" | "double" | "multiple" (visa only)
+    var residenceClass by remember { mutableStateOf(ResidenceClass.TEMPORARY) } // residence only
     var expiryDate by remember { mutableStateOf<Long?>(null) }
     var validFromDate by remember { mutableStateOf<Long?>(null) }
 
@@ -285,6 +291,14 @@ fun AddDocumentDialog(
         customIso = emptySet(); customBlocChoice = null; holdingChoice = null
     }
 
+    // The residence class follows the selected known holding (e.g. a US green card defaults to
+    // permanent); a custom residence with no known holding defaults to temporary.
+    LaunchedEffect(docType, effectiveHolding) {
+        if (docType == DocType.RESIDENCE) {
+            residenceClass = defaultResidenceClassFor(effectiveHolding, effectiveHolding == null)
+        }
+    }
+
     val valid = when (docType) {
         DocType.PASSPORT -> passportIso != null
         DocType.RESIDENCE, DocType.VISA -> customIso.isNotEmpty()
@@ -304,7 +318,8 @@ fun AddDocumentDialog(
                 val names = customIso.joinToString(", ") { countries[it]?.name ?: it }.take(80)
                 val typeSuffix = effectiveHolding?.let { id -> " (${world.holdings[id]?.name ?: id})" } ?: ""
                 val entry = if (docType == DocType.VISA) entryType else null
-                Document(UUID.randomUUID().toString(), "${docType.label}: $names$typeSuffix", DocKind.Custom(customIso, effectiveBloc, docType.kind, effectiveHolding, entry), null, exp, vfrom)
+                val rc = if (docType == DocType.RESIDENCE) residenceClass else null
+                Document(UUID.randomUUID().toString(), "${docType.label}: $names$typeSuffix", DocKind.Custom(customIso, effectiveBloc, docType.kind, effectiveHolding, entry), null, exp, vfrom, rc)
             }
         }
     }
@@ -365,6 +380,18 @@ fun AddDocumentDialog(
                                     text = { Text(h.name) },
                                     onClick = { holdingChoice = h.id; typeOpen.value = false },
                                 )
+                            }
+                        }
+                        if (docType == DocType.RESIDENCE) {
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                ResidenceClass.entries.forEach { rc ->
+                                    FilterChip(
+                                        selected = residenceClass == rc,
+                                        onClick = { residenceClass = rc },
+                                        label = { Text(rc.label) },
+                                    )
+                                }
                             }
                         }
                         Spacer(Modifier.height(8.dp))

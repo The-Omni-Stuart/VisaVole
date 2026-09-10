@@ -60,7 +60,12 @@ fun CountryDetailCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(
                     Modifier
-                        .background(if (isHome) HOME else colorFor(level), CircleShape)
+                        .background(
+                            if (isHome) HOME
+                            else if (level == AccessLevel.RESIDENCE) residenceColor(access?.residenceClass)
+                            else colorFor(level),
+                            CircleShape,
+                        )
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                 ) {
                     Text(
@@ -75,7 +80,8 @@ fun CountryDetailCard(
                     Text(shownDays, style = MaterialTheme.typography.titleMedium)
                 }
             }
-            val subtext = if (isHome) "Passport: ${homePassport.orEmpty()}" else access?.reason.orEmpty()
+            val classSuffix = access?.residenceClass?.let { " (${it.label.lowercase()})" }.orEmpty()
+            val subtext = if (isHome) "Passport: ${homePassport.orEmpty()}" else (access?.reason.orEmpty() + classSuffix).trim()
             if (subtext.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
                 Text(

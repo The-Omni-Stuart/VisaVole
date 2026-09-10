@@ -32,4 +32,5 @@ data class Document(
     val countryNumber: String? = null,
     val expiry: String? = null, // valid to — ISO-8601 date (YYYY-MM-DD)
     val validFrom: String? = null, // valid from — ISO-8601 date (YYYY-MM-DD)
+    val residenceClass: ResidenceClass? = null, // residence docs only (temporary / long-term / permanent)
 )

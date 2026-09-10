@@ -72,19 +72,33 @@ object JdbcRepository {
     }
 
     private fun loadBenefits(c: Connection): Map<String, List<Benefit>> {
+        val hasResidenceMin = hasColumn(c, "visa_benefits", "residence_min")
         val out = HashMap<String, MutableList<Benefit>>()
         c.createStatement().use { st ->
-            st.executeQuery("SELECT holding, destination, type, days, entry_type FROM visa_benefits").use { rs ->
+            val sql = "SELECT holding, destination, type, days, entry_type" +
+                if (hasResidenceMin) ", residence_min FROM visa_benefits" else " FROM visa_benefits"
+            st.executeQuery(sql).use { rs ->
                 while (rs.next()) {
                     val h = rs.getString("holding")
                     val d = rs.getInt("days")
                     val days = if (rs.wasNull()) null else d
+                    val residenceMin = if (hasResidenceMin) rs.getString("residence_min") else null
                     out.getOrPut(h) { mutableListOf() }
-                        .add(Benefit(h, rs.getString("destination"), rs.getString("type"), days, parseEntryTypes(rs.getString("entry_type"))))
+                        .add(Benefit(h, rs.getString("destination"), rs.getString("type"), days, parseEntryTypes(rs.getString("entry_type")), residenceMin))
                 }
             }
         }
         return out
+    }
+
+    /** True when [column] exists on [table] — optional columns may be absent from older bundled DBs. */
+    private fun hasColumn(c: Connection, table: String, column: String): Boolean {
+        c.createStatement().use { st ->
+            st.executeQuery("PRAGMA table_info($table)").use { rs ->
+                while (rs.next()) if (rs.getString(1) == column) return true
+            }
+        }
+        return false
     }
 
     private fun loadStayRules(c: Connection): List<StayRule> {

@@ -1,5 +1,6 @@
 package com.example.visa_vole.domain
 
+import com.example.visa_vole.data.Benefit
 import com.example.visa_vole.data.Regime
 import com.example.visa_vole.data.StayRule
 import com.example.visa_vole.data.WorldData
@@ -31,12 +32,17 @@ import java.time.ZoneOffset
  */
 object AccessModel {
 
-    /** Pure best-of: higher [AccessLevel.rank] wins; on a tie, the one carrying a days limit. */
+    /** Pure best-of: higher [AccessLevel.rank] wins; on a tie, the one carrying a days limit, then
+     *  the higher residence class, so the strongest held residence document is displayed. */
     private fun best(a: Access?, b: Access): Access {
         if (a == null) return b
         if (b.level.rank > a.level.rank) return b
         if (a.level.rank > b.level.rank) return a
         if (a.days == null && b.days != null) return b
+        val aClass = a.residenceClass?.ordinal ?: -1
+        val bClass = b.residenceClass?.ordinal ?: -1
+        if (bClass > aClass) return b
+        if (aClass > bClass) return a
         return a
     }
 
@@ -49,6 +55,15 @@ object AccessModel {
      *  [Holding]) never satisfies a restricted grant. */
     private fun entryTypeSatisfied(benefitTypes: Set<String>, docEntryType: String?): Boolean =
         benefitTypes.isEmpty() || (docEntryType != null && docEntryType in benefitTypes)
+
+    /** A benefit with a null [Benefit.residenceMin] applies to any document; otherwise the
+     *  document's effective residence class must rank at or above the minimum, and a
+     *  non-residence document (no class) never satisfies a restricted grant. */
+    private fun residenceMinSatisfied(doc: Document, world: WorldData, benefit: Benefit): Boolean {
+        val min = ResidenceClass.fromId(benefit.residenceMin) ?: return true
+        val effective = doc.residenceClassFor(world) ?: return false
+        return effective.ordinal >= min.ordinal
+    }
 
     /** True when [doc] carries an expiry date already in the past (relative to [today]). */
     private fun isExpired(doc: Document, today: LocalDate): Boolean {
@@ -87,15 +102,17 @@ object AccessModel {
             is Passport -> { /* contributed via passportCandidates */ }
             is Holding -> {
                 val h = world.holdings[k.holdingId] ?: return emptyMap()
-                val isResidence = h.category == "residency"
+                val isResidence = h.category in RESIDENCE_LIKE_HOLDING_CATEGORIES
+                val rc = if (isResidence) doc.residenceClassFor(world) else null
                 merge(
                     map, h.issuingCountry,
-                    Access(if (isResidence) RESIDENCE else COVERED, null, if (isResidence) "Residence: ${h.name}" else "You hold: ${h.name}", true),
+                    Access(if (isResidence) RESIDENCE else COVERED, null, if (isResidence) "Residence: ${h.name}" else "You hold: ${h.name}", true, rc),
                 )
                 val benefitLevel = if (isResidence) VISA_FREE else COVERED
                 for (b in world.benefits[k.holdingId].orEmpty()) {
                     if (!AccessLevel.isEntryBenefit(b.type)) continue // skip transit-only rows
                     if (!entryTypeSatisfied(b.entryTypes, null)) continue // a bare Holding has no entry type
+                    if (!residenceMinSatisfied(doc, world, b)) continue
                     merge(map, b.destination, Access(benefitLevel, b.days, "${h.name} (${b.type})", true))
                 }
             }
@@ -116,13 +133,14 @@ object AccessModel {
                 travelBloc?.let { targets += it.members }
                 val isResidence = k.kind == "residence"
                 val residenceCountry = k.countries.firstOrNull()
+                val rc = if (isResidence) doc.residenceClassFor(world) else null
                 for (c in targets) {
                     val level = when {
                         isResidence && c == residenceCountry -> RESIDENCE
                         isResidence -> VISA_FREE
                         else -> COVERED
                     }
-                    merge(map, c, Access(level, null, "Your ${k.kind}", true))
+                    merge(map, c, Access(level, null, "Your ${k.kind}", true, if (level == RESIDENCE) rc else null))
                 }
                 // A known holding tied to this document also applies its travel perks (entry benefits only).
                 k.holdingId?.let { hid ->
@@ -131,6 +149,7 @@ object AccessModel {
                     for (b in world.benefits[hid].orEmpty()) {
                         if (!AccessLevel.isEntryBenefit(b.type)) continue
                         if (!entryTypeSatisfied(b.entryTypes, k.entryType)) continue
+                        if (!residenceMinSatisfied(doc, world, b)) continue
                         merge(map, b.destination, Access(perkLevel, b.days, "${h.name} (${b.type})", true))
                     }
                 }
@@ -160,7 +179,7 @@ object AccessModel {
                 is Passport -> emptyList()
                 is Holding -> {
                     val h = world.holdings[k.holdingId] ?: return@flatMap emptyList()
-                    if (h.category == "residency") emptyList() else listOf(h.issuingCountry)
+                    if (h.category in RESIDENCE_LIKE_HOLDING_CATEGORIES) emptyList() else listOf(h.issuingCountry)
                 }
                 is Custom -> if (k.kind == "residence") emptyList() else k.countries.toList()
             }

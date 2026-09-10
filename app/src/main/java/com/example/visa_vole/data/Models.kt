@@ -17,13 +17,16 @@ data class Holding(val id: String, val name: String, val category: String, val i
 
 /** A grant from `visa_benefits`: what a [holding] document confers at [destination].
  *  [entryTypes] restricts the grant to documents with one of these entry types
- *  ("single"/"double"/"multiple"); empty = applies to every entry type. */
+ *  ("single"/"double"/"multiple"); empty = applies to every entry type. [residenceMin] is the
+ *  minimum residence class ("long_term" | "permanent") the document must reach for the grant to
+ *  apply; null = no minimum. */
 data class Benefit(
     val holding: String,
     val destination: String,
     val type: String,
     val days: Int?,
     val entryTypes: Set<String> = emptySet(),
+    val residenceMin: String? = null,
 )
 
 /** A per-destination stay/entry rule from `stay_rules`: the window and entry type. */

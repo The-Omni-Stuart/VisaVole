@@ -7,6 +7,7 @@ data class Access(
     val days: Int?,
     val reason: String = "",
     val fromDocument: Boolean = false,
+    val residenceClass: ResidenceClass? = null, // set on RESIDENCE access, colours the teal shade
 )
 
 /** A single document's access to a destination, for the per-document "enter with" breakdown. */
