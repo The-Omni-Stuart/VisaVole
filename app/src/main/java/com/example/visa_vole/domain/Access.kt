@@ -14,4 +14,5 @@ data class Access(
 data class DocAccess(
     val label: String,
     val access: Access,
+    val isOwn: Boolean = false,
 )

@@ -24,7 +24,7 @@ fun colorFor(level: AccessLevel?): Color = when (level) {
     AccessLevel.FREEDOM -> Color(0xFF93C5FD)       // light blue — bloc citizenship
     AccessLevel.RESIDENCE -> RESIDENCE_FILL         // teal — residence permit
     AccessLevel.VISA_FREE -> Color(0xFF4ADE80)     // green — visa-free / on arrival, no step needed
-    AccessLevel.COVERED -> Color(0xFFC4B5FD)       // light purple — covered via a visa's travel bloc
+    AccessLevel.COVERED -> Color(0xFFA78BFA)       // soft purple — covered via a visa's travel bloc
     AccessLevel.ETA -> Color(0xFFFACC15)           // yellow — quick pre-authorisation (eTA/ESTA/ETIAS)
     AccessLevel.E_VISA -> Color(0xFFF59E0B)        // orange — e-visa, apply online
     AccessLevel.VISA_REQUIRED -> Color(0xFF94A3B8) // gray — embassy visit

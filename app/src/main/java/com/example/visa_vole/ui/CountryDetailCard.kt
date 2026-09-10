@@ -110,7 +110,9 @@ fun CountryDetailCard(
                             val isYourCountry = entry.access.reason == "Your country"
                             Text(
                                 if (isYourCountry) "Your country" else entry.access.level.label(),
-                                color = if (isYourCountry) HOME else colorFor(entry.access.level),
+                                color = if (isYourCountry) HOME
+                                    else if (entry.access.level == AccessLevel.COVERED && entry.isOwn) COVERED_OWN
+                                    else colorFor(entry.access.level),
                                 style = MaterialTheme.typography.labelMedium,
                             )
                             Spacer(Modifier.width(10.dp))

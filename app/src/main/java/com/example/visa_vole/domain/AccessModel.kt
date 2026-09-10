@@ -208,7 +208,15 @@ object AccessModel {
                     is Holding -> world.holdings[k.holdingId]?.name ?: d.label
                     is Custom -> d.label
                 }
-                DocAccess(label, candidates[dest] ?: Access(UNKNOWN, null))
+                val isOwn = when (val k = d.kind) {
+                    is Passport -> false
+                    is Holding -> {
+                        val h = world.holdings[k.holdingId]
+                        h != null && h.category !in RESIDENCE_LIKE_HOLDING_CATEGORIES && h.issuingCountry == dest
+                    }
+                    is Custom -> k.kind != "residence" && dest in k.countries
+                }
+                DocAccess(label, candidates[dest] ?: Access(UNKNOWN, null), isOwn)
             }
             .filter { it.access.level != UNKNOWN }
             .sortedByDescending { it.access.level.rank }
