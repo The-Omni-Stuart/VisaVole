@@ -384,12 +384,17 @@ fun AddDocumentDialog(
                         }
                         if (docType == DocType.RESIDENCE) {
                             Spacer(Modifier.height(8.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val classOpen = remember { mutableStateOf(false) }
+                            Row(Modifier.fillMaxWidth()) {
+                                OutlinedButton(onClick = { classOpen.value = true }, modifier = Modifier.fillMaxWidth()) {
+                                    Text("Residence class: ${residenceClass.label}")
+                                }
+                            }
+                            DropdownMenu(expanded = classOpen.value, onDismissRequest = { classOpen.value = false }) {
                                 ResidenceClass.entries.forEach { rc ->
-                                    FilterChip(
-                                        selected = residenceClass == rc,
-                                        onClick = { residenceClass = rc },
-                                        label = { Text(rc.label) },
+                                    DropdownMenuItem(
+                                        text = { Text(rc.label) },
+                                        onClick = { residenceClass = rc; classOpen.value = false },
                                     )
                                 }
                             }
