@@ -60,13 +60,15 @@ fun OnboardingScreen(
 
     Surface(
         color = MaterialTheme.colorScheme.background,
-        modifier = modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .navigationBarsPadding()
-            .padding(20.dp),
+        modifier = modifier.fillMaxSize(),
     ) {
-        Column {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(20.dp),
+        ) {
             Text("Welcome to VisaVole", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))
             Text(
@@ -80,23 +82,37 @@ fun OnboardingScreen(
                 onValueChange = { query = it },
                 label = { Text("Search country") },
                 singleLine = true,
+                shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth(),
             )
             Spacer(Modifier.height(12.dp))
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                items(list, key = { it.key }) { entry ->
-                    val name = entry.value.name
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                pendingIso = entry.key
-                                showExpiryDialog = true
-                            }
-                            .padding(vertical = 12.dp, horizontal = 8.dp),
-                    ) {
-                        Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                        Text(entry.key, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    items(list, key = { it.key }) { entry ->
+                        val name = entry.value.name
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    pendingIso = entry.key
+                                    showExpiryDialog = true
+                                }
+                                .padding(vertical = 12.dp, horizontal = 10.dp),
+                        ) {
+                            Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                            Text(entry.key, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
