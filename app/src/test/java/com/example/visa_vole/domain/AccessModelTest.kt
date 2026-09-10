@@ -493,11 +493,11 @@ class AccessModelTest {
         assertEquals(null, acc["CY"])
     }
 
-    @Test fun realDatabaseSchengaResidenceLegacyFreedomBlocGrantsSchengenNotIrelandCyprus() {
+    @Test fun realDatabaseSchengaResidenceLegacyFreedomBlocGrantsSchengenAndCyprusNotIreland() {
         val w = JdbcRepository.load(File("src/main/assets/visa_data.db"))
         // A legacy CZ residence stored with the EU/EEA/EFTA freedom bloc must grant the Schengen
-        // travel area (which now includes Bulgaria) but NOT the non-Schengen EU states
-        // Ireland/Cyprus.
+        // travel area (which now includes Bulgaria) and Cyprus, which separately accepts a
+        // Schengen residence permit, but NOT non-Schengen Ireland.
         val acc = AccessModel.compute(
             listOf(doc("d", Custom(setOf("CZ"), "eu-eea-efta", "residence", "schengen-residence"))), w,
         )
@@ -505,7 +505,19 @@ class AccessModelTest {
         assertTrue(acc.containsKey("DE"))
         assertEquals(VISA_FREE, acc["BG"]!!.level)
         assertEquals(null, acc["IE"])
-        assertEquals(null, acc["CY"])
+        assertEquals(VISA_FREE, acc["CY"]!!.level)
+        assertEquals(90, acc["CY"]!!.days)
+        assertTrue(acc["CY"]!!.fromDocument)
+    }
+
+    @Test fun realDatabaseSchengenResidenceGrantsCyprusNotIreland() {
+        val w = JdbcRepository.load(File("src/main/assets/visa_data.db"))
+        val acc = AccessModel.compute(listOf(doc("d", Holding("schengen-residence"))), w)
+        assertEquals(VISA_FREE, acc["DE"]!!.level)
+        assertEquals(VISA_FREE, acc["CY"]!!.level)
+        assertEquals(90, acc["CY"]!!.days)
+        assertTrue(acc["CY"]!!.fromDocument)
+        assertEquals(null, acc["IE"])
     }
 
     @Test fun schengenVisaCyprusRequiresDoubleOrMultipleEntry() {
