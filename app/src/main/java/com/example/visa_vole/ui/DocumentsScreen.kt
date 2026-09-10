@@ -3,6 +3,7 @@ package com.example.visa_vole.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,12 +22,14 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
@@ -254,6 +258,41 @@ private enum class DocType(val label: String, val kind: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+private fun SelectionField(
+    label: String,
+    value: String,
+    items: @Composable ColumnScope.(onSelected: () -> Unit) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            singleLine = true,
+            shape = MaterialTheme.shapes.large,
+            modifier = Modifier
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth(),
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            shape = MaterialTheme.shapes.large,
+        ) {
+            items({ expanded = false })
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun AddDocumentDialog(
     world: WorldData,
     onAdd: (Document) -> Unit,
@@ -340,7 +379,7 @@ fun AddDocumentDialog(
                         FilterChip(selected = docType == t, onClick = { docType = t; resetFields() }, label = { Text(t.label) })
                     }
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(4.dp))
 
                 when (docType) {
                     DocType.PASSPORT -> CountryPicker(
@@ -354,105 +393,81 @@ fun AddDocumentDialog(
                             single = false,
                         )
                         Spacer(Modifier.height(8.dp))
-                        val typeOpen = remember { mutableStateOf(false) }
                         val autoTypeName = inferredHolding?.let { world.holdings[it]?.name }
-                        val typeLabel = when (val choice = holdingChoice) {
-                            null -> if (autoTypeName != null) "Type: $autoTypeName (auto)" else "Type: none (custom only)"
-                            "" -> "Type: none"
+                        val typeValue = when (val choice = holdingChoice) {
+                            null -> autoTypeName?.let { "$it (auto)" } ?: "none (custom only)"
+                            "" -> "none"
                             else -> world.holdings[choice]?.name ?: choice
                         }
-                        Row(Modifier.fillMaxWidth()) {
-                            OutlinedButton(onClick = { typeOpen.value = true }, modifier = Modifier.fillMaxWidth()) {
-                                Text(typeLabel)
-                            }
-                        }
-                        DropdownMenu(expanded = typeOpen.value, onDismissRequest = { typeOpen.value = false }) {
+                        SelectionField("Type", typeValue) { onSelected ->
                             DropdownMenuItem(
                                 text = { Text("Auto — ${autoTypeName ?: "none"}") },
-                                onClick = { holdingChoice = null; typeOpen.value = false },
+                                onClick = { holdingChoice = null; onSelected() },
                             )
                             DropdownMenuItem(
                                 text = { Text("No known type (custom only)") },
-                                onClick = { holdingChoice = ""; typeOpen.value = false },
+                                onClick = { holdingChoice = ""; onSelected() },
                             )
                             world.holdingsForKind(docType.kind).forEach { h ->
                                 DropdownMenuItem(
                                     text = { Text(h.name) },
-                                    onClick = { holdingChoice = h.id; typeOpen.value = false },
+                                    onClick = { holdingChoice = h.id; onSelected() },
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        val autoName = inferredBloc?.name
+                        val blocValue = when (val choice = customBlocChoice) {
+                            null -> autoName?.let { "$it (auto)" } ?: "none detected"
+                            "" -> "none"
+                            else -> world.regimes.firstOrNull { it.id == choice }?.name ?: choice
+                        }
+                        SelectionField("Mobility bloc", blocValue) { onSelected ->
+                            DropdownMenuItem(
+                                text = { Text("Auto — ${autoName ?: "none detected"}") },
+                                onClick = { customBlocChoice = null; onSelected() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("No mobility bloc") },
+                                onClick = { customBlocChoice = ""; onSelected() },
+                            )
+                            world.regimes.sortedBy { it.name }.forEach { r ->
+                                DropdownMenuItem(
+                                    text = { Text("${r.name} (${r.id})") },
+                                    onClick = { customBlocChoice = r.id; onSelected() },
                                 )
                             }
                         }
                         if (docType == DocType.RESIDENCE) {
                             Spacer(Modifier.height(8.dp))
-                            val classOpen = remember { mutableStateOf(false) }
-                            Row(Modifier.fillMaxWidth()) {
-                                OutlinedButton(onClick = { classOpen.value = true }, modifier = Modifier.fillMaxWidth()) {
-                                    Text("Residence class: ${residenceClass.label}")
-                                }
-                            }
-                            DropdownMenu(expanded = classOpen.value, onDismissRequest = { classOpen.value = false }) {
+                            SelectionField("Residence class", residenceClass.label) { onSelected ->
                                 ResidenceClass.entries.forEach { rc ->
                                     DropdownMenuItem(
                                         text = { Text(rc.label) },
-                                        onClick = { residenceClass = rc; classOpen.value = false },
+                                        onClick = { residenceClass = rc; onSelected() },
                                     )
                                 }
                             }
                         }
-                        Spacer(Modifier.height(8.dp))
-                        val blocOpen = remember { mutableStateOf(false) }
-                        val autoName = inferredBloc?.name
-                        val blocLabel = when (val choice = customBlocChoice) {
-                            null -> if (autoName != null) "Mobility bloc: $autoName (auto)" else "Mobility bloc: none detected"
-                            "" -> "Mobility bloc: none"
-                            else -> world.regimes.firstOrNull { it.id == choice }?.name ?: choice
-                        }
-                        Row(Modifier.fillMaxWidth()) {
-                            OutlinedButton(onClick = { blocOpen.value = true }, modifier = Modifier.fillMaxWidth()) {
-                                Text(blocLabel)
-                            }
-                        }
-                        DropdownMenu(expanded = blocOpen.value, onDismissRequest = { blocOpen.value = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Auto — ${autoName ?: "none detected"}") },
-                                onClick = { customBlocChoice = null; blocOpen.value = false },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("No mobility bloc") },
-                                onClick = { customBlocChoice = ""; blocOpen.value = false },
-                            )
-                            world.regimes.sortedBy { it.name }.forEach { r ->
-                                DropdownMenuItem(
-                                    text = { Text("${r.name} (${r.id})") },
-                                    onClick = { customBlocChoice = r.id; blocOpen.value = false },
-                                )
-                            }
-                        }
                         if (docType == DocType.VISA) {
                             Spacer(Modifier.height(8.dp))
-                            val entryOpen = remember { mutableStateOf(false) }
-                            val entryLabel = when (entryType) {
+                            val entryValue = when (entryType) {
                                 "single" -> "Single entry"
                                 "double" -> "Double entry"
                                 else -> "Multiple entry"
                             }
-                            Row(Modifier.fillMaxWidth()) {
-                                OutlinedButton(onClick = { entryOpen.value = true }, modifier = Modifier.fillMaxWidth()) {
-                                    Text("Entry type: $entryLabel")
-                                }
-                            }
-                            DropdownMenu(expanded = entryOpen.value, onDismissRequest = { entryOpen.value = false }) {
+                            SelectionField("Entry type", entryValue) { onSelected ->
                                 DropdownMenuItem(
                                     text = { Text("Single entry") },
-                                    onClick = { entryType = "single"; entryOpen.value = false },
+                                    onClick = { entryType = "single"; onSelected() },
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Double entry") },
-                                    onClick = { entryType = "double"; entryOpen.value = false },
+                                    onClick = { entryType = "double"; onSelected() },
                                 )
                                 DropdownMenuItem(
                                     text = { Text("Multiple entry") },
-                                    onClick = { entryType = "multiple"; entryOpen.value = false },
+                                    onClick = { entryType = "multiple"; onSelected() },
                                 )
                             }
                         }
@@ -460,42 +475,63 @@ fun AddDocumentDialog(
                 }
 
                 Spacer(Modifier.height(16.dp))
+                val todayMillis = remember {
+                    LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+                }
+                val validityLabel = when {
+                    validFromDate != null || expiryDate != null ->
+                        "Validity: ${validFromDate?.let { it.toUtcIsoDate() } ?: "…"} → ${expiryDate?.let { it.toUtcIsoDate() } ?: "…"}"
+                    else -> "Validity period (optional)"
+                }
                 var showValidFromPicker by remember { mutableStateOf(false) }
-                OutlinedButton(onClick = { showValidFromPicker = true }, modifier = Modifier.fillMaxWidth()) {
+                var showValidToPicker by remember { mutableStateOf(false) }
+                OutlinedButton(
+                    onClick = { showValidFromPicker = true },
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Icon(Icons.Filled.DateRange, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
-                    Text(validFromDate?.let { it.toUtcIsoDate() } ?: "Valid from (optional)")
+                    Text(validityLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (showValidFromPicker) {
-                    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = validFromDate)
+                    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = validFromDate ?: todayMillis)
                     DatePickerDialog(
-                        onDismissRequest = { showValidFromPicker = false },
+                        onDismissRequest = { showValidFromPicker = false; showValidToPicker = false },
                         confirmButton = {
-                            TextButton(onClick = { validFromDate = datePickerState.selectedDateMillis; showValidFromPicker = false }) { Text("OK") }
+                            TextButton(onClick = {
+                                validFromDate = datePickerState.selectedDateMillis
+                                showValidFromPicker = false
+                                showValidToPicker = true
+                            }) { Text("Next") }
                         },
                         dismissButton = {
-                            TextButton(onClick = { validFromDate = null; showValidFromPicker = false }) { Text("Clear") }
+                            TextButton(onClick = {
+                                validFromDate = null
+                                showValidFromPicker = false
+                                showValidToPicker = true
+                            }) { Text("Clear") }
                         },
                     ) {
                         DatePicker(state = datePickerState)
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                var showDatePicker by remember { mutableStateOf(false) }
-                OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Filled.DateRange, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(expiryDate?.let { it.toUtcIsoDate() } ?: "Valid to (optional)")
-                }
-                if (showDatePicker) {
-                    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = expiryDate)
+                if (showValidToPicker) {
+                    val fallbackTo = maxOf(validFromDate ?: todayMillis, todayMillis)
+                    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = expiryDate ?: fallbackTo)
                     DatePickerDialog(
-                        onDismissRequest = { showDatePicker = false },
+                        onDismissRequest = { showValidToPicker = false },
                         confirmButton = {
-                            TextButton(onClick = { expiryDate = datePickerState.selectedDateMillis; showDatePicker = false }) { Text("OK") }
+                            TextButton(onClick = {
+                                expiryDate = datePickerState.selectedDateMillis
+                                showValidToPicker = false
+                            }) { Text("Done") }
                         },
                         dismissButton = {
-                            TextButton(onClick = { expiryDate = null; showDatePicker = false }) { Text("Clear") }
+                            TextButton(onClick = {
+                                expiryDate = null
+                                showValidToPicker = false
+                            }) { Text("Clear") }
                         },
                     ) {
                         DatePicker(state = datePickerState)
@@ -530,12 +566,14 @@ private fun CountryPicker(
         OutlinedTextField(
             value = query, onValueChange = onQuery,
             label = { Text(if (single) "Passport country" else "Add countries") },
-            singleLine = true, modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            shape = MaterialTheme.shapes.large,
+            modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
         Surface(
-            modifier = Modifier.fillMaxWidth().height(220.dp),
-            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.fillMaxWidth().height(180.dp),
+            shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surfaceVariant,
         ) {
             LazyColumn(Modifier.padding(4.dp)) {
