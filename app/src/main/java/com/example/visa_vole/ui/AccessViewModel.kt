@@ -105,8 +105,8 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = AppState.Ready(homeCountries, ownVisaCountries, docs.toList(), access, world, geometry)
     }
 
-    fun setHome(iso2: String) {
-        val homeDoc = Document(HOME_DOC_ID, "Passport · ${world.countries[iso2]?.name ?: iso2}", DocKind.Passport(iso2))
+    fun setHome(iso2: String, expiry: String? = null) {
+        val homeDoc = Document(HOME_DOC_ID, "Passport · ${world.countries[iso2]?.name ?: iso2}", DocKind.Passport(iso2), null, expiry)
         docs = (listOf(homeDoc) + docs.filterNot { it.id == HOME_DOC_ID }).toMutableList()
         persist()
         publish()
@@ -117,6 +117,8 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         persist()
         publish()
     }
+
+    fun updateDocument(doc: Document) = addDocument(doc)
 
     fun removeDocument(id: String) {
         if (id != HOME_DOC_ID) {

@@ -93,7 +93,7 @@ fun VisaVoleApp() {
         AppState.Loading -> LoadingScreen()
         is AppState.Ready -> {
             if (s.homeCountries.isEmpty()) {
-                OnboardingScreen(countries = s.world.countries, onPick = { vm.setHome(it) })
+                OnboardingScreen(countries = s.world.countries, onPick = { iso, expiry -> vm.setHome(iso, expiry) })
             } else {
                 MainScaffold(vm, s)
             }
@@ -103,11 +103,13 @@ fun VisaVoleApp() {
 
 @Composable
 private fun LoadingScreen() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator()
-            Spacer(Modifier.height(12.dp))
-            Text("Loading…", style = MaterialTheme.typography.bodyMedium)
+    Surface(color = MaterialTheme.colorScheme.background) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator()
+                Spacer(Modifier.height(12.dp))
+                Text("Loading…", style = MaterialTheme.typography.bodyMedium)
+            }
         }
     }
 }

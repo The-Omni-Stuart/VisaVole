@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -50,8 +53,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
@@ -73,6 +78,9 @@ private fun Long.toUtcIsoDate(): String {
     val d = Instant.ofEpochMilli(this).atOffset(ZoneOffset.UTC).toLocalDate()
     return "%04d-%02d-%02d".format(d.year, d.monthValue, d.dayOfMonth)
 }
+
+private fun String.toUtcMillis(): Long? =
+    runCatching { LocalDate.parse(this).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
 
 private val STATUS_ORANGE = Color(0xFFEF6C00)
 private val STATUS_GREEN = Color(0xFF2E7D32)
@@ -141,6 +149,7 @@ fun DocumentsScreen(
     modifier: Modifier = Modifier,
 ) {
     var showAdd by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<Document?>(null) }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("Documents", style = MaterialTheme.typography.headlineSmall)
         Text(
@@ -173,13 +182,25 @@ fun DocumentsScreen(
                 if (active.isNotEmpty()) {
                     item(key = "header-active") { SectionLabel("Active") }
                     items(active, key = { it.id }) { doc ->
-                        DocCard(doc, ready.world, today, onRemove = { vm.removeDocument(doc.id) })
+                        DocCard(
+                            doc,
+                            ready.world,
+                            today,
+                            onRemove = { vm.removeDocument(doc.id) },
+                            onEdit = { editing = doc },
+                        )
                     }
                 }
                 if (archived.isNotEmpty()) {
                     item(key = "header-archive") { SectionLabel("Archive") }
                     items(archived, key = { it.id }) { doc ->
-                        DocCard(doc, ready.world, today, onRemove = { vm.removeDocument(doc.id) })
+                        DocCard(
+                            doc,
+                            ready.world,
+                            today,
+                            onRemove = { vm.removeDocument(doc.id) },
+                            onEdit = { editing = doc },
+                        )
                     }
                 }
             }
@@ -190,6 +211,14 @@ fun DocumentsScreen(
             world = ready.world,
             onAdd = { vm.addDocument(it) },
             onDismiss = { showAdd = false },
+        )
+    }
+    if (editing != null) {
+        AddDocumentDialog(
+            world = ready.world,
+            initial = editing,
+            onAdd = { vm.updateDocument(it) },
+            onDismiss = { editing = null },
         )
     }
 }
@@ -229,6 +258,7 @@ private fun DocCard(
     world: WorldData,
     today: LocalDate,
     onRemove: () -> Unit,
+    onEdit: () -> Unit,
 ) {
     ElevatedCard(Modifier.fillMaxWidth()) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -242,6 +272,9 @@ private fun DocCard(
             if (doc.expiry != null) {
                 Spacer(Modifier.width(8.dp))
                 ExpiryStatusPill(doc, today)
+            }
+            IconButton(onClick = onEdit) {
+                Icon(Icons.Filled.Edit, contentDescription = "Edit")
             }
             IconButton(onClick = onRemove) {
                 Icon(Icons.Filled.Close, contentDescription = "Remove")
@@ -297,18 +330,68 @@ fun AddDocumentDialog(
     world: WorldData,
     onAdd: (Document) -> Unit,
     onDismiss: () -> Unit,
+    initial: Document? = null,
 ) {
     val countries = world.countries
-    var docType by remember { mutableStateOf(DocType.RESIDENCE) }
+    val initPassport = initial?.kind as? DocKind.Passport
+    val initCustom = initial?.kind as? DocKind.Custom
+    val initHolding = initial?.kind as? DocKind.Holding
+    var docType by remember {
+        mutableStateOf(
+            when {
+                initPassport != null -> DocType.PASSPORT
+                initCustom?.kind == "visa" || initCustom?.kind == "permit" -> DocType.VISA
+                initCustom?.kind == "passport" -> DocType.PASSPORT
+                else -> DocType.RESIDENCE
+            },
+        )
+    }
+    var customIso by remember {
+        mutableStateOf(
+            when {
+                initPassport != null -> setOf(initPassport.iso2)
+                initCustom != null -> initCustom.countries
+                else -> emptySet()
+            },
+        )
+    }
     var query by remember { mutableStateOf("") }
-    var passportIso by remember { mutableStateOf<String?>(null) }
-    var customIso by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var customBlocChoice by remember { mutableStateOf<String?>(null) } // null=auto, ""=none, else regime id
-    var holdingChoice by remember { mutableStateOf<String?>(null) } // null=auto, ""=none, else holding id
-    var entryType by remember { mutableStateOf("multiple") } // "single" | "double" | "multiple" (visa only)
-    var residenceClass by remember { mutableStateOf(ResidenceClass.TEMPORARY) } // residence only
-    var expiryDate by remember { mutableStateOf<Long?>(null) }
-    var validFromDate by remember { mutableStateOf<Long?>(null) }
+    var lastIso by remember {
+        mutableStateOf(
+            when {
+                initPassport != null -> initPassport.iso2
+                initCustom != null -> initCustom.countries.firstOrNull()
+                else -> null
+            },
+        )
+    }
+    val initialInferredBloc = remember(initCustom) { initCustom?.let { world.travelBlocFor(it.countries) } }
+    var customBlocChoice by remember {
+        mutableStateOf(
+            when {
+                initCustom == null -> null
+                initialInferredBloc?.id == initCustom.blocId -> null
+                initCustom.blocId == null -> ""
+                else -> initCustom.blocId
+            },
+        )
+    } // null=auto, ""=none, else regime id
+    val initialInferredHolding = remember(initCustom) { initCustom?.let { world.holdingFor(it.countries, it.kind) } }
+    var holdingChoice by remember {
+        mutableStateOf(
+            when {
+                initCustom == null -> initHolding?.holdingId
+                initialInferredHolding == initCustom.holdingId -> null
+                initCustom.holdingId == null -> ""
+                else -> initCustom.holdingId
+            },
+        )
+    } // null=auto, ""=none, else holding id
+    var entryType by remember { mutableStateOf(initCustom?.entryType ?: "multiple") } // "single" | "double" | "multiple" (visa only)
+    var residenceClass by remember { mutableStateOf(initial?.residenceClass ?: ResidenceClass.TEMPORARY) } // residence only
+    var expiryDate by remember { mutableStateOf(initial?.expiry?.toUtcMillis()) }
+    var validFromDate by remember { mutableStateOf(initial?.validFrom?.toUtcMillis()) }
+    var showMultiCountryWarning by remember { mutableStateOf(false) }
 
     // A residence/visa earns short-stay travel, not freedom of movement — infer the visa-free
     // travel bloc (e.g. Schengen for an EU residence) rather than the freedom-of-movement bloc.
@@ -325,40 +408,57 @@ fun AddDocumentDialog(
         else -> holdingChoice
     }
 
-    fun resetFields() {
-        query = ""; passportIso = null
-        customIso = emptySet(); customBlocChoice = null; holdingChoice = null
+    val visaMulti = docType == DocType.VISA && customIso.size > 1
+
+    fun onSwitchTab(target: DocType) {
+        if (docType == DocType.VISA && customIso.size > 1 && target != DocType.VISA) return
+        customBlocChoice = null
+        holdingChoice = null
     }
 
     // The residence class follows the selected known holding (e.g. a US green card defaults to
-    // permanent); a custom residence with no known holding defaults to temporary.
+    // permanent); a custom residence with no known holding defaults to temporary. In edit mode the
+    // initially stored class is preserved until the holding actually changes.
+    var lastResidenceKey by remember { mutableStateOf(docType to effectiveHolding) }
     LaunchedEffect(docType, effectiveHolding) {
-        if (docType == DocType.RESIDENCE) {
-            residenceClass = defaultResidenceClassFor(effectiveHolding, effectiveHolding == null)
+        val key = docType to effectiveHolding
+        if (key != lastResidenceKey) {
+            lastResidenceKey = key
+            if (docType == DocType.RESIDENCE) {
+                residenceClass = defaultResidenceClassFor(effectiveHolding, effectiveHolding == null)
+            }
         }
     }
 
-    val valid = when (docType) {
-        DocType.PASSPORT -> passportIso != null
-        DocType.RESIDENCE, DocType.VISA -> customIso.isNotEmpty()
+    val valid = when {
+        docType == DocType.PASSPORT -> lastIso != null && customIso.isNotEmpty()
+        initHolding != null && customIso.isEmpty() -> docType == DocType.RESIDENCE && holdingChoice != null
+        docType == DocType.RESIDENCE || docType == DocType.VISA -> customIso.isNotEmpty()
+        else -> false
     }
     val expiryOrNull = expiryDate?.let { it.toUtcIsoDate() }
     val validFromOrNull = validFromDate?.let { it.toUtcIsoDate() }
 
     fun build(): Document {
+        val id = initial?.id ?: UUID.randomUUID().toString()
         val exp = expiryOrNull
         val vfrom = validFromOrNull
-        return when (docType) {
-            DocType.PASSPORT -> {
-                val iso = passportIso!!
-                Document(UUID.randomUUID().toString(), "Passport · ${countries[iso]?.name ?: iso}", DocKind.Passport(iso), null, exp, vfrom)
+        return when {
+            docType == DocType.PASSPORT -> {
+                val iso = lastIso ?: customIso.first()
+                Document(id, "Passport · ${countries[iso]?.name ?: iso}", DocKind.Passport(iso), null, exp, vfrom)
             }
-            DocType.RESIDENCE, DocType.VISA -> {
+            initHolding != null && customIso.isEmpty() -> {
+                val h = holdingChoice!!
+                val label = (world.holdings[h]?.name ?: h) + residenceClass.let { " · ${it.label}" }
+                Document(id, label, DocKind.Holding(h), null, exp, vfrom, residenceClass)
+            }
+            else -> {
                 val names = customIso.joinToString(", ") { countries[it]?.name ?: it }.take(80)
-                val typeSuffix = effectiveHolding?.let { id -> " (${world.holdings[id]?.name ?: id})" } ?: ""
+                val typeSuffix = effectiveHolding?.let { hid -> " (${world.holdings[hid]?.name ?: hid})" } ?: ""
                 val entry = if (docType == DocType.VISA) entryType else null
                 val rc = if (docType == DocType.RESIDENCE) residenceClass else null
-                Document(UUID.randomUUID().toString(), "${docType.label}: $names$typeSuffix", DocKind.Custom(customIso, effectiveBloc, docType.kind, effectiveHolding, entry), null, exp, vfrom, rc)
+                Document(id, "${docType.label}: $names$typeSuffix", DocKind.Custom(customIso, effectiveBloc, docType.kind, effectiveHolding, entry), null, exp, vfrom, rc)
             }
         }
     }
@@ -372,28 +472,45 @@ fun AddDocumentDialog(
                 .heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp),
         ) {
             Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState())) {
-                Text("Add document", style = MaterialTheme.typography.titleLarge)
+                Text(if (initial == null) "Add document" else "Edit document", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DocType.entries.forEach { t ->
-                        FilterChip(selected = docType == t, onClick = { docType = t; resetFields() }, label = { Text(t.label) })
+                        FilterChip(
+                            selected = docType == t,
+                            enabled = !(visaMulti && t != DocType.VISA),
+                            onClick = { if (t != docType) { docType = t; onSwitchTab(t) } },
+                            label = { Text(t.label) },
+                        )
                     }
                 }
                 Spacer(Modifier.height(4.dp))
 
-                when (docType) {
-                    DocType.PASSPORT -> CountryPicker(
-                        countries, query, { query = it }, setOfNotNull(passportIso),
-                        onToggle = { passportIso = it }, single = true,
-                    )
-                    DocType.RESIDENCE, DocType.VISA -> {
-                        CountryPicker(
-                            countries, query, { query = it }, customIso,
-                            onToggle = { customIso = if (customIso.contains(it)) customIso - it else customIso + it },
-                            single = false,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        val autoTypeName = inferredHolding?.let { world.holdings[it]?.name }
+                CountryPicker(
+                    countries,
+                    query,
+                    { query = it },
+                    selected = if (docType == DocType.PASSPORT) lastIso?.let { setOf(it) } ?: emptySet() else customIso,
+                    onToggle = { iso ->
+                        if (docType == DocType.VISA) {
+                            val next = if (customIso.contains(iso)) customIso - iso else customIso + iso
+                            customIso = next
+                            lastIso = if (next.contains(iso)) iso else next.firstOrNull()
+                        } else {
+                            customIso = setOf(iso)
+                            lastIso = iso
+                        }
+                    },
+                    label = when (docType) {
+                        DocType.PASSPORT -> "Passport country"
+                        DocType.RESIDENCE -> "Residence country"
+                        DocType.VISA -> "Add countries"
+                    },
+                )
+
+                if (docType == DocType.RESIDENCE || docType == DocType.VISA) {
+                    Spacer(Modifier.height(8.dp))
+                    val autoTypeName = inferredHolding?.let { world.holdings[it]?.name }
                         val typeValue = when (val choice = holdingChoice) {
                             null -> autoTypeName?.let { "$it (auto)" } ?: "none (custom only)"
                             "" -> "none"
@@ -472,7 +589,6 @@ fun AddDocumentDialog(
                             }
                         }
                     }
-                }
 
                 Spacer(Modifier.height(16.dp))
                 val todayMillis = remember {
@@ -541,10 +657,51 @@ fun AddDocumentDialog(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     OutlinedButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(Modifier.width(12.dp))
-                    Button(onClick = { onAdd(build()); onDismiss() }, enabled = valid) { Text("Add") }
+                    Button(
+                        onClick = {
+                            if (visaMulti) {
+                                showMultiCountryWarning = true
+                            } else {
+                                onAdd(build())
+                                onDismiss()
+                            }
+                        },
+                        enabled = valid,
+                    ) { Text(if (initial == null) "Add" else "Save") }
                 }
             }
         }
+    }
+
+    if (showMultiCountryWarning) {
+        AlertDialog(
+            onDismissRequest = { showMultiCountryWarning = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMultiCountryWarning = false
+                    onAdd(build())
+                    onDismiss()
+                }) { Text("Save anyway") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showMultiCountryWarning = false }) { Text("Go back") }
+            },
+            text = {
+                Text(
+                    buildAnnotatedString {
+                        append("You have multiple countries selected for this visa: ")
+                        val names = customIso.sortedBy { countries[it]?.name ?: it }
+                        names.forEachIndexed { index, iso ->
+                            withStyle(SpanStyle(color = Color(0xFFFF9800), fontWeight = FontWeight.SemiBold)) {
+                                append(countries[iso]?.name ?: iso)
+                            }
+                            if (index != names.lastIndex) append(", ")
+                        }
+                        append(". Are you sure you want to save?")
+                    },
+                )
+            },
+        )
     }
 }
 
@@ -556,16 +713,21 @@ private fun CountryPicker(
     onQuery: (String) -> Unit,
     selected: Set<String>,
     onToggle: (String) -> Unit,
-    single: Boolean,
+    label: String,
 ) {
+    val listState = rememberLazyListState()
     val q = query.trim().lowercase()
     val list = countries.entries
         .filter { q.isEmpty() || it.value.name.lowercase().contains(q) || it.key.lowercase() == q }
         .sortedBy { it.value.name }
+    LaunchedEffect(list, selected) {
+        val selectedIndex = list.indexOfFirst { selected.contains(it.key) }
+        if (selectedIndex >= 0) listState.scrollToItem(selectedIndex)
+    }
     Column {
         OutlinedTextField(
             value = query, onValueChange = onQuery,
-            label = { Text(if (single) "Passport country" else "Add countries") },
+            label = { Text(label) },
             singleLine = true,
             shape = MaterialTheme.shapes.large,
             modifier = Modifier.fillMaxWidth(),
@@ -576,7 +738,7 @@ private fun CountryPicker(
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surfaceVariant,
         ) {
-            LazyColumn(Modifier.padding(4.dp)) {
+            LazyColumn(state = listState, modifier = Modifier.padding(4.dp)) {
                 items(list, key = { it.key }) { entry ->
                     val isSel = selected.contains(entry.key)
                     Row(
