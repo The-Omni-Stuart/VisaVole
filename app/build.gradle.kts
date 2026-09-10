@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.visa_vole"
+    namespace = "com.cbkres.visavole"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.example.visa_vole"
+        applicationId = "com.cbkres.visavole"
         minSdk = 28
         targetSdk = 37
         versionCode = 1
