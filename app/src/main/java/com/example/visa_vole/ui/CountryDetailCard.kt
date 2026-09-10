@@ -38,6 +38,7 @@ fun CountryDetailCard(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     isHome: Boolean = false,
+    isOwnCovered: Boolean = false,
     homePassport: String? = null,
     daysLabel: String? = null,
 ) {
@@ -62,7 +63,8 @@ fun CountryDetailCard(
                     Modifier
                         .background(
                             if (isHome) HOME
-                            else if (level == AccessLevel.RESIDENCE) residenceColor(access?.residenceClass)
+                            else if (level == AccessLevel.RESIDENCE) RESIDENCE_FILL
+                            else if (level == AccessLevel.COVERED && isOwnCovered) COVERED_OWN
                             else colorFor(level),
                             CircleShape,
                         )

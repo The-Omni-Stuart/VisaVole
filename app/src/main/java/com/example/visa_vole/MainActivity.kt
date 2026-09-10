@@ -196,6 +196,7 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
                     breakdown = AccessModel.breakdownFor(selected, s.docs, s.world),
                     onDismiss = { pick(null) },
                     isHome = selected in s.homeCountries,
+                    isOwnCovered = selected in s.ownVisaCountries,
                     homePassport = if (selected in s.homeCountries) s.world.countries[selected]?.name else null,
                     daysLabel = AccessModel.stayLabelFor(selectedAccess, stayRule),
                 )

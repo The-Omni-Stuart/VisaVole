@@ -243,7 +243,7 @@ fun WorldMapCanvas(
                         val fill = when {
                             s.iso in homeCountries -> HOME
                             lvl == AccessLevel.COVERED && s.iso in ownVisaCountries -> COVERED_OWN
-                            lvl == AccessLevel.RESIDENCE -> residenceColor(a?.residenceClass)
+                            lvl == AccessLevel.RESIDENCE -> RESIDENCE_FILL
                             else -> colorFor(lvl)
                         }
                         drawPath(s.path, fill)
