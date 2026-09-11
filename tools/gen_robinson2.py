@@ -1,11 +1,11 @@
-import shapefile, json, math, os, sys
+import shapefile, json, math, os, sys, struct
 from shapely.geometry import Polygon, MultiPolygon, Point, box
 from shapely.ops import unary_union
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(BASE, "data")
-EPS = float(sys.argv[1]) if len(sys.argv) > 1 else 0.25
-OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.normpath(os.path.join(BASE, "..", "app/src/main/assets/world_robinson.json"))
+EPS = float(sys.argv[1]) if len(sys.argv) > 1 else 0.05
+OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.normpath(os.path.join(BASE, "..", "app/src/main/assets/world_robinson.bin"))
 
 W, H = 1000, 512
 MX, MY = 14.0, 16.0
@@ -39,14 +39,21 @@ def dp(points, eps):
         s, e = stack.pop()
         ax, ay = points[s]; bx, by = points[e]
         dx, dy = bx-ax, by-ay
-        L = math.hypot(dx, dy)
+        L2 = dx*dx + dy*dy
         maxd = -1.0; idx = -1
         for i in range(s+1, e):
             px, py = points[i]
-            if L == 0:
+            if L2 == 0:
                 d = math.hypot(px-ax, py-ay)
             else:
-                d = abs(dy*(ax-px) - dx*(ay-py)) / L
+                t = ((px-ax)*dx + (py-ay)*dy) / L2
+                if t < 0:
+                    cx, cy = ax, ay
+                elif t > 1:
+                    cx, cy = bx, by
+                else:
+                    cx, cy = ax + t*dx, ay + t*dy
+                d = math.hypot(px-cx, py-cy)
             if d > maxd:
                 maxd = d; idx = i
         if maxd > eps and idx > 0:
@@ -66,6 +73,8 @@ def rings_of(shp):
     out = []
     for k in range(len(parts)-1):
         ring = [[pts[j][0], pts[j][1]] for j in range(parts[k], parts[k+1])]
+        if ring and ring[0] == ring[-1]:
+            ring = ring[:-1]
         if len(ring) >= 3:
             out.append(ring)
     return out
@@ -270,11 +279,12 @@ for iso in sorted(countries):
     rings = []
     for ring in all_rings[iso]:
         px = [to_px(x, y) for (x, y) in ring]
+        if px and px[0] == px[-1]:
+            px = px[:-1]
         before_pts += len(px)
-        d = bbox_diag(px)
-        if d >= 5.0 and len(px) > 12:
+        if len(px) > 3:
             simp = dp(px, EPS)
-            if len(simp) >= 12:      # never collapse a ring below a usable count
+            if len(simp) >= 3:
                 px = simp
         px = [[round(a, 2), round(b, 2)] for (a, b) in px]
         if len(px) >= 3:
@@ -282,7 +292,27 @@ for iso in sorted(countries):
     if rings:
         out["countries"][iso] = {"name": countries[iso]["name"], "rings": rings}
 
-json.dump(out, open(OUT,"w"), separators=(",",":"))
+if OUT.endswith(".bin"):
+    with open(OUT, "wb") as fh:
+        fh.write(struct.pack(">iii", 0x56525743, int(out["width"]), int(out["height"])))
+        fh.write(struct.pack(">i", len(out["countries"])))
+        for iso in sorted(out["countries"]):
+            c = out["countries"][iso]
+            iso_b = iso.encode("utf-8")
+            name_b = c["name"].encode("utf-8")
+            fh.write(struct.pack(">i", len(iso_b)))
+            fh.write(iso_b)
+            fh.write(struct.pack(">i", len(name_b)))
+            fh.write(name_b)
+            fh.write(struct.pack(">i", len(c["rings"])))
+            for ring in c["rings"]:
+                fh.write(struct.pack(">i", len(ring)))
+                for x, y in ring:
+                    xi = max(0, min(65535, int(round(float(x) * 64.0))))
+                    yi = max(0, min(65535, int(round(float(y) * 64.0))))
+                    fh.write(struct.pack(">HH", xi, yi))
+else:
+    json.dump(out, open(OUT,"w"), separators=(",",":"))
 
 after_pts = sum(len(r) for c in out["countries"].values() for r in c["rings"])
 sz = os.path.getsize(OUT)

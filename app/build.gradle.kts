@@ -37,6 +37,9 @@ android {
         // Keep the bundled SQLite DB stored (uncompressed) so it can be opened via a file
         // descriptor and its size compared on launch to detect bundled-data refreshes.
         noCompress("db")
+        // Keep the binary world geometry uncompressed so first launch can read it without APK
+        // decompression.
+        noCompress("bin")
     }
 }
 

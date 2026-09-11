@@ -150,7 +150,7 @@ fun DocumentsScreen(
 ) {
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Document?>(null) }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
+    Column(modifier.fillMaxSize().padding(16.dp)) {
         Text("Documents", style = MaterialTheme.typography.headlineSmall)
         Text(
             "Add the passport and papers you hold — the map updates to match.",

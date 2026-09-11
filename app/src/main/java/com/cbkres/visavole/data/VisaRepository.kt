@@ -10,11 +10,11 @@ import org.json.JSONArray
  */
 class VisaRepository(private val db: VisaDb) {
 
-    fun loadWorld(): WorldData {
+    fun loadWorld(homePassports: Set<String>): WorldData {
         val conn = db.database
         return WorldData(
             countries = loadCountries(conn),
-            baseline = loadBaseline(conn),
+            baseline = loadBaseline(conn, homePassports),
             regimes = loadRegimes(conn),
             holdings = loadHoldings(conn),
             benefits = loadBenefits(conn),
@@ -30,13 +30,20 @@ class VisaRepository(private val db: VisaDb) {
         return out
     }
 
-    private fun loadBaseline(c: android.database.sqlite.SQLiteDatabase): Map<String, List<Corridor>> {
+    private fun loadBaseline(c: android.database.sqlite.SQLiteDatabase, homePassports: Set<String>): Map<String, List<Corridor>> {
+        if (homePassports.isEmpty()) return emptyMap()
         val out = HashMap<String, MutableList<Corridor>>()
-        c.rawQuery("SELECT passport, destination, type, days FROM visa_rules", null).use { cur ->
-            while (cur.moveToNext()) {
-                val p = cur.getString(0)
-                val days = if (cur.isNull(3)) null else cur.getInt(3)
-                out.getOrPut(p) { mutableListOf() }.add(Corridor(p, cur.getString(1), cur.getString(2), days))
+        homePassports.toList().chunked(500).forEach { chunk ->
+            val placeholders = chunk.joinToString(",") { "?" }
+            c.rawQuery(
+                "SELECT passport, destination, type, days FROM visa_rules WHERE passport IN ($placeholders)",
+                chunk.toTypedArray(),
+            ).use { cur ->
+                while (cur.moveToNext()) {
+                    val p = cur.getString(0)
+                    val days = if (cur.isNull(3)) null else cur.getInt(3)
+                    out.getOrPut(p) { mutableListOf() }.add(Corridor(p, cur.getString(1), cur.getString(2), days))
+                }
             }
         }
         return out

@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.zIndex
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -143,16 +145,29 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
         },
     ) { pad ->
         Box(Modifier.fillMaxSize().padding(pad)) {
-            when (tab) {
-                0 -> MapTab(s, selected, { selected = it })
-                else -> DocumentsScreen(vm, s)
-            }
+            MapTab(
+                s,
+                selected,
+                { selected = it },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .alpha(if (tab == 0) 1f else 0f)
+                    .zIndex(if (tab == 0) 1f else 0f),
+            )
+            DocumentsScreen(
+                vm,
+                s,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .alpha(if (tab == 1) 1f else 0f)
+                    .zIndex(if (tab == 1) 1f else 0f),
+            )
         }
     }
 }
 
 @Composable
-private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> Unit) {
+private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> Unit, modifier: Modifier = Modifier) {
     var query by remember { mutableStateOf("") }
     val matches = remember(query, s.world) {
         val q = query.trim().lowercase()
@@ -169,7 +184,7 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
     var legendH by remember { mutableStateOf(0.dp) }
     val mapBottomPadding = if (selected != null) (cardH - 16.dp).coerceAtLeast(0.dp) else 0.dp
     val controlsBottomPadding = if (selected != null) 24.dp else legendH + 8.dp
-    Box(Modifier.fillMaxSize()) {
+    Box(modifier.fillMaxSize()) {
         WorldMapCanvas(
             geometry = s.geometry,
             access = s.access,
@@ -178,6 +193,7 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
             homeCountries = s.homeCountries,
             ownVisaCountries = s.ownVisaCountries,
             controlsBottomPadding = controlsBottomPadding,
+            topInset = searchBarH,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(bottom = mapBottomPadding),

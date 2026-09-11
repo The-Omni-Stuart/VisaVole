@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -45,7 +46,10 @@ import com.cbkres.visavole.domain.Access
 import com.cbkres.visavole.domain.AccessLevel
 
 private const val MIN_ZOOM = 1f
-private const val MAX_ZOOM = 20f
+// High enough for tiny island states (MT, CY, LU, MC…) to become genuinely inspectable without
+// entering a regime where the simplified coastline looks obviously faceted or the screen is mostly
+// empty ocean.
+private const val MAX_ZOOM = 80f
 
 /**
  * Per-country focus margin as a fraction of the world width (default 7%). A small mainland would
@@ -58,7 +62,7 @@ private val FOCUS_MARGIN_OVERRIDE: Map<String, Float> = mapOf("GB" to 0.03f)
 
 private data class IsoShape(
     val iso: String,
-    val rings: List<List<Offset>>,
+    val rings: List<FloatArray>,
     val path: Path,
     val area: Float,
 )
@@ -96,15 +100,28 @@ fun WorldMapCanvas(
     homeCountries: Set<String> = emptySet(),
     ownVisaCountries: Set<String> = emptySet(),
     controlsBottomPadding: Dp = 24.dp,
+    topInset: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
+    val density = LocalDensity.current
+    val topInsetPx = with(density) { topInset.toPx() }
+    var controlsH by remember { mutableStateOf(0.dp) }
+    // When a country is selected, keep the tap-to-zoom target above the floating zoom controls so
+    // the country is not visually “inside” the control box.
+    val controlsBottomInsetPx = if (selected != null) {
+        with(density) { (controlsH + controlsBottomPadding + 12.dp).toPx() }
+    } else {
+        0f
+    }
     val shapes: List<IsoShape> = remember(geometry) {
         geometry.countries.map { (iso, shape) ->
             val path = Path()
             var area = 0f
             for (ring in shape.rings) {
-                ring.forEachIndexed { i, p ->
-                    if (i == 0) path.moveTo(p.x, p.y) else path.lineTo(p.x, p.y)
+                for (i in ring.indices step 2) {
+                    val x = ring[i]
+                    val y = ring[i + 1]
+                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
                 }
                 path.close()
                 area += polygonArea(ring)
@@ -145,14 +162,20 @@ fun WorldMapCanvas(
     val baseScale = if (canvasSize.width > 0f) fitScale(geometry, canvasSize.width, canvasSize.height) else 1f
 
     // Smoothly centre and zoom in when a country becomes selected.
-    LaunchedEffect(selected, canvasSize) {
+    LaunchedEffect(selected, canvasSize, topInsetPx, controlsBottomInsetPx) {
         if (selected == null || canvasSize.width <= 0f) return@LaunchedEffect
         val f = focus[selected] ?: return@LaunchedEffect
         val w = canvasSize.width
         val h = canvasSize.height
+        val top = topInsetPx.coerceIn(0f, h)
+        val bottom = controlsBottomInsetPx.coerceIn(0f, h - top)
+        val visibleH = (h - top - bottom).coerceAtLeast(1f)
         val bs = fitScale(geometry, w, h)
-        val targetZoom = (minOf(w * 0.75f / f.bbox.w, h * 0.75f / f.bbox.h) / bs).coerceIn(MIN_ZOOM, MAX_ZOOM)
-        val targetCenter = clampCenter(f.point, bs * targetZoom, geometry, w, h)
+        val targetZoom = (minOf(w * 0.75f / f.bbox.w, visibleH * 0.75f / f.bbox.h) / bs).coerceIn(MIN_ZOOM, MAX_ZOOM)
+        // The canvas itself is centred on `centerWorld`; shift the centre so the selected country
+        // lands in the middle of the *visible* strip between the search bar and the bottom UI.
+        val visibleCenterShift = Offset(0f, (top - bottom) / (2f * bs * targetZoom))
+        val targetCenter = clampCenter(f.point - visibleCenterShift, bs * targetZoom, geometry, w, h)
         val fromZoom = zoom
         val fromCenter = centerWorld
         Animatable(0f).animateTo(1f, tween(350)) {
@@ -268,7 +291,8 @@ fun WorldMapCanvas(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(horizontal = 12.dp)
-                .padding(top = 12.dp, bottom = controlsBottomPadding),
+                .padding(top = 12.dp, bottom = controlsBottomPadding)
+                .onSizeChanged { controlsH = Dp(it.height / density.density) },
         ) {
             val cx = canvasSize.width / 2f
             val cy = canvasSize.height / 2f
@@ -345,16 +369,18 @@ private fun zoomAround(
     return nz to clampCenter(Offset(ncx, ncy), ns, geometry, w, h)
 }
 
-private fun bboxOf(rings: List<List<Offset>>): BBox {
+private fun bboxOf(rings: List<FloatArray>): BBox {
     var minX = Float.MAX_VALUE
     var minY = Float.MAX_VALUE
     var maxX = -Float.MAX_VALUE
     var maxY = -Float.MAX_VALUE
-    for (r in rings) for (p in r) {
-        if (p.x < minX) minX = p.x
-        if (p.x > maxX) maxX = p.x
-        if (p.y < minY) minY = p.y
-        if (p.y > maxY) maxY = p.y
+    for (r in rings) for (i in r.indices step 2) {
+        val x = r[i]
+        val y = r[i + 1]
+        if (x < minX) minX = x
+        if (x > maxX) maxX = x
+        if (y < minY) minY = y
+        if (y > maxY) maxY = y
     }
     return if (minX > maxX) BBox(0f, 0f, 1f, 1f) else BBox(minX, minY, maxX, maxY)
 }
@@ -378,19 +404,21 @@ private fun hitTest(shapes: List<IsoShape>, px: Float, py: Float): String? {
     return best
 }
 
-private fun pointInAnyRing(rings: List<List<Offset>>, x: Float, y: Float): Boolean {
+private fun pointInAnyRing(rings: List<FloatArray>, x: Float, y: Float): Boolean {
     for (ring in rings) if (pointInRing(ring, x, y)) return true
     return false
 }
 
-private fun pointInRing(ring: List<Offset>, x: Float, y: Float): Boolean {
+private fun pointInRing(ring: FloatArray, x: Float, y: Float): Boolean {
     var inside = false
-    var j = ring.size - 1
-    for (i in ring.indices) {
-        val pi = ring[i]
-        val pj = ring[j]
-        if ((pi.y > y) != (pj.y > y)) {
-            val xInt = (pj.x - pi.x) * (y - pi.y) / (pj.y - pi.y) + pi.x
+    var j = ring.size - 2
+    for (i in ring.indices step 2) {
+        val piX = ring[i]
+        val piY = ring[i + 1]
+        val pjX = ring[j]
+        val pjY = ring[j + 1]
+        if ((piY > y) != (pjY > y)) {
+            val xInt = (pjX - piX) * (y - piY) / (pjY - piY) + piX
             if (x < xInt) inside = !inside
         }
         j = i
@@ -398,11 +426,15 @@ private fun pointInRing(ring: List<Offset>, x: Float, y: Float): Boolean {
     return inside
 }
 
-private fun polygonArea(ring: List<Offset>): Float {
+private fun polygonArea(ring: FloatArray): Float {
     var a = 0f
-    var j = ring.size - 1
-    for (i in ring.indices) {
-        a += (ring[j].x + ring[i].x) * (ring[j].y - ring[i].y)
+    var j = ring.size - 2
+    for (i in ring.indices step 2) {
+        val piX = ring[i]
+        val piY = ring[i + 1]
+        val pjX = ring[j]
+        val pjY = ring[j + 1]
+        a += (pjX + piX) * (pjY - piY)
         j = i
     }
     return kotlin.math.abs(a) / 2f

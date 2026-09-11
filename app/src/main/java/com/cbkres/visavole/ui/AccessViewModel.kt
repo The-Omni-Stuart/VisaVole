@@ -51,7 +51,8 @@ sealed interface AppState {
 class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     private val context: Context = app
-    private val world: WorldData by lazy { VisaRepository(VisaDb(context)).loadWorld() }
+    private val repository = VisaRepository(VisaDb(context))
+    @Volatile private var world: WorldData? = null
     private val geometry: WorldMapData by lazy { WorldGeometry.load(context) }
 
     private val _state = MutableStateFlow<AppState>(AppState.Loading)
@@ -59,6 +60,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     private var docs: MutableList<Document> = mutableListOf()
     private var pendingHome: String? = null
+    private var reloadGeneration = 0
 
     private val homeIso: String?
         get() = (docs.firstOrNull { it.id == HOME_DOC_ID }?.kind as? DocKind.Passport)?.iso2
@@ -67,9 +69,11 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         readPersisted()
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                world; geometry // one-time asset copy + load
-                normalizeResidenceClasses()
-                migrateHomeDoc()
+                world = repository.loadWorld(AccessModel.homeCountries(docs))
+                geometry
+                normalizeResidenceClasses(world!!)
+                migrateHomeDoc(world!!)
+                world = repository.loadWorld(AccessModel.homeCountries(docs))
             }
             publish()
         }
@@ -77,9 +81,9 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Fill in the residence class of residence documents saved before the field existed
      *  (inferred from their known holding); passport/visa documents stay null. */
-    private fun normalizeResidenceClasses() {
+    private fun normalizeResidenceClasses(w: WorldData) {
         val normalized = docs.map { d ->
-            if (d.residenceClass == null) d.residenceClassFor(world)?.let { d.copy(residenceClass = it) } ?: d
+            if (d.residenceClass == null) d.residenceClassFor(w)?.let { d.copy(residenceClass = it) } ?: d
             else d
         }
         if (normalized != docs) {
@@ -89,52 +93,68 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Promote a legacy "home" string (pre home-as-document) into a first-class document. */
-    private fun migrateHomeDoc() {
+    private fun migrateHomeDoc(w: WorldData) {
         val iso = pendingHome ?: return
         pendingHome = null
         if (docs.none { it.id == HOME_DOC_ID }) {
-            docs = (listOf(Document(HOME_DOC_ID, "Passport · ${world.countries[iso]?.name ?: iso}", DocKind.Passport(iso))) + docs).toMutableList()
+            docs = (listOf(Document(HOME_DOC_ID, "Passport · ${w.countries[iso]?.name ?: iso}", DocKind.Passport(iso))) + docs).toMutableList()
             persist()
         }
     }
 
     private fun publish() {
+        val w = world ?: return
         val homeCountries = AccessModel.homeCountries(docs)
-        val ownVisaCountries = if (homeCountries.isNotEmpty()) AccessModel.ownVisaCountries(docs, world) else emptySet()
-        val access = if (homeCountries.isNotEmpty()) AccessModel.compute(docs, world) else emptyMap()
-        _state.value = AppState.Ready(homeCountries, ownVisaCountries, docs.toList(), access, world, geometry)
+        val ownVisaCountries = if (homeCountries.isNotEmpty()) AccessModel.ownVisaCountries(docs, w) else emptySet()
+        val access = if (homeCountries.isNotEmpty()) AccessModel.compute(docs, w) else emptyMap()
+        _state.value = AppState.Ready(homeCountries, ownVisaCountries, docs.toList(), access, w, geometry)
+    }
+
+    private fun updateDocs(nextDocs: List<Document>) {
+        val oldHomes = AccessModel.homeCountries(docs)
+        docs = nextDocs.toMutableList()
+        persist()
+        if (AccessModel.homeCountries(docs) != oldHomes) reloadWorldAndPublish() else publish()
+    }
+
+    private fun reloadWorldAndPublish() {
+        val homes = AccessModel.homeCountries(docs)
+        val gen = ++reloadGeneration
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                val w = repository.loadWorld(homes)
+                if (gen != reloadGeneration) return@withContext
+                world = w
+            }
+            if (gen != reloadGeneration) return@launch
+            publish()
+        }
     }
 
     fun setHome(iso2: String, expiry: String? = null) {
-        val homeDoc = Document(HOME_DOC_ID, "Passport · ${world.countries[iso2]?.name ?: iso2}", DocKind.Passport(iso2), null, expiry)
-        docs = (listOf(homeDoc) + docs.filterNot { it.id == HOME_DOC_ID }).toMutableList()
-        persist()
-        publish()
+        val homeDoc = Document(HOME_DOC_ID, "Passport · ${world?.countries?.get(iso2)?.name ?: iso2}", DocKind.Passport(iso2), null, expiry)
+        updateDocs(listOf(homeDoc) + docs.filterNot { it.id == HOME_DOC_ID })
     }
 
     fun addDocument(doc: Document) {
-        docs = (docs.filterNot { it.id == doc.id } + doc).toMutableList()
-        persist()
-        publish()
+        updateDocs(docs.filterNot { it.id == doc.id } + doc)
     }
 
     fun updateDocument(doc: Document) = addDocument(doc)
 
     fun removeDocument(id: String) {
-        if (id != HOME_DOC_ID) {
-            docs = docs.filterNot { it.id == id }.toMutableList()
-            persist()
-            publish()
-            return
+        val next = if (id != HOME_DOC_ID) {
+            docs.filterNot { it.id == id }
+        } else {
+            var nextDocs = docs.filterNot { it.id == id }
+            docs.firstOrNull { it.kind is DocKind.Passport }?.let { p ->
+                val iso = (p.kind as DocKind.Passport).iso2
+                val promoted = p.copy(id = HOME_DOC_ID, label = "Passport · ${world?.countries?.get(iso)?.name ?: iso}")
+                nextDocs = nextDocs.map { if (it.id == p.id) promoted else it }
+            }
+            nextDocs
         }
-        docs = docs.filterNot { it.id == id }.toMutableList()
-        docs.firstOrNull { it.kind is DocKind.Passport }?.let { p ->
-            val iso = (p.kind as DocKind.Passport).iso2
-            val promoted = p.copy(id = HOME_DOC_ID, label = "Passport · ${world.countries[iso]?.name ?: iso}")
-            docs = docs.map { if (it.id == p.id) promoted else it }.toMutableList()
-        }
-        persist()
-        publish()
+        updateDocs(next)
     }
 
     // ---- persistence (JSON in the app's files dir) ----
