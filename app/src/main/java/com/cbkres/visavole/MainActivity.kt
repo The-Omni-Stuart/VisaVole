@@ -214,7 +214,7 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
                 .fillMaxWidth()
                 .onSizeChanged { searchBarH = Dp(it.height / density.density) },
         )
-        val selName = selected?.let { s.world.countries[it]?.name }
+        val selName = selected?.let { iso -> s.world.countries[iso]?.name ?: s.geometry.countries[iso]?.name ?: iso }
         if (selected != null && selName != null) {
             val selectedAccess = s.access[selected]
             val stayRule = when {
@@ -234,7 +234,7 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .heightIn(max = 360.dp)
+                    .heightIn(max = 300.dp)
                     .onSizeChanged { cardH = Dp(it.height / density.density) },
             )
         } else {

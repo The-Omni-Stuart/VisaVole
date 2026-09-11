@@ -50,6 +50,13 @@ private const val MIN_ZOOM = 1f
 // entering a regime where the simplified coastline looks obviously faceted or the screen is mostly
 // empty ocean.
 private const val MAX_ZOOM = 80f
+// The minimum zoom is a width-fit view with a small buffer, not an exact full-geometry fit.
+private const val MIN_ZOOM_BUFFER = 1.04f
+// Slightly east of the geometric centre so the default world framing feels evenly divided.
+private const val DEFAULT_CENTER_X_FRACTION = 0.52f
+// Panning may move the map, but at least this fraction of the world (or of the visible viewport)
+// must remain on screen.
+private const val MIN_VISIBLE_FRACTION = 0.2f
 
 /**
  * Per-country focus margin as a fraction of the world width (default 7%). A small mainland would
@@ -156,10 +163,12 @@ fun WorldMapCanvas(
 
     var canvasSize by remember { mutableStateOf(Size.Zero) }
     var zoom by remember { mutableStateOf(1f) }
-    var centerWorld by remember { mutableStateOf(Offset(geometry.width / 2f, geometry.height / 2f)) }
+    var centerWorld by remember {
+        mutableStateOf(Offset(geometry.width * DEFAULT_CENTER_X_FRACTION, geometry.height / 2f))
+    }
 
-    // The scale at which the whole world fits the canvas (zoom == 1).
-    val baseScale = if (canvasSize.width > 0f) fitScale(geometry, canvasSize.width, canvasSize.height) else 1f
+    // The scale at which the world fits the canvas at the minimum zoom (zoom == 1).
+    val baseScale = if (canvasSize.width > 0f) baseScaleFor(geometry, canvasSize.width, canvasSize.height) else 1f
 
     // Smoothly centre and zoom in when a country becomes selected.
     LaunchedEffect(selected, canvasSize, topInsetPx, controlsBottomInsetPx) {
@@ -170,7 +179,7 @@ fun WorldMapCanvas(
         val top = topInsetPx.coerceIn(0f, h)
         val bottom = controlsBottomInsetPx.coerceIn(0f, h - top)
         val visibleH = (h - top - bottom).coerceAtLeast(1f)
-        val bs = fitScale(geometry, w, h)
+        val bs = baseScaleFor(geometry, w, h)
         val targetZoom = (minOf(w * 0.75f / f.bbox.w, visibleH * 0.75f / f.bbox.h) / bs).coerceIn(MIN_ZOOM, MAX_ZOOM)
         // The canvas itself is centred on `centerWorld`; shift the centre so the selected country
         // lands in the middle of the *visible* strip between the search bar and the bottom UI.
@@ -200,20 +209,25 @@ fun WorldMapCanvas(
                         var last = down.position
                         var lastDist = Float.NaN
                         var moved = false
+                        var prevPointCount = 1
                         while (true) {
                             val ev = awaitPointerEvent()
                             val act = ev.changes.filter { it.pressed }
                             val ds = if (canvasSize.width > 0f) canvasSize else Size(1f, 1f)
                             val w = ds.width
                             val h = ds.height
-                            val bs = fitScale(geometry, w, h)
+                            val bs = baseScaleFor(geometry, w, h)
                             when {
                                 act.size >= 2 -> {
                                     val p0 = act[0].position
                                     val p1 = act[1].position
                                     val c = Offset((p0.x + p1.x) / 2f, (p0.y + p1.y) / 2f)
                                     val dist = distBetween(p0, p1)
-                                    if (!lastDist.isNaN() && lastDist > 0f) {
+                                    if (prevPointCount < 2) {
+                                        last = c
+                                        lastDist = dist
+                                        moved = true
+                                    } else if (!lastDist.isNaN() && lastDist > 0f) {
                                         val (nz, nc) = zoomAround(centerWorld, zoom, bs, c, dist / lastDist, geometry, w, h)
                                         zoom = nz
                                         centerWorld = nc
@@ -227,22 +241,30 @@ fun WorldMapCanvas(
                                     moved = true
                                 }
                                 act.size == 1 -> {
-                                    val p = act[0].position
-                                    val d = Offset(p.x - last.x, p.y - last.y)
-                                    if (d.length() > viewConfiguration.touchSlop) {
-                                        val sc = bs * zoom
-                                        centerWorld = clampCenter(centerWorld - Offset(d.x / sc, d.y / sc), sc, geometry, w, h)
-                                        moved = true
+                                    if (prevPointCount >= 2) {
+                                        // Re-anchor the surviving finger so the pinch centroid is not
+                                        // interpreted as an extra one-finger pan on release.
+                                        last = act[0].position
+                                        lastDist = Float.NaN
+                                    } else {
+                                        val p = act[0].position
+                                        val d = Offset(p.x - last.x, p.y - last.y)
+                                        if (d.length() > viewConfiguration.touchSlop) {
+                                            val sc = bs * zoom
+                                            centerWorld = clampCenter(centerWorld - Offset(d.x / sc, d.y / sc), sc, geometry, w, h)
+                                            moved = true
+                                        }
+                                        last = p
                                     }
-                                    last = p
                                 }
                                 else -> break
                             }
+                            prevPointCount = act.size
                             ev.changes.forEach { it.consume() }
                         }
                         if (!moved) {
                             val ds = if (canvasSize.width > 0f) canvasSize else Size(1f, 1f)
-                            val sc = fitScale(geometry, ds.width, ds.height) * zoom
+                            val sc = baseScaleFor(geometry, ds.width, ds.height) * zoom
                             val wx = centerWorld.x + (down.position.x - ds.width / 2f) / sc
                             val wy = centerWorld.y + (down.position.y - ds.height / 2f) / sc
                             val hit = hitTest(shapes, wx, wy)
@@ -253,7 +275,7 @@ fun WorldMapCanvas(
         ) {
             drawRect(OCEAN)
             val ds = if (canvasSize.width > 0f) canvasSize else size
-            val sc = fitScale(geometry, ds.width, ds.height) * zoom
+            val sc = baseScaleFor(geometry, ds.width, ds.height) * zoom
             // Screen point for a world point: (canvasCenter) + (world - centerWorld) * sc.
             val tx = ds.width / 2f - centerWorld.x * sc
             val ty = ds.height / 2f - centerWorld.y * sc
@@ -321,7 +343,7 @@ fun WorldMapCanvas(
                 }
                 IconButton(onClick = {
                     zoom = 1f
-                    centerWorld = Offset(geometry.width / 2f, geometry.height / 2f)
+                    centerWorld = Offset(geometry.width * DEFAULT_CENTER_X_FRACTION, geometry.height / 2f)
                 }) {
                     Icon(Icons.Filled.Home, contentDescription = "Reset view")
                 }
@@ -334,16 +356,27 @@ fun WorldMapCanvas(
 private fun fitScale(geometry: WorldMapData, w: Float, h: Float): Float =
     minOf(w / geometry.width, h / geometry.height)
 
+/** The canvas scale at `zoom == 1`: a width-fit world view with a small framing buffer. */
+private fun baseScaleFor(geometry: WorldMapData, w: Float, h: Float): Float =
+    fitScale(geometry, w, h) * MIN_ZOOM_BUFFER
+
 /**
- * Keep the world's bounding box overlapping the canvas (a sliver always visible) so the user can pan
- * freely — including to the very top and bottom — but can never lose the map entirely.
+ * Keep at least [MIN_VISIBLE_FRACTION] of the world on screen while panning. When the whole world
+ * fits the viewport on an axis, that axis is pinned to the world centre.
  */
 private fun clampCenter(center: Offset, scale: Float, geometry: WorldMapData, w: Float, h: Float): Offset {
-    val hx = w / 2f / scale
-    val hy = h / 2f / scale
-    val x = center.x.coerceIn(-hx, geometry.width + hx)
-    val y = center.y.coerceIn(-hy, geometry.height + hy)
+    val x = clampAxis(center.x, geometry.width.toFloat(), w / scale)
+    val y = clampAxis(center.y, geometry.height.toFloat(), h / scale)
     return Offset(x, y)
+}
+
+private fun clampAxis(center: Float, extent: Float, visibleExtent: Float): Float {
+    if (visibleExtent >= extent) return extent / 2f
+    val minVisible = MIN_VISIBLE_FRACTION * minOf(extent, visibleExtent)
+    val halfVisible = visibleExtent / 2f
+    val min = minVisible - halfVisible
+    val max = extent - minVisible + halfVisible
+    return if (min <= max) center.coerceIn(min, max) else extent / 2f
 }
 
 /** Zoom by [factor] keeping the world point under [pivot] fixed; returns (newZoom, newCenter). */

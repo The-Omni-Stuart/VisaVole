@@ -556,6 +556,29 @@ class AccessModelTest {
         assertTrue(w.stayRuleFor("BA", setOf("IN")) != null)
     }
 
+    @Test fun realDatabaseStayRulesReflectAuditedWindows() {
+        val w = JdbcRepository.load(File("src/main/assets/visa_data.db"))
+
+        assertEquals(183, w.stayRuleFor("PE", setOf("MX"))?.windowDays)
+        assertEquals(90, w.stayRuleFor("PE", setOf("GB"))?.windowDays)
+        assertEquals(60, w.stayRuleFor("PE", setOf("DO"))?.windowDays)
+
+        assertEquals(30, w.stayRuleFor("PA", setOf("HK"))?.windowDays)
+        assertEquals(180, w.stayRuleFor("PA", setOf("US"))?.windowDays)
+        assertEquals(90, w.stayRuleFor("PA", setOf("GB"))?.windowDays)
+
+        assertEquals(7, w.stayRuleFor("TH", setOf("KH"))?.windowDays)
+        assertEquals(14, w.stayRuleFor("TH", setOf("MM"))?.windowDays)
+        assertEquals(30, w.stayRuleFor("TH", setOf("TL"))?.windowDays)
+        assertEquals(90, w.stayRuleFor("TH", setOf("AR"))?.windowDays)
+        assertEquals(60, w.stayRuleFor("TH", setOf("GB"))?.windowDays)
+
+        val tr = w.stayRuleFor("TR", setOf("GB"))!!
+        assertEquals(90, tr.windowDays)
+        assertEquals(180, tr.windowPeriodDays)
+        assertTrue(tr.multipleEntry)
+    }
+
     // ---- residence classes + benefit residence-minimum gating ----
 
     private fun residenceDoc(id: String, cls: ResidenceClass?) =

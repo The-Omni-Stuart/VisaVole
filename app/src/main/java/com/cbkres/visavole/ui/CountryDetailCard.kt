@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -50,7 +51,7 @@ fun CountryDetailCard(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 0.dp,
     ) {
-        Column(Modifier.padding(20.dp).padding(bottom = 20.dp).verticalScroll(rememberScrollState())) {
+        Column(Modifier.padding(20.dp).padding(bottom = 20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(countryName, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.weight(1f))
@@ -79,7 +80,18 @@ fun CountryDetailCard(
                 }
             }
             val classSuffix = access?.residenceClass?.let { " (${it.label.lowercase()})" }.orEmpty()
-            val subtext = if (isHome) "Passport: ${homePassport.orEmpty()}" else (access?.reason.orEmpty() + classSuffix).trim()
+            val subtext = when {
+                isHome -> "Passport: ${homePassport.orEmpty()}"
+                access == null || access.level == AccessLevel.UNKNOWN -> ""
+                else -> {
+                    val reason = when {
+                        access.reason == "Passport rule" -> ""
+                        access.reason.startsWith("No data") -> "No documented rule"
+                        else -> access.reason
+                    }
+                    (reason + classSuffix).trim()
+                }
+            }
             if (subtext.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -96,7 +108,7 @@ fun CountryDetailCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))
-                Column {
+                Column(Modifier.heightIn(max = 112.dp).verticalScroll(rememberScrollState())) {
                     breakdown.forEachIndexed { i, entry ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             val isYourCountry = entry.access.reason == "Your country"
