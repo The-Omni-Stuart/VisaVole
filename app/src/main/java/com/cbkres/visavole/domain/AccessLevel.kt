@@ -38,6 +38,7 @@ enum class AccessLevel(val rank: Int) {
 
     companion object {
         fun fromBaselineType(type: String?): AccessLevel = when (type) {
+            "freedom-of-movement" -> FREEDOM
             "visa-free", "visa-on-arrival" -> VISA_FREE
             "eta" -> ETA
             "e-visa" -> E_VISA

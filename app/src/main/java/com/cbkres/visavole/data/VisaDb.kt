@@ -44,6 +44,6 @@ class VisaDb(context: Context) {
     companion object {
         private const val ASSET_NAME = "visa_data.db"
         private const val DB_NAME = "visa_data.db"
-        private const val DB_VERSION = 1
+        private const val DB_VERSION = 2
     }
 }

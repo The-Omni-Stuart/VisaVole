@@ -61,6 +61,11 @@ class AccessModelTest {
         assertEquals(90, acc.days)
     }
 
+    @Test fun freedomOfMovementBaselineIsFreedom() {
+        val w = world(baseline = mapOf("RU" to listOf(corridor("RU", "OS", "freedom-of-movement"))))
+        assertEquals(FREEDOM, AccessModel.compute(listOf(doc("p", Passport("RU"))), w)["OS"]!!.level)
+    }
+
     @Test fun eVisaBaseline() {
         val w = world(baseline = mapOf("GB" to listOf(corridor("GB", "AU", "e-visa", 90))))
         assertEquals(E_VISA, AccessModel.compute(listOf(doc("p", Passport("GB"))), w)["AU"]!!.level)
