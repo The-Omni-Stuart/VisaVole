@@ -87,7 +87,7 @@ fun OnboardingScreen(
             )
             Spacer(Modifier.height(12.dp))
             Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
                 shape = MaterialTheme.shapes.large,
                 modifier = Modifier
                     .fillMaxWidth()

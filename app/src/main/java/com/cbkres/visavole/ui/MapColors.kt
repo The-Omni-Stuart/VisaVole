@@ -5,29 +5,50 @@ import com.cbkres.visavole.domain.AccessLevel
 
 // Ocean + unknown-land base.
 val OCEAN = Color(0xFF0B1F2A)
-// Borders: a solid navy line (matches the sea) so the bright pastel fills read as separate
+// Borders: a solid navy line (matches the sea) so the bright fills read as separate
 // countries. Drawn in a second pass on top of every fill so shared borders stay crisp.
 val LAND_STROKE = Color(0xFF0B1F2A)
 
 // The traveller's home country (citizenship) — special-cased on the map, not a map level.
-val HOME = Color(0xFF3B82F6)
+val HOME = Color(0xFF0460EE)
 
 // A short-term visa's own country (the doc's home / issuing country) — darker than the lighter
 // purple of the rest of the bloc the visa unlocks, so the primary destination stands out.
-val COVERED_OWN = Color(0xFF8B5CF6)
+val COVERED_OWN = Color(0xFFA12AFA)
 
-// One uniform residence shade: a middle teal that stays visible without the class-based dark/light split.
-val RESIDENCE_FILL = Color(0xFF2DD4BF)
+// A uniform residence shade.
+val RESIDENCE_FILL = Color(0xFF14DC9D)
 
 // Choropleth palette, best (blue / teal / green) -> worst (red). Home is drawn separately.
 fun colorFor(level: AccessLevel?): Color = when (level) {
-    AccessLevel.FREEDOM -> Color(0xFF93C5FD)       // light blue — bloc citizenship
+    AccessLevel.FREEDOM -> Color(0xFF5BDCEC)       // cyan — bloc citizenship
     AccessLevel.RESIDENCE -> RESIDENCE_FILL         // teal — residence permit
-    AccessLevel.VISA_FREE -> Color(0xFF4ADE80)     // green — visa-free / on arrival, no step needed
-    AccessLevel.COVERED -> Color(0xFFA78BFA)       // soft purple — covered via a visa's travel bloc
-    AccessLevel.ETA -> Color(0xFFFACC15)           // yellow — quick pre-authorisation (eTA/ESTA/ETIAS)
-    AccessLevel.E_VISA -> Color(0xFFF59E0B)        // orange — e-visa, apply online
-    AccessLevel.VISA_REQUIRED -> Color(0xFF94A3B8) // gray — embassy visit
-    AccessLevel.REFUSED -> Color(0xFFF87171)       // red — no entry
+    AccessLevel.VISA_FREE -> Color(0xFF44F17A)     // green — visa-free / on arrival, no step needed
+    AccessLevel.COVERED -> Color(0xFFBD6AFC)       // magenta — covered via a visa's travel bloc
+    AccessLevel.ETA -> Color(0xFFB9F04A)           // lime — quick pre-authorisation (eTA/ESTA/ETIAS)
+    AccessLevel.E_VISA -> Color(0xFFFFD84A)        // yellow — e-visa, apply online
+    AccessLevel.VISA_REQUIRED -> Color(0xFF94A3B8) // grey — embassy visit
+    AccessLevel.REFUSED -> Color(0xFFFB1604)       // red — no entry
     AccessLevel.UNKNOWN, null -> Color(0xFF334155) // slate — no data
+}
+
+// Accessible text/pill tones derived from the map palette. The bright map fills are for the
+// canvas; these darker shades are for labels and tonal chips on theme-driven surfaces.
+const val STATUS_CHIP_ALPHA = 0.16f
+val STATUS_OK = Color(0xFF15803D)
+val STATUS_WARN = Color(0xFFC2410C)
+val STATUS_BAD = Color(0xFFB91C1C)
+
+fun statusTone(level: AccessLevel?, isHome: Boolean = false, isOwnCovered: Boolean = false): Color = when {
+    isHome -> Color(0xFF0460EE)
+    level == AccessLevel.FREEDOM -> Color(0xFF00B8D4)
+    level == AccessLevel.RESIDENCE -> Color(0xFF00C48C)
+    level == AccessLevel.VISA_FREE -> Color(0xFF00D26A)
+    level == AccessLevel.COVERED && isOwnCovered -> Color(0xFFA12AFA)
+    level == AccessLevel.COVERED -> Color(0xFFBD6AFC)
+    level == AccessLevel.ETA -> Color(0xFF7CB342)
+    level == AccessLevel.E_VISA -> Color(0xFFCA8A04)
+    level == AccessLevel.VISA_REQUIRED -> Color(0xFF475569)
+    level == AccessLevel.REFUSED -> Color(0xFFFB1604)
+    else -> Color(0xFF334155)
 }

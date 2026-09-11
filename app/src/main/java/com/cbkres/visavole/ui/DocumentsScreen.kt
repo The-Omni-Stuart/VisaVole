@@ -1,6 +1,7 @@
 package com.cbkres.visavole.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -82,9 +83,9 @@ private fun Long.toUtcIsoDate(): String {
 private fun String.toUtcMillis(): Long? =
     runCatching { LocalDate.parse(this).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
 
-private val STATUS_ORANGE = Color(0xFFEF6C00)
-private val STATUS_GREEN = Color(0xFF2E7D32)
-private val STATUS_RED = Color(0xFFC62828)
+private val STATUS_ORANGE = STATUS_WARN
+private val STATUS_GREEN = STATUS_OK
+private val STATUS_RED = STATUS_BAD
 
 /** Days from [today] until the ISO date in [iso]; null when unset or unparsable. */
 private fun daysUntil(iso: String?, today: LocalDate): Long? =
@@ -150,7 +151,7 @@ fun DocumentsScreen(
 ) {
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Document?>(null) }
-    Column(modifier.fillMaxSize().padding(16.dp)) {
+    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         Text("Documents", style = MaterialTheme.typography.headlineSmall)
         Text(
             "Add the passport and papers you hold — the map updates to match.",
@@ -237,11 +238,11 @@ private fun SectionLabel(text: String) {
 private fun ExpiryStatusPill(doc: Document, today: LocalDate) {
     val days = daysUntil(doc.expiry, today) ?: return
     val (text, color, bold) = when {
-        days < 0 -> Triple("Expired", MaterialTheme.colorScheme.error, true)
+        days < 0 -> Triple("Expired", STATUS_BAD, true)
         days <= 7 -> Triple("Expiring soon ($days days)", STATUS_ORANGE, false)
         else -> Triple("Valid for $days days", STATUS_GREEN, false)
     }
-    Surface(shape = RoundedCornerShape(50), color = color.copy(alpha = 0.15f)) {
+    Surface(shape = RoundedCornerShape(50), color = color.copy(alpha = STATUS_CHIP_ALPHA)) {
         Text(
             text,
             color = color,
@@ -465,8 +466,9 @@ fun AddDocumentDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
             shape = MaterialTheme.shapes.large,
-            tonalElevation = 6.dp,
+            tonalElevation = 0.dp,
             modifier = Modifier
                 .width(400.dp)
                 .heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp),
@@ -692,7 +694,7 @@ fun AddDocumentDialog(
                         append("You have multiple countries selected for this visa: ")
                         val names = customIso.sortedBy { countries[it]?.name ?: it }
                         names.forEachIndexed { index, iso ->
-                            withStyle(SpanStyle(color = Color(0xFFFF9800), fontWeight = FontWeight.SemiBold)) {
+                            withStyle(SpanStyle(color = STATUS_WARN, fontWeight = FontWeight.SemiBold)) {
                                 append(countries[iso]?.name ?: iso)
                             }
                             if (index != names.lastIndex) append(", ")
@@ -736,7 +738,7 @@ private fun CountryPicker(
         Surface(
             modifier = Modifier.fillMaxWidth().height(180.dp),
             shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surfaceVariant,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
         ) {
             LazyColumn(state = listState, modifier = Modifier.padding(4.dp)) {
                 items(list, key = { it.key }) { entry ->

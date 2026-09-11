@@ -286,7 +286,8 @@ fun WorldMapCanvas(
         }
 
         Surface(
-            tonalElevation = 6.dp,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 0.dp,
             shape = MaterialTheme.shapes.large,
             modifier = Modifier
                 .align(Alignment.BottomEnd)

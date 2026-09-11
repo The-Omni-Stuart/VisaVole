@@ -47,8 +47,8 @@ fun CountryDetailCard(
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 3.dp,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 0.dp,
     ) {
         Column(Modifier.padding(20.dp).padding(bottom = 20.dp).verticalScroll(rememberScrollState())) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -60,20 +60,15 @@ fun CountryDetailCard(
             }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
+                val chipTone = statusTone(level, isHome, isOwnCovered && level == AccessLevel.COVERED)
                 Column(
                     Modifier
-                        .background(
-                            if (isHome) HOME
-                            else if (level == AccessLevel.RESIDENCE) RESIDENCE_FILL
-                            else if (level == AccessLevel.COVERED && isOwnCovered) COVERED_OWN
-                            else colorFor(level),
-                            CircleShape,
-                        )
+                        .background(chipTone.copy(alpha = STATUS_CHIP_ALPHA), CircleShape)
                         .padding(horizontal = 12.dp, vertical = 6.dp),
                 ) {
                     Text(
                         if (isHome) "Your country" else level.label(),
-                        color = Color.White,
+                        color = chipTone,
                         style = MaterialTheme.typography.labelLarge,
                     )
                 }
@@ -107,9 +102,7 @@ fun CountryDetailCard(
                             val isYourCountry = entry.access.reason == "Your country"
                             Text(
                                 if (isYourCountry) "Your country" else entry.access.level.label(),
-                                color = if (isYourCountry) HOME
-                                    else if (entry.access.level == AccessLevel.COVERED && entry.isOwn) COVERED_OWN
-                                    else colorFor(entry.access.level),
+                                color = statusTone(entry.access.level, isYourCountry, entry.isOwn),
                                 style = MaterialTheme.typography.labelMedium,
                                 modifier = Modifier.widthIn(min = 72.dp),
                             )

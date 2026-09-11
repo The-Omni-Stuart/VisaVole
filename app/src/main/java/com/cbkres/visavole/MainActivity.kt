@@ -1,12 +1,14 @@
 package com.cbkres.visavole
 
 import android.app.Application
+import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -76,6 +78,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val darkTheme = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+            Configuration.UI_MODE_NIGHT_YES
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            isAppearanceLightStatusBars = !darkTheme
+            isAppearanceLightNavigationBars = !darkTheme
+        }
         setContent {
             Visa_VoleTheme {
                 VisaVoleApp()
@@ -124,7 +132,7 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("VisaVole") },
+                title = { Text("Visa Vole") },
             )
         },
         bottomBar = {
@@ -241,7 +249,8 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
         }
         if (query.isNotBlank() && matches.isNotEmpty()) {
             Surface(
-                tonalElevation = 8.dp,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 0.dp,
                 shape = MaterialTheme.shapes.large,
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -283,8 +292,8 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit, modifier: Modifi
         singleLine = true,
         shape = MaterialTheme.shapes.large,
         colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         ),
         modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 8.dp, bottom = 4.dp),
     )
@@ -296,7 +305,7 @@ private fun LegendRow(counts: Map<AccessLevel, Int>, homeCount: Int = 1) {
         AccessLevel.FREEDOM, AccessLevel.RESIDENCE, AccessLevel.VISA_FREE, AccessLevel.COVERED,
         AccessLevel.ETA, AccessLevel.E_VISA, AccessLevel.VISA_REQUIRED, AccessLevel.REFUSED,
     )
-    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
+    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 0.dp) {
         Row(
             Modifier
                 .fillMaxWidth()
