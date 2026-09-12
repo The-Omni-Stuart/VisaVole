@@ -58,6 +58,9 @@ private const val DEFAULT_CENTER_X_FRACTION = 0.52f
 // Panning may move the map, but at least this fraction of the world (or of the visible viewport)
 // must remain on screen.
 private const val MIN_VISIBLE_FRACTION = 0.2f
+// Experimental performance switch: draw only country paths that intersect the visible canvas.
+// Set to false to restore the original full-world draw path.
+private const val ENABLE_VIEWPORT_CULLING = true
 
 /**
  * Per-country focus margin as a fraction of the world width (default 7%). A small mainland would
@@ -73,6 +76,7 @@ private data class IsoShape(
     val rings: List<FloatArray>,
     val path: Path,
     val area: Float,
+    val bbox: BBox,
 )
 
 private data class BBox(
@@ -85,6 +89,9 @@ private data class BBox(
     val cy get() = (minY + maxY) / 2f
     val w get() = (maxX - minX).coerceAtLeast(1f)
     val h get() = (maxY - minY).coerceAtLeast(1f)
+
+    fun intersectsViewport(left: Float, top: Float, right: Float, bottom: Float): Boolean =
+        maxX >= left && minX <= right && maxY >= top && minY <= bottom
 }
 
 /** The world point to centre on, plus the bbox used to choose the zoom level for it. */
@@ -134,7 +141,7 @@ fun WorldMapCanvas(
                 path.close()
                 area += polygonArea(ring)
             }
-            IsoShape(iso, shape.rings, path, area)
+            IsoShape(iso, shape.rings, path, area, bboxOf(shape.rings))
         }
     }
     // Focus = the country's main body: its largest landmass ring plus any rings that sit close to it
@@ -295,9 +302,16 @@ fun WorldMapCanvas(
             translate(tx, ty) {
                 scale(sc, sc, pivot = Offset.Zero) {
                     val hair = 1.0f / sc
+                    val invSc = 1.0f / sc
+                    val cullPad = 2.0f * invSc
+                    val vxMin = centerWorld.x - (ds.width * invSc) / 2f - cullPad
+                    val vyMin = centerWorld.y - (ds.height * invSc) / 2f - cullPad
+                    val vxMax = centerWorld.x + (ds.width * invSc) / 2f + cullPad
+                    val vyMax = centerWorld.y + (ds.height * invSc) / 2f + cullPad
                     // Pass 1: fills. Pass 2: borders on top of every fill so shared borders are
                     // crisp (not overdrawn by a neighbour's fill). Width is constant on screen.
                     for (s in shapes) {
+                        if (ENABLE_VIEWPORT_CULLING && !s.bbox.intersectsViewport(vxMin, vyMin, vxMax, vyMax)) continue
                         val a = access[s.iso]
                         val lvl = a?.level
                         val fill = when {
@@ -309,11 +323,14 @@ fun WorldMapCanvas(
                         drawPath(s.path, fill)
                     }
                     for (s in shapes) {
+                        if (ENABLE_VIEWPORT_CULLING && !s.bbox.intersectsViewport(vxMin, vyMin, vxMax, vyMax)) continue
                         drawPath(s.path, LAND_STROKE, style = Stroke(width = hair))
                     }
                     selected?.let { sel ->
                         shapes.firstOrNull { it.iso == sel }?.let { s ->
-                            drawPath(s.path, Color.White, style = Stroke(width = 2.2f / sc))
+                            if (!ENABLE_VIEWPORT_CULLING || s.bbox.intersectsViewport(vxMin, vyMin, vxMax, vyMax)) {
+                                drawPath(s.path, Color.White, style = Stroke(width = 2.2f / sc))
+                            }
                         }
                     }
                 }
