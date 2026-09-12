@@ -10,6 +10,87 @@ OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.normpath(os.path.join(BASE, 
 W, H = 1000, 512
 MX, MY = 14.0, 16.0
 
+# Central meridian of the projection, in degrees east. Shifting it east moves
+# the antimeridian "cut" into the Pacific east of the Chukchi tip so Russia's
+# Chukchi Peninsula and Fiji stay whole on the right edge instead of being
+# split across the map. C=11.5 puts the cut at 191.5E / 168.5W, which avoids
+# Russia and Alaska mainland while keeping the Atlantic near the map center.
+CENTRAL_MERIDIAN = 11.5
+
+def wrap180(lon):
+    return ((lon + 180.0) % 360.0) - 180.0
+
+CUT_LON = wrap180(CENTRAL_MERIDIAN - 180.0)
+
+def crosses_cut(a, b, c):
+    d = wrap180(b - a)
+    dc = wrap180(c - a)
+    if d >= 0:
+        return 0.0 < dc < d
+    else:
+        return d < dc < 0.0
+
+def ring_crosses_cut(ring):
+    n = len(ring)
+    for i in range(n):
+        if crosses_cut(ring[i][0], ring[(i + 1) % n][0], CUT_LON):
+            return True
+    return False
+
+SEAM_EPS_LON = 1e-6
+
+def split_ring_at_cut(ring):
+    n = len(ring)
+    seq = []
+    for i in range(n):
+        a = ring[i]
+        b = ring[(i + 1) % n]
+        seq.append(("p", a[0], a[1]))
+        if crosses_cut(a[0], b[0], CUT_LON):
+            d = wrap180(b[0] - a[0])
+            dc = wrap180(CUT_LON - a[0])
+            t = dc / d
+            lat = a[1] + (b[1] - a[1]) * t
+            seq.append(("c", lat))
+    cut_idx = [i for i, item in enumerate(seq) if item[0] == "c"]
+    if not cut_idx:
+        return [ring]
+    if len(cut_idx) == 1:
+        return [ring]
+    parts = []
+    m = len(cut_idx)
+    for k in range(m):
+        start_ci = cut_idx[k]
+        end_ci = cut_idx[(k + 1) % m]
+        middle = seq[start_ci + 1:end_ci] if k < m - 1 else seq[start_ci + 1:] + seq[:end_ci]
+        side = None
+        best = 1e9
+        for item in middle:
+            if item[0] == "p":
+                dc = wrap180(item[1] - CUT_LON)
+                if abs(dc) < best:
+                    best = abs(dc)
+                    side = "west" if dc < 0 else "east"
+        if side is None:
+            continue
+        end_lon = wrap180(CUT_LON - SEAM_EPS_LON) if side == "west" else wrap180(CUT_LON + SEAM_EPS_LON)
+        part = [[end_lon, seq[start_ci][1]]]
+        for item in middle:
+            if item[0] == "p":
+                pt = [item[1], item[2]]
+                if not part or part[-1] != pt:
+                    part.append(pt)
+        part.append([end_lon, seq[end_ci][1]])
+        cleaned = []
+        for pt in part:
+            if not cleaned or cleaned[-1] != pt:
+                cleaned.append(pt)
+        if len(cleaned) > 1 and cleaned[0] == cleaned[-1]:
+            cleaned.pop()
+        if len(cleaned) >= 3:
+            parts.append(cleaned)
+    return parts
+
 LAT = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90]
 XT  = [1.0000,0.9986,0.9954,0.9900,0.9822,0.9730,0.9600,0.9427,0.9216,0.8962,0.8679,0.8350,0.7986,0.7597,0.7186,0.6732,0.6213,0.5722,0.5322]
 YT  = [0.0000,0.0620,0.1240,0.1860,0.2480,0.3100,0.3720,0.4340,0.4958,0.5571,0.6176,0.6769,0.7346,0.7903,0.8435,0.8936,0.9394,0.9761,1.0000]
@@ -26,7 +107,10 @@ def robinson_raw(lon, lat):
             yv = YT[i] + (YT[i+1]-YT[i])*f
         else:
             xv, yv = XT[i], YT[i]
-    return 0.8487*xv*math.radians(lon), 1.3523*yv*(1.0 if lat >= 0 else -1.0)
+    # Rotate the longitude so the cut (antimeridian) sits at 180+C, i.e. in
+    # the open Pacific east of the Chukchi tip, keeping it connected to Russia.
+    mlon = wrap180(lon - CENTRAL_MERIDIAN)
+    return 0.8487*xv*math.radians(mlon), 1.3523*yv*(1.0 if lat >= 0 else -1.0)
 
 def dp(points, eps):
     n = len(points)
@@ -259,7 +343,20 @@ for ti, parent in sorted(TERRITORY_PARENT.items()):
 def proj_ring(ring):
     return [robinson_raw(lo, la) for (lo, la) in ring]
 
-all_rings = {iso: [proj_ring(ring) for ring in c["rings"]] for iso, c in countries.items()}
+all_rings = {}
+split_seam_rings = []
+for iso, c in countries.items():
+    kept = []
+    for ring in c["rings"]:
+        if iso != "AQ" and ring_crosses_cut(ring):
+            parts = split_ring_at_cut(ring)
+            split_seam_rings.append((iso, len(ring), len(parts), sum(len(p) for p in parts)))
+            kept.extend(proj_ring(p) for p in parts)
+        else:
+            kept.append(proj_ring(ring))
+    all_rings[iso] = kept
+if split_seam_rings:
+    print(f"split seam-crossing rings: {split_seam_rings}")
 raw_pts = [p for pr in all_rings.values() for ring in pr for p in ring]
 xs=[p[0] for p in raw_pts]; ys=[p[1] for p in raw_pts]
 xmin,xmax=min(xs),max(xs); ymin,ymax=min(ys),max(ys)
@@ -291,6 +388,85 @@ for iso in sorted(countries):
             rings.append(px)
     if rings:
         out["countries"][iso] = {"name": countries[iso]["name"], "rings": rings}
+
+def path_from_to(ring, start, end):
+    n = len(ring)
+    start %= n
+    end %= n
+    if start <= end:
+        return ring[start:end + 1]
+    return ring[start:] + ring[:end + 1]
+
+def find_directed_edge(ring, u, v):
+    n = len(ring)
+    for i in range(n):
+        if ring[i] == u and ring[(i + 1) % n] == v:
+            return i
+    return None
+
+def merge_shared_edge(rings, ia, ib, edge):
+    A = rings[ia]
+    B = rings[ib]
+    p, q = list(edge)
+    cases = (
+        (find_directed_edge(A, p, q), find_directed_edge(B, q, p)),
+        (find_directed_edge(A, q, p), find_directed_edge(B, p, q)),
+    )
+    for iA, iB in cases:
+        if iA is None or iB is None:
+            continue
+        pathA = path_from_to(A, iA + 1, iA)
+        pathB = path_from_to(B, iB + 1, iB)
+        merged = pathA + pathB[1:]
+        cleaned = []
+        for pt in merged:
+            if not cleaned or cleaned[-1] != pt:
+                cleaned.append(pt)
+        if len(cleaned) > 1 and cleaned[0] == cleaned[-1]:
+            cleaned.pop()
+        if len(cleaned) >= 3:
+            return cleaned
+    return None
+
+def heal_shared_edges(rings):
+    work = [[(float(x), float(y)) for (x, y) in r] for r in rings]
+    changed = True
+    while changed:
+        changed = False
+        edge_map = {}
+        for ri, r in enumerate(work):
+            n = len(r)
+            for i in range(n):
+                a = r[i]
+                b = r[(i + 1) % n]
+                if a != b:
+                    edge_map.setdefault(frozenset((a, b)), []).append((ri, i, a, b))
+        for edge, occ in edge_map.items():
+            ring_ids = []
+            for x in occ:
+                if x[0] not in ring_ids:
+                    ring_ids.append(x[0])
+            if len(ring_ids) < 2:
+                continue
+            a, b = list(edge)
+            if math.hypot(a[0] - b[0], a[1] - b[1]) <= 0.1:
+                continue
+            ia, ib = ring_ids[0], ring_ids[1]
+            merged = merge_shared_edge(work, ia, ib, edge)
+            if merged is not None:
+                work[ia] = merged
+                work.pop(ib)
+                changed = True
+                break
+    return [[[x, y] for (x, y) in r] for r in work]
+
+healed_rings = 0
+for iso in out["countries"]:
+    before = len(out["countries"][iso]["rings"])
+    out["countries"][iso]["rings"] = heal_shared_edges(out["countries"][iso]["rings"])
+    healed_rings += before - len(out["countries"][iso]["rings"])
+if healed_rings:
+    print(f"healed shared-edge rings: {healed_rings}")
 
 if OUT.endswith(".bin"):
     with open(OUT, "wb") as fh:
