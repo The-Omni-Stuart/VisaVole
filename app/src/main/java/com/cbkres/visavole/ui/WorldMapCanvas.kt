@@ -1,5 +1,6 @@
 package com.cbkres.visavole.ui
 
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -206,9 +207,11 @@ fun WorldMapCanvas(
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         down.consume()
+                        val panSlop = maxOf(8f, viewConfiguration.touchSlop / 2f)
+                        val downTime = SystemClock.uptimeMillis()
                         var last = down.position
                         var lastDist = Float.NaN
-                        var moved = false
+                        var dragging = false
                         var prevPointCount = 1
                         while (true) {
                             val ev = awaitPointerEvent()
@@ -226,7 +229,6 @@ fun WorldMapCanvas(
                                     if (prevPointCount < 2) {
                                         last = c
                                         lastDist = dist
-                                        moved = true
                                     } else if (!lastDist.isNaN() && lastDist > 0f) {
                                         val (nz, nc) = zoomAround(centerWorld, zoom, bs, c, dist / lastDist, geometry, w, h)
                                         zoom = nz
@@ -238,7 +240,7 @@ fun WorldMapCanvas(
                                     }
                                     lastDist = dist
                                     last = c
-                                    moved = true
+                                    dragging = true
                                 }
                                 act.size == 1 -> {
                                     if (prevPointCount >= 2) {
@@ -248,13 +250,24 @@ fun WorldMapCanvas(
                                         lastDist = Float.NaN
                                     } else {
                                         val p = act[0].position
-                                        val d = Offset(p.x - last.x, p.y - last.y)
-                                        if (d.length() > viewConfiguration.touchSlop) {
-                                            val sc = bs * zoom
-                                            centerWorld = clampCenter(centerWorld - Offset(d.x / sc, d.y / sc), sc, geometry, w, h)
-                                            moved = true
+                                        if (!dragging) {
+                                            // Activate on cumulative distance from the original down point,
+                                            // then re-anchor so the activation threshold is not applied
+                                            // as a sudden initial pan.
+                                            if (kotlin.math.hypot(p.x - down.position.x, p.y - down.position.y) > panSlop) {
+                                                dragging = true
+                                                last = p
+                                            } else {
+                                                last = p
+                                            }
+                                        } else {
+                                            val d = Offset(p.x - last.x, p.y - last.y)
+                                            if (d.length() > 0f) {
+                                                val sc = bs * zoom
+                                                centerWorld = clampCenter(centerWorld - Offset(d.x / sc, d.y / sc), sc, geometry, w, h)
+                                            }
+                                            last = p
                                         }
-                                        last = p
                                     }
                                 }
                                 else -> break
@@ -262,7 +275,7 @@ fun WorldMapCanvas(
                             prevPointCount = act.size
                             ev.changes.forEach { it.consume() }
                         }
-                        if (!moved) {
+                        if (!dragging && SystemClock.uptimeMillis() - downTime <= 500L) {
                             val ds = if (canvasSize.width > 0f) canvasSize else Size(1f, 1f)
                             val sc = baseScaleFor(geometry, ds.width, ds.height) * zoom
                             val wx = centerWorld.x + (down.position.x - ds.width / 2f) / sc
