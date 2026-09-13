@@ -2,12 +2,16 @@ package com.cbkres.visavole
 
 import android.app.Application
 import android.content.res.Configuration
+import android.graphics.Rect
 import android.os.Bundle
+import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,17 +50,23 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
@@ -157,6 +167,7 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
                 s,
                 selected,
                 { selected = it },
+                active = tab == 0,
                 modifier = Modifier
                     .fillMaxSize()
                     .alpha(if (tab == 0) 1f else 0f)
@@ -175,7 +186,14 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
 }
 
 @Composable
-private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> Unit, modifier: Modifier = Modifier) {
+private fun MapTab(
+    s: AppState.Ready,
+    selected: String?,
+    onSelect: (String?) -> Unit,
+    active: Boolean = true,
+    modifier: Modifier = Modifier,
+) {
+    val focusManager = LocalFocusManager.current
     var query by remember { mutableStateOf("") }
     val matches = remember(query, s.world) {
         val q = query.trim().lowercase()
@@ -185,7 +203,11 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
             .sortedBy { it.name }
             .take(20)
     }
-    val pick: (String?) -> Unit = { iso -> query = ""; onSelect(iso) }
+    val pick: (String?) -> Unit = { iso ->
+        query = ""
+        if (active) focusManager.clearFocus(true)
+        onSelect(iso)
+    }
     val density = LocalDensity.current
     var searchBarH by remember { mutableStateOf(0.dp) }
     var cardH by remember { mutableStateOf(0.dp) }
@@ -209,6 +231,7 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
         SearchBar(
             query = query,
             onQuery = { query = it },
+            active = active,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
@@ -234,7 +257,7 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .heightIn(max = 300.dp)
+                    .heightIn(max = 420.dp)
                     .onSizeChanged { cardH = Dp(it.height / density.density) },
             )
         } else {
@@ -278,7 +301,31 @@ private fun MapTab(s: AppState.Ready, selected: String?, onSelect: (String?) -> 
 }
 
 @Composable
-private fun SearchBar(query: String, onQuery: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun SearchBar(
+    query: String,
+    onQuery: (String) -> Unit,
+    active: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val focusManager = LocalFocusManager.current
+    val view = LocalView.current
+    var searchFocused by remember { mutableStateOf(false) }
+    val searchFocusedNow = rememberUpdatedState(searchFocused)
+
+    DisposableEffect(view, active) {
+        val listener = ViewTreeObserver.OnGlobalLayoutListener {
+            val visible = Rect()
+            view.getWindowVisibleDisplayFrame(visible)
+            val imeHeight = view.height - visible.bottom
+            val threshold = view.resources.displayMetrics.heightPixels / 5
+            if (active && imeHeight <= threshold && searchFocusedNow.value) {
+                focusManager.clearFocus(false)
+            }
+        }
+        view.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        onDispose { view.viewTreeObserver.removeOnGlobalLayoutListener(listener) }
+    }
+
     OutlinedTextField(
         value = query,
         onValueChange = onQuery,
@@ -290,12 +337,18 @@ private fun SearchBar(query: String, onQuery: (String) -> Unit, modifier: Modifi
             }
         },
         singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus(true) }),
         shape = MaterialTheme.shapes.large,
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         ),
-        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(top = 8.dp, bottom = 4.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .padding(top = 8.dp, bottom = 4.dp)
+            .onFocusChanged { searchFocused = it.isFocused },
     )
 }
 

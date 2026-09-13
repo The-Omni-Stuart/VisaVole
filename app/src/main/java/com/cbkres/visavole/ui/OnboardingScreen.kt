@@ -69,7 +69,7 @@ fun OnboardingScreen(
                 .navigationBarsPadding()
                 .padding(20.dp),
         ) {
-            Text("Welcome to VisaVole", style = MaterialTheme.typography.headlineSmall)
+            Text("Welcome to Visa Vole", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))
             Text(
                 "Add your first passport (you can add more later). Every passport becomes a home country (blue) on the map.",
