@@ -1,6 +1,10 @@
-# VisaVole
+![Licence: GPL v3](https://img.shields.io/github/license/The-Omni-Stuart/VisaVole)
 
-VisaVole is an Android app for checking travel access based on the passports, visas, and residence permits you hold. Add your documents, then explore an interactive world map showing where you can travel visa-free, on arrival, or with a visa requirement.
+# Visa Vole
+
+Visa Vole is an Android app for checking travel access based on the passports, visas, and residence permits you hold. Add your documents, then explore an interactive world map showing where you can travel visa-free, on arrival, or with a visa requirement.
+
+Visa Vole uses [VisaDB](https://github.com/The-Omni-Stuart/VisaDB) as its bundled visa-rule dataset.
 
 ## Features
 
@@ -23,6 +27,8 @@ From the repository root:
 ```bash
 ./gradlew :app:assembleDebug
 ```
+
+The build automatically fetches the latest [VisaDB](https://github.com/The-Omni-Stuart/VisaDB) release and refreshes the bundled database when its SHA-256 changes.
 
 Install the debug APK:
 
