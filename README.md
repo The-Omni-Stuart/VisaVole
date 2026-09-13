@@ -1,6 +1,6 @@
 ![Build status](https://github.com/The-Omni-Stuart/VisaVole/actions/workflows/build-apk.yml/badge.svg)
 ![Licence: GPL v3](https://img.shields.io/github/license/The-Omni-Stuart/VisaVole)
-![Latest release](https://img.shields.io/github/v/release/The-Omni-Stuart/VisaVole?label=latest%20release)
+![Latest release](https://img.shields.io/github/v/release/The-Omni-Stuart/VisaVole?label=latest%20release&include_prereleases=true)
 
 # Visa Vole
 
