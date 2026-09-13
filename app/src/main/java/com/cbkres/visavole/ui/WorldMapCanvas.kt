@@ -55,10 +55,10 @@ private const val MIN_ZOOM = 1f
 // entering a regime where the simplified coastline looks obviously faceted or the screen is mostly
 // empty ocean.
 private const val MAX_ZOOM = 80f
-// The minimum zoom is a width-fit view with a small buffer, not an exact full-geometry fit.
-private const val MIN_ZOOM_BUFFER = 1.04f
-// Slightly east of the geometric centre so the default world framing feels evenly divided.
-private const val DEFAULT_CENTER_X_FRACTION = 0.52f
+// The minimum zoom is an exact world fit so edge islands remain visible in the default view.
+private const val MIN_ZOOM_BUFFER = 1f
+// Geometric centre, so an exact world fit keeps equal margins on both map edges.
+private const val DEFAULT_CENTER_X_FRACTION = 0.5f
 // Pan bounds: fully zoomed out the map is locked to the default centre; as you zoom in the
 // free-pan range widens so a map edge can reach the centre of the screen (edge islands like Samoa
 // stay centreable). Pushing past the bound is rubber-banded and springs back on release.
@@ -589,7 +589,7 @@ fun WorldMapCanvas(
 private fun fitScale(geometry: WorldMapData, w: Float, h: Float): Float =
     minOf(w / geometry.width, h / geometry.height)
 
-/** The canvas scale at `zoom == 1`: a width-fit world view with a small framing buffer. */
+/** The canvas scale at `zoom == 1`: an exact world fit. */
 private fun baseScaleFor(geometry: WorldMapData, w: Float, h: Float): Float =
     fitScale(geometry, w, h) * MIN_ZOOM_BUFFER
 
@@ -620,11 +620,8 @@ private fun clampAxis(center: Float, extent: Float, scale: Float, viewSize: Floa
     val (minC, maxC) = if (locked) {
         // [k] is 0 at (and out to) the default framing and reaches 1 once the map is
         // ~1/EDGE_REACH_VISIBLE_RATIO times the screen, so the free range opens toward the edges
-        // as you zoom in. MIN_ZOOM_BUFFER is divided back out because the default framing is
-        // already 1.04x the exact fit: without this, the width axis (the one the buffer zooms in
-        // on) reads as slightly "zoomed in" and lets you decentre horizontally at the default
-        // zoom, while the height axis — which fits with room to spare — stays locked.
-        val visibleRatio = (viewSize / scale / extent * MIN_ZOOM_BUFFER).coerceIn(0f, 1f)
+        // as you zoom in.
+        val visibleRatio = (viewSize / scale / extent).coerceIn(0f, 1f)
         val k = ((1f - visibleRatio) / (1f - EDGE_REACH_VISIBLE_RATIO)).coerceIn(0f, 1f)
         rest * (1f - k) to rest + (extent - rest) * k
     } else {
