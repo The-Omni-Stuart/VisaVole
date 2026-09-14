@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DatePicker
@@ -93,25 +94,30 @@ fun OnboardingScreen(
                     .fillMaxWidth()
                     .weight(1f),
             ) {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    items(list, key = { it.key }) { entry ->
-                        val name = entry.value.name
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    pendingIso = entry.key
-                                    showExpiryDialog = true
-                                }
-                                .padding(vertical = 12.dp, horizontal = 10.dp),
-                        ) {
-                            Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                            Text(entry.key, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val onboardingListState = rememberLazyListState()
+                val (onbTop, onbEnd) = onboardingListState.hazeAlphas()
+                HazeBox(onbTop, onbEnd, MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        state = onboardingListState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        items(list, key = { it.key }) { entry ->
+                            val name = entry.value.name
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        pendingIso = entry.key
+                                        showExpiryDialog = true
+                                    }
+                                    .padding(vertical = 12.dp, horizontal = 10.dp),
+                            ) {
+                                Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                                Text(entry.key, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
                 }

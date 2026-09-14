@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -135,23 +136,27 @@ fun TripsScreen(
                 modifier = Modifier.padding(vertical = 16.dp),
             )
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (sections.upcoming.isNotEmpty()) {
-                    item(key = "header-upcoming") { SectionLabel("Upcoming") }
-                    items(sections.upcoming, key = { it.id }) { trip ->
-                        TripCard(trip, ready.world, ready.docs, ready.allowances, today, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip })
+            val tripsListState = rememberLazyListState()
+            val (tripsTop, tripsEnd) = tripsListState.hazeAlphas()
+            HazeBox(tripsTop, tripsEnd, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
+                LazyColumn(state = tripsListState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (sections.upcoming.isNotEmpty()) {
+                        item(key = "header-upcoming") { SectionLabel("Upcoming") }
+                        items(sections.upcoming, key = { it.id }) { trip ->
+                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip })
+                        }
                     }
-                }
-                if (sections.current.isNotEmpty()) {
-                    item(key = "header-current") { SectionLabel("Current") }
-                    items(sections.current, key = { it.id }) { trip ->
-                        TripCard(trip, ready.world, ready.docs, ready.allowances, today, onEdit = { editingTrip = trip }, onEnd = { endingTrip = trip }, onDelete = { deletingTrip = trip })
+                    if (sections.current.isNotEmpty()) {
+                        item(key = "header-current") { SectionLabel("Current") }
+                        items(sections.current, key = { it.id }) { trip ->
+                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, onEdit = { editingTrip = trip }, onEnd = { endingTrip = trip }, onDelete = { deletingTrip = trip })
+                        }
                     }
-                }
-                if (sections.previous.isNotEmpty()) {
-                    item(key = "header-previous") { SectionLabel("Previous") }
-                    items(sections.previous, key = { it.id }) { trip ->
-                        TripCard(trip, ready.world, ready.docs, ready.allowances, today, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip })
+                    if (sections.previous.isNotEmpty()) {
+                        item(key = "header-previous") { SectionLabel("Previous") }
+                        items(sections.previous, key = { it.id }) { trip ->
+                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip })
+                        }
                     }
                 }
             }
@@ -223,9 +228,13 @@ private fun AllowanceSection(
         }
         Spacer(Modifier.height(16.dp))
     }
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        allowances.forEach { a ->
-            AllowanceCard(a, focused = a.key == focusedKey, onClick = { onFocus(a.key) })
+    val switcherScroll = rememberScrollState()
+    val (switcherStart, switcherEnd) = switcherScroll.hazeAlphas()
+    HazeBox(switcherStart, switcherEnd, MaterialTheme.colorScheme.background, horizontal = true, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(switcherScroll), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            allowances.forEach { a ->
+                AllowanceCard(a, focused = a.key == focusedKey, onClick = { onFocus(a.key) })
+            }
         }
     }
 }
@@ -794,33 +803,42 @@ private fun AddTripDialog(
             Column(Modifier.padding(20.dp)) {
                 Text(if (isEditingExisting) "Edit trip" else "Add trip", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(12.dp))
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.45f).dp)
-                        .verticalScroll(rememberScrollState()),
+                val stopsScroll = rememberScrollState()
+                val (stopsTop, stopsEnd) = stopsScroll.hazeAlphas()
+                HazeBox(
+                    stopsTop,
+                    stopsEnd,
+                    MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.fillMaxWidth().heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.45f).dp),
                 ) {
-                    if (stops.isEmpty()) {
-                        Text("No stops yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    stops.forEach { stop ->
-                        StopRow(
-                            stop = stop,
-                            world = ready.world,
-                            docs = ready.docs,
-                            today = today,
-                            onClick = { editingStopId = stop.id },
-                            onRemove = {
-                                stops = stops.filter { it.id != stop.id }
-                                lastStopSnapshot = null
-                                refreshGap()
-                            },
-                        )
-                        Spacer(Modifier.height(6.dp))
-                    }
-                    if (stops.size > 1) {
-                        Text("Stops are kept in arrival order.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.height(6.dp))
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.45f).dp)
+                            .verticalScroll(stopsScroll),
+                    ) {
+                        if (stops.isEmpty()) {
+                            Text("No stops yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        stops.forEach { stop ->
+                            StopRow(
+                                stop = stop,
+                                world = ready.world,
+                                docs = ready.docs,
+                                today = today,
+                                onClick = { editingStopId = stop.id },
+                                onRemove = {
+                                    stops = stops.filter { it.id != stop.id }
+                                    lastStopSnapshot = null
+                                    refreshGap()
+                                },
+                            )
+                            Spacer(Modifier.height(6.dp))
+                        }
+                        if (stops.size > 1) {
+                            Text("Stops are kept in arrival order.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(6.dp))
+                        }
                     }
                 }
                 OutlinedButton(
@@ -1088,8 +1106,11 @@ private fun StopEditorDialog(
                 .width(400.dp)
                 .heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp),
         ) {
-            Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState())) {
-                Text(if (onRemove == null) "Add stop" else "Edit stop", style = MaterialTheme.typography.titleLarge)
+            val stopDialogScroll = rememberScrollState()
+            val (stopTop, stopEnd) = stopDialogScroll.hazeAlphas()
+            HazeBox(stopTop, stopEnd, MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp)) {
+                Column(Modifier.padding(20.dp).verticalScroll(stopDialogScroll)) {
+                    Text(if (onRemove == null) "Add stop" else "Edit stop", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(16.dp))
                 CountryPicker(
                     countries = world.countries,
@@ -1163,6 +1184,7 @@ private fun StopEditorDialog(
                     Spacer(Modifier.width(12.dp))
                     Button(onClick = { onDone(stop); onDismiss() }, enabled = countrySelected) { Text("Done") }
                 }
+            }
             }
         }
     }

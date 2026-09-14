@@ -26,9 +26,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.Access
@@ -117,7 +114,8 @@ fun CountryDetailCard(
                 val breakdownSpacing = 8.dp
                 val breakdownMaxHeight = breakdownRowHeight * maxVisibleBreakdownRows +
                     breakdownSpacing * (maxVisibleBreakdownRows - 1)
-                Box(Modifier.fillMaxWidth()) {
+                val (breakdownTop, breakdownEnd) = breakdownScroll.hazeAlphas()
+                HazeBox(breakdownTop, breakdownEnd, MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
                     Column(
                         Modifier.then(
                             if (breakdown.size > maxVisibleBreakdownRows) {
@@ -162,25 +160,6 @@ fun CountryDetailCard(
                                 }
                             }
                             if (i < breakdown.size - 1) Spacer(Modifier.height(breakdownSpacing))
-                        }
-                    }
-                    if (breakdown.size > maxVisibleBreakdownRows) {
-                        val fadeAlpha = ((breakdownScroll.maxValue - breakdownScroll.value) / 80f)
-                            .coerceIn(0f, 1f)
-                        if (fadeAlpha > 0.01f) {
-                            Box(
-                                Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .fillMaxWidth()
-                                    .height(48.dp)
-                                    .alpha(fadeAlpha)
-                                    .background(
-                                        Brush.verticalGradient(
-                                            0f to Color.Transparent,
-                                            1f to MaterialTheme.colorScheme.surfaceContainerHigh,
-                                        ),
-                                    ),
-                            )
                         }
                     }
                 }

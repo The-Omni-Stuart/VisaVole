@@ -31,6 +31,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
+import com.cbkres.visavole.ui.HazeBox
+import com.cbkres.visavole.ui.hazeAlphas
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
@@ -298,16 +300,20 @@ private fun MapTab(
                     .offset(y = searchBarH)
                     .heightIn(max = 240.dp),
             ) {
-                Column(Modifier.verticalScroll(rememberScrollState())) {
-                    matches.forEach { c ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { pick(c.iso2) }
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(c.name, style = MaterialTheme.typography.bodyMedium)
+                val searchScroll = rememberScrollState()
+                val (searchTop, searchEnd) = searchScroll.hazeAlphas()
+                HazeBox(searchTop, searchEnd, MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
+                    Column(Modifier.verticalScroll(searchScroll)) {
+                        matches.forEach { c ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { pick(c.iso2) }
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(c.name, style = MaterialTheme.typography.bodyMedium)
+                            }
                         }
                     }
                 }
@@ -374,15 +380,18 @@ private fun LegendRow(counts: Map<AccessLevel, Int>, homeCount: Int = 1) {
         AccessLevel.FREEDOM, AccessLevel.RESIDENCE, AccessLevel.VISA_FREE, AccessLevel.COVERED,
         AccessLevel.ETA, AccessLevel.E_VISA, AccessLevel.VISA_REQUIRED, AccessLevel.REFUSED,
     )
+    val legendScroll = rememberScrollState()
+    val (legendStart, legendEnd) = legendScroll.hazeAlphas()
     Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 0.dp) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        HazeBox(legendStart, legendEnd, MaterialTheme.colorScheme.surfaceContainerHigh, horizontal = true, modifier = Modifier.fillMaxWidth()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(legendScroll)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier
@@ -411,6 +420,7 @@ private fun LegendRow(counts: Map<AccessLevel, Int>, homeCount: Int = 1) {
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
+            }
             }
         }
     }

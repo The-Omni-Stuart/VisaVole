@@ -199,31 +199,35 @@ fun DocumentsScreen(
             val today = LocalDate.now(ZoneOffset.UTC)
             val active = ready.docs.filter { !isExpired(it, ready.documentEntryStatus[it.id], today) }
             val archived = ready.docs.filter { isExpired(it, ready.documentEntryStatus[it.id], today) }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (active.isNotEmpty()) {
-                    item(key = "header-active") { SectionLabel("Active") }
-                    items(active, key = { it.id }) { doc ->
-                        DocCard(
-                            doc,
-                            ready.world,
-                            today,
-                            ready.documentEntryStatus[doc.id],
-                            onRemove = { vm.removeDocument(doc.id) },
-                            onEdit = { editing = doc },
-                        )
+            val docsListState = rememberLazyListState()
+            val (docsTop, docsEnd) = docsListState.hazeAlphas()
+            HazeBox(docsTop, docsEnd, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
+                LazyColumn(state = docsListState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (active.isNotEmpty()) {
+                        item(key = "header-active") { SectionLabel("Active") }
+                        items(active, key = { it.id }) { doc ->
+                            DocCard(
+                                doc,
+                                ready.world,
+                                today,
+                                ready.documentEntryStatus[doc.id],
+                                onRemove = { vm.removeDocument(doc.id) },
+                                onEdit = { editing = doc },
+                            )
+                        }
                     }
-                }
-                if (archived.isNotEmpty()) {
-                    item(key = "header-archive") { SectionLabel("Archive") }
-                    items(archived, key = { it.id }) { doc ->
-                        DocCard(
-                            doc,
-                            ready.world,
-                            today,
-                            ready.documentEntryStatus[doc.id],
-                            onRemove = { vm.removeDocument(doc.id) },
-                            onEdit = { editing = doc },
-                        )
+                    if (archived.isNotEmpty()) {
+                        item(key = "header-archive") { SectionLabel("Archive") }
+                        items(archived, key = { it.id }) { doc ->
+                            DocCard(
+                                doc,
+                                ready.world,
+                                today,
+                                ready.documentEntryStatus[doc.id],
+                                onRemove = { vm.removeDocument(doc.id) },
+                                onEdit = { editing = doc },
+                            )
+                        }
                     }
                 }
             }
@@ -511,8 +515,11 @@ fun AddDocumentDialog(
                 .width(400.dp)
                 .heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp),
         ) {
-            Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState())) {
-                Text(if (initial == null) "Add document" else "Edit document", style = MaterialTheme.typography.titleLarge)
+            val docDialogScroll = rememberScrollState()
+            val (docTop, docEnd) = docDialogScroll.hazeAlphas()
+            HazeBox(docTop, docEnd, MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp)) {
+                Column(Modifier.padding(20.dp).verticalScroll(docDialogScroll)) {
+                    Text(if (initial == null) "Add document" else "Edit document", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DocType.entries.forEach { t ->
@@ -710,6 +717,7 @@ fun AddDocumentDialog(
                     ) { Text(if (initial == null) "Add" else "Save") }
                 }
             }
+            }
         }
     }
 
@@ -778,8 +786,10 @@ internal fun CountryPicker(
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surfaceContainerLow,
         ) {
-            LazyColumn(state = listState, modifier = Modifier.padding(4.dp)) {
-                items(list, key = { it.key }) { entry ->
+            val (pickerTop, pickerEnd) = listState.hazeAlphas()
+            HazeBox(pickerTop, pickerEnd, MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxSize()) {
+                LazyColumn(state = listState, modifier = Modifier.padding(4.dp)) {
+                    items(list, key = { it.key }) { entry ->
                     val isSel = selected.contains(entry.key)
                     Row(
                         Modifier
@@ -795,6 +805,7 @@ internal fun CountryPicker(
                         Text(entry.value.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                         Text(entry.key, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                }
                 }
             }
         }
