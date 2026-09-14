@@ -99,21 +99,46 @@ class VisaRepository(private val db: VisaDb) {
 
     private fun loadStayRules(c: android.database.sqlite.SQLiteDatabase): List<StayRule> {
         val out = mutableListOf<StayRule>()
-        c.rawQuery(
-            "SELECT zone_name, countries, window_type, window_days, window_period_days, multiple_entry, nationalities, note FROM stay_rules",
-            null,
-        ).use { cur ->
+        c.rawQuery("SELECT * FROM stay_rules", null).use { cur ->
+            val iZoneName = cur.getColumnIndex("zone_name")
+            val iZone = cur.getColumnIndex("zone")
+            val iCountries = cur.getColumnIndex("countries")
+            val iWindowType = cur.getColumnIndex("window_type")
+            val iWindowDays = cur.getColumnIndex("window_days")
+            val iWindowPeriodDays = cur.getColumnIndex("window_period_days")
+            val iExtension = cur.getColumnIndex("extension")
+            val iMultipleEntry = cur.getColumnIndex("multiple_entry")
+            val iNationalities = cur.getColumnIndex("nationalities")
+            val iValidFrom = cur.getColumnIndex("valid_from")
+            val iValidTo = cur.getColumnIndex("valid_to")
+            val iSource = cur.getColumnIndex("source")
+            val iNote = cur.getColumnIndex("note")
+            val iId = cur.getColumnIndex("id")
+
+            fun str(idx: Int): String? = if (idx < 0) null else cur.getString(idx)
+            fun intv(idx: Int): Int? = if (idx < 0 || cur.isNull(idx)) null else cur.getInt(idx)
+
             while (cur.moveToNext()) {
                 out.add(
                     StayRule(
-                        zoneName = cur.getString(0) ?: "",
-                        countries = jsonSet(cur.getString(1)),
-                        windowType = cur.getString(2) ?: "",
-                        windowDays = if (cur.isNull(3)) null else cur.getInt(3),
-                        windowPeriodDays = if (cur.isNull(4)) null else cur.getInt(4),
-                        multipleEntry = cur.getInt(5) != 0,
-                        nationalities = jsonSet(cur.getString(6)),
-                        note = cur.getString(7),
+                        zoneName = when {
+                            iZoneName >= 0 -> str(iZoneName) ?: ""
+                            iZone >= 0 -> str(iZone) ?: ""
+                            else -> ""
+                        },
+                        countries = jsonSet(str(iCountries)),
+                        windowType = str(iWindowType) ?: "",
+                        windowDays = intv(iWindowDays),
+                        windowPeriodDays = intv(iWindowPeriodDays),
+                        multipleEntry = (intv(iMultipleEntry) ?: 0) != 0,
+                        nationalities = jsonSet(str(iNationalities)),
+                        note = str(iNote),
+                        id = str(iId) ?: "",
+                        zoneId = str(iZone),
+                        extensionDays = intv(iExtension),
+                        validFrom = str(iValidFrom),
+                        validTo = str(iValidTo),
+                        source = str(iSource),
                     ),
                 )
             }

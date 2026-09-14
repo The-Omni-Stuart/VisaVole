@@ -266,6 +266,81 @@ class AccessModelTest {
         assertEquals(VISA_REQUIRED, bd[1].access.level)
     }
 
+    @Test fun bestDocumentPrefersHeldVisaOverVisaRequiredPassport() {
+        val w = world(
+            baseline = mapOf("GB" to listOf(corridor("GB", "SY", "visa-required"))),
+            holdings = mapOf("x" to DataHolding("x", "X Visa", "short_term_visa", "SY")),
+            benefits = mapOf("x" to listOf(Benefit("x", "SY", "visa-free", 90))),
+        )
+        val docs = listOf(doc("p", Passport("GB")), doc("d", Holding("x")))
+        assertEquals("d", AccessModel.bestDocumentId("SY", docs, w))
+    }
+
+    @Test fun bestDocumentPrefersStrongerPassport() {
+        val w = world(
+            baseline = mapOf(
+                "GB" to listOf(corridor("GB", "SY", "visa-required")),
+                "IE" to listOf(corridor("IE", "SY", "visa-free", 90)),
+            ),
+        )
+        val docs = listOf(doc("p1", Passport("GB")), doc("p2", Passport("IE")))
+        assertEquals("p2", AccessModel.bestDocumentId("SY", docs, w))
+    }
+
+    @Test fun bestDocumentIgnoresExpiredDocuments() {
+        val w = world(
+            holdings = mapOf("x" to DataHolding("x", "X Visa", "short_term_visa", "SY")),
+            benefits = mapOf("x" to listOf(Benefit("x", "SY", "visa-free", 90))),
+        )
+        val today = LocalDate.of(2026, 9, 8)
+        val docs = listOf(docEx("expired", Holding("x"), "2020-01-01"), docEx("valid", Holding("x"), "2030-01-01"))
+        assertEquals("valid", AccessModel.bestDocumentId("SY", docs, w, today))
+        assertNull(AccessModel.bestDocumentId("SY", docs.filter { it.id == "expired" }, w, today))
+    }
+
+    @Test fun bestDocumentIsNullWithoutDocumentedRule() {
+        val w = world()
+        assertNull(AccessModel.bestDocumentId("XX", listOf(doc("p", Passport("GB"))), w))
+    }
+
+    @Test fun bestDocumentPrefersDestinationResidenceOverPassportFreedom() {
+        val w = world(
+            baseline = mapOf("CZ" to listOf(corridor("CZ", "DE", "visa-free", 90))),
+            regimes = listOf(regime("eu", "EU", "freedom-of-movement", "CZ", "DE")),
+        )
+        val docs = listOf(doc("p", Passport("CZ")), doc("res", Custom(setOf("CZ"), "eu", "residence")))
+        assertEquals("res", AccessModel.bestDocumentId("CZ", docs, w))
+    }
+
+    @Test fun bestDocumentPrefersResidenceShortStayOverEqualPassport() {
+        val w = world(
+            baseline = mapOf("GB" to listOf(corridor("GB", "DE", "visa-free", 90))),
+            holdings = mapOf("res" to DataHolding("res", "Schengen Residence", "residency", "CZ")),
+            benefits = mapOf("res" to listOf(Benefit("res", "DE", "visa-free", 90))),
+        )
+        val docs = listOf(doc("p", Passport("GB")), doc("res", Holding("res")))
+        assertEquals("res", AccessModel.bestDocumentId("DE", docs, w))
+    }
+
+    @Test fun bestDocumentPrefersPassportOverResidenceInAnotherCountry() {
+        val w = world(
+            baseline = mapOf("CZ" to listOf(corridor("CZ", "DE", "visa-free", 90))),
+            regimes = listOf(regime("eu", "EU", "freedom-of-movement", "CZ", "DE")),
+        )
+        val docs = listOf(doc("p", Passport("CZ")), doc("res", Custom(setOf("CZ"), "eu", "residence")))
+        assertEquals("p", AccessModel.bestDocumentId("DE", docs, w))
+    }
+
+    @Test fun bestDocumentPrefersPassportOverWeakerVisa() {
+        val w = world(
+            baseline = mapOf("GB" to listOf(corridor("GB", "AD", "visa-free", 90))),
+            holdings = mapOf("x" to DataHolding("x", "X Visa", "short_term_visa", "AD")),
+            benefits = mapOf("x" to listOf(Benefit("x", "AD", "e-visa", 30))),
+        )
+        val docs = listOf(doc("p", Passport("GB")), doc("x", Holding("x")))
+        assertEquals("p", AccessModel.bestDocumentId("AD", docs, w))
+    }
+
     @Test fun mobilityBlocPrefersFreedomThenLargest() {
         val w = world(
             regimes = listOf(

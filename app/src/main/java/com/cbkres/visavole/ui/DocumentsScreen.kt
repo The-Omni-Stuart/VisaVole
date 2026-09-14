@@ -66,6 +66,8 @@ import com.cbkres.visavole.data.Country
 import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.DocKind
+import com.cbkres.visavole.domain.EntryState
+import com.cbkres.visavole.domain.EntryStatus
 import com.cbkres.visavole.domain.ResidenceClass
 import com.cbkres.visavole.domain.defaultResidenceClassFor
 import com.cbkres.visavole.domain.residenceClassFor
@@ -87,13 +89,29 @@ private val STATUS_ORANGE = STATUS_WARN
 private val STATUS_GREEN = STATUS_OK
 private val STATUS_RED = STATUS_BAD
 
-/** Days from [today] until the ISO date in [iso]; null when unset or unparsable. */
-private fun daysUntil(iso: String?, today: LocalDate): Long? =
-    iso?.let { runCatching { ChronoUnit.DAYS.between(today, LocalDate.parse(it)) }.getOrNull() }
+/** Days from [today] until [date]; null when unset. */
+private fun daysUntil(date: LocalDate?, today: LocalDate): Long? =
+    date?.let { ChronoUnit.DAYS.between(today, it) }
 
-/** True when the document has an expiry and it is already past. */
-private fun isExpired(doc: Document, today: LocalDate): Boolean =
-    daysUntil(doc.expiry, today)?.let { it < 0 } ?: false
+private fun effectiveExpiryFor(doc: Document, entry: EntryStatus?): LocalDate? {
+    val original = doc.expiry?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    val effective = entry?.effectiveExpiry
+    return when {
+        effective == null -> original
+        original == null -> effective
+        effective.isBefore(original) -> effective
+        else -> original
+    }
+}
+
+/** True when the document's effective expiry (including entry exhaustion) is no longer usable. */
+private fun isExpired(doc: Document, entry: EntryStatus?, today: LocalDate): Boolean {
+    val effective = effectiveExpiryFor(doc, entry)
+    val pastExpiry = daysUntil(effective, today)?.let { it < 0 } ?: false
+    val exhaustedToday = entry?.state == EntryState.EXHAUSTED &&
+        daysUntil(entry.effectiveExpiry ?: effective, today)?.let { it <= 0 } ?: false
+    return pastExpiry || exhaustedToday
+}
 
 /**
  * The document subtitle: kind/summary and the valid-from / valid-to dates in the neutral base
@@ -107,11 +125,13 @@ private fun docSubtitle(
     orange: Color,
     green: Color,
     red: Color,
+    effectiveExpiry: LocalDate? = null,
 ): AnnotatedString {
     val k = doc.kind
     val regime = (k as? DocKind.Custom)?.blocId?.let { id -> world.regimes.firstOrNull { r -> r.id == id }?.name }
     val entryType = (k as? DocKind.Custom)?.entryType
     val classSuffix = doc.residenceClassFor(world)?.let { " · ${it.label}" } ?: ""
+    val displayExpiry = effectiveExpiry?.toString() ?: doc.expiry
 
     val b = AnnotatedString.Builder()
     fun styled(text: String, color: Color) {
@@ -139,7 +159,7 @@ private fun docSubtitle(
         styled(" · $label entry", color)
     }
     doc.validFrom?.let { from -> styled(" · from $from", base) }
-    doc.expiry?.let { exp -> styled(" · to $exp", base) }
+    displayExpiry?.let { exp -> styled(" · to $exp", base) }
     return b.toAnnotatedString()
 }
 
@@ -177,8 +197,8 @@ fun DocumentsScreen(
             )
         } else {
             val today = LocalDate.now(ZoneOffset.UTC)
-            val active = ready.docs.filter { !isExpired(it, today) }
-            val archived = ready.docs.filter { isExpired(it, today) }
+            val active = ready.docs.filter { !isExpired(it, ready.documentEntryStatus[it.id], today) }
+            val archived = ready.docs.filter { isExpired(it, ready.documentEntryStatus[it.id], today) }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (active.isNotEmpty()) {
                     item(key = "header-active") { SectionLabel("Active") }
@@ -187,6 +207,7 @@ fun DocumentsScreen(
                             doc,
                             ready.world,
                             today,
+                            ready.documentEntryStatus[doc.id],
                             onRemove = { vm.removeDocument(doc.id) },
                             onEdit = { editing = doc },
                         )
@@ -199,6 +220,7 @@ fun DocumentsScreen(
                             doc,
                             ready.world,
                             today,
+                            ready.documentEntryStatus[doc.id],
                             onRemove = { vm.removeDocument(doc.id) },
                             onEdit = { editing = doc },
                         )
@@ -235,10 +257,17 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun ExpiryStatusPill(doc: Document, today: LocalDate) {
-    val days = daysUntil(doc.expiry, today) ?: return
+private fun ExpiryStatusPill(doc: Document, today: LocalDate, entry: EntryStatus? = null) {
+    val effective = effectiveExpiryFor(doc, entry)
+    val days = daysUntil(effective, today)
     val (text, color, bold) = when {
-        days < 0 -> Triple("Expired", STATUS_BAD, true)
+        entry?.total != null && entry.state == EntryState.IN_USE -> Triple("In use", STATUS_GREEN, false)
+        entry?.total != null && entry.remaining == 0 && days != null && days <= 0 ->
+            Triple("Expired on ${entry.effectiveExpiry ?: effective}", STATUS_BAD, true)
+        entry?.total != null && entry.remaining != null && entry.remaining > 0 ->
+            Triple("${entry.remaining} ${if (entry.remaining == 1) "entry" else "entries"} left", STATUS_GREEN, false)
+        days == null -> Triple("No expiry", STATUS_GREEN, false)
+        days < 0 -> Triple("Expired on $effective", STATUS_BAD, true)
         days <= 7 -> Triple("Expiring soon ($days days)", STATUS_ORANGE, false)
         else -> Triple("Valid for $days days", STATUS_GREEN, false)
     }
@@ -258,21 +287,31 @@ private fun DocCard(
     doc: Document,
     world: WorldData,
     today: LocalDate,
+    entryStatus: EntryStatus? = null,
     onRemove: () -> Unit,
     onEdit: () -> Unit,
 ) {
+    val effectiveExpiry = effectiveExpiryFor(doc, entryStatus)
     ElevatedCard(Modifier.fillMaxWidth()) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(doc.label, style = MaterialTheme.typography.titleSmall)
                 Text(
-                    docSubtitle(doc, world, MaterialTheme.colorScheme.onSurfaceVariant, STATUS_ORANGE, STATUS_GREEN, STATUS_RED),
+                    docSubtitle(
+                        doc,
+                        world,
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                        STATUS_ORANGE,
+                        STATUS_GREEN,
+                        STATUS_RED,
+                        effectiveExpiry,
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            if (doc.expiry != null) {
+            if (effectiveExpiry != null || entryStatus?.total != null) {
                 Spacer(Modifier.width(8.dp))
-                ExpiryStatusPill(doc, today)
+                ExpiryStatusPill(doc, today, entryStatus)
             }
             IconButton(onClick = onEdit) {
                 Icon(Icons.Filled.Edit, contentDescription = "Edit")
@@ -292,7 +331,7 @@ private enum class DocType(val label: String, val kind: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SelectionField(
+internal fun SelectionField(
     label: String,
     value: String,
     items: @Composable ColumnScope.(onSelected: () -> Unit) -> Unit,
@@ -709,7 +748,7 @@ fun AddDocumentDialog(
 
 /** Search + list of countries; tap toggles membership in [selected]. */
 @Composable
-private fun CountryPicker(
+internal fun CountryPicker(
     countries: Map<String, Country>,
     query: String,
     onQuery: (String) -> Unit,

@@ -1,5 +1,8 @@
 package com.cbkres.visavole.data
 
+import java.time.LocalDate
+import java.time.ZoneOffset
+
 /** A country as stored in the VisaDB `countries` table. */
 data class Country(val iso2: String, val name: String)
 
@@ -39,7 +42,16 @@ data class StayRule(
     val multipleEntry: Boolean,
     val nationalities: Set<String>, // "*" or an ISO2 or a bloc code (e.g. "EU-EEA")
     val note: String?,
+    val id: String = "",
+    val zoneId: String? = null,
+    val extensionDays: Int? = null,
+    val validFrom: String? = null,
+    val validTo: String? = null,
+    val source: String? = null,
 ) {
+    val displayName: String
+        get() = zoneName.ifBlank { zoneId?.takeIf { it.isNotBlank() } ?: "short-stay" }
+
     /** Compact window text for the primary days display, e.g. "90 in 180 (rolling)" or "90 per entry". */
     fun windowSummary(): String = when (windowType) {
         "rolling" -> when {
@@ -155,9 +167,8 @@ data class WorldData(
      * which beats the "any" wildcard (1). Returns null when no rule names the destination or none
      * matches the traveller's nationality.
      */
-    fun stayRuleFor(dest: String, passports: Set<String>): StayRule? {
-        val cands = stayRules.filter { dest in it.countries }
-        if (cands.isEmpty()) return null
+    fun stayRuleFor(dest: String, passports: Set<String>, today: LocalDate = LocalDate.now(ZoneOffset.UTC), allowSynthetic: Boolean = true): StayRule? {
+        val cands = stayRules.filter { dest in it.countries && isStayRuleValidOn(it, today) }
         val hasEuEea = passports.any { it in euEeaMembers }
         fun score(nats: Set<String>): Int = when {
             passports.any { it in nats } -> 3 // a named passport
@@ -165,7 +176,56 @@ data class WorldData(
             "*" in nats -> 1 // any nationality
             else -> 0
         }
-        return cands.maxByOrNull { score(it.nationalities) }
+        val explicit = cands.maxByOrNull { score(it.nationalities) }
             ?.takeIf { score(it.nationalities) > 0 }
+        if (explicit != null) return explicit
+        if (!allowSynthetic) return null
+        return baselineSyntheticStayRuleFor(dest, passports)
+    }
+
+    fun syntheticStayRuleFor(dest: String, days: Int): StayRule? {
+        if (days <= 0) return null
+        return StayRule(
+            zoneName = countries[dest]?.name ?: dest,
+            countries = setOf(dest),
+            windowType = "per-entry",
+            windowDays = days,
+            windowPeriodDays = null,
+            multipleEntry = false,
+            nationalities = setOf("*"),
+            note = null,
+            id = "synthetic:$dest",
+            zoneId = null,
+        )
+    }
+
+    private fun baselineSyntheticStayRuleFor(dest: String, passports: Set<String>): StayRule? {
+        val days = passports
+            .flatMap { baseline[it].orEmpty() }
+            .filter { it.destination == dest && (it.type == "visa-free" || it.type == "visa-on-arrival") }
+            .maxOfOrNull { it.days ?: 0 }
+            ?: return null
+        return syntheticStayRuleFor(dest, days)
+    }
+
+    private fun isStayRuleValidOn(rule: StayRule, today: LocalDate): Boolean {
+        rule.validFrom?.let { from -> runCatching { LocalDate.parse(from) }.getOrNull() }?.let { if (it.isAfter(today)) return false }
+        rule.validTo?.let { to -> runCatching { LocalDate.parse(to) }.getOrNull() }?.let { if (it.isBefore(today)) return false }
+        return true
+    }
+
+    /** Stable allowance-pool key: shared zones pool together, standalone rules do not. */
+    fun zoneKeyFor(rule: StayRule): String = when {
+        !rule.zoneId.isNullOrBlank() -> "stay:${rule.zoneId}"
+        rule.id.isNotBlank() -> "stay:${rule.id}"
+        else -> "stay:${rule.zoneName}"
+    }
+
+    val stayRulesByCountry: Map<String, List<StayRule>> by lazy {
+        val out = HashMap<String, MutableList<StayRule>>()
+        for (rule in stayRules) {
+            for (c in rule.countries) out.getOrPut(c) { mutableListOf() }.add(rule)
+        }
+        out
     }
 }

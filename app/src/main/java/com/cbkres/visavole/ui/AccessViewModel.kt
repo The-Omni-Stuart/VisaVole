@@ -11,11 +11,20 @@ import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.data.WorldMapData
 import com.cbkres.visavole.domain.Access
 import com.cbkres.visavole.domain.AccessModel
+import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.DocKind
+import com.cbkres.visavole.domain.EntryStatus
 import com.cbkres.visavole.domain.ResidenceClass
+import com.cbkres.visavole.domain.Trip
+import com.cbkres.visavole.domain.TripCalculation
+import com.cbkres.visavole.domain.TripModel
+import com.cbkres.visavole.domain.TripSections
+import com.cbkres.visavole.domain.TripStop
 import com.cbkres.visavole.domain.residenceClassFor
 import java.io.File
+import java.time.LocalDate
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +46,10 @@ sealed interface AppState {
         val access: Map<String, Access>,
         val world: WorldData,
         val geometry: WorldMapData,
+        val trips: List<Trip> = emptyList(),
+        val tripSections: TripSections = TripSections(emptyList(), emptyList(), emptyList()),
+        val allowances: List<AllowanceSnapshot> = emptyList(),
+        val documentEntryStatus: Map<String, EntryStatus> = emptyMap(),
     ) : AppState
 }
 
@@ -59,6 +72,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<AppState> = _state.asStateFlow()
 
     private var docs: MutableList<Document> = mutableListOf()
+    private var trips: MutableList<Trip> = mutableListOf()
     private var pendingHome: String? = null
     private var reloadGeneration = 0
 
@@ -106,8 +120,22 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         val w = world ?: return
         val homeCountries = AccessModel.homeCountries(docs)
         val ownVisaCountries = if (homeCountries.isNotEmpty()) AccessModel.ownVisaCountries(docs, w) else emptySet()
-        val access = if (homeCountries.isNotEmpty()) AccessModel.compute(docs, w) else emptyMap()
-        _state.value = AppState.Ready(homeCountries, ownVisaCountries, docs.toList(), access, w, geometry)
+        val effectiveDocs = if (homeCountries.isNotEmpty()) TripModel.effectiveDocs(docs, trips, w) else docs
+        val access = if (homeCountries.isNotEmpty()) AccessModel.compute(effectiveDocs, w) else emptyMap()
+        val calc = if (homeCountries.isNotEmpty()) TripModel.calculate(trips, docs, w)
+        else TripCalculation(TripSections(emptyList(), emptyList(), emptyList()), emptyList(), emptyMap())
+        _state.value = AppState.Ready(
+            homeCountries = homeCountries,
+            ownVisaCountries = ownVisaCountries,
+            docs = docs.toList(),
+            access = access,
+            world = w,
+            geometry = geometry,
+            trips = trips.toList(),
+            tripSections = calc.sections,
+            allowances = calc.allowances,
+            documentEntryStatus = calc.entryStatus,
+        )
     }
 
     private fun updateDocs(nextDocs: List<Document>) {
@@ -157,16 +185,55 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         updateDocs(next)
     }
 
+    fun addTrip(trip: Trip) {
+        trips = (trips + trip).toMutableList()
+        persist()
+        publish()
+    }
+
+    fun updateTrip(trip: Trip) {
+        trips = trips.map { if (it.id == trip.id) trip else it }.toMutableList()
+        persist()
+        publish()
+    }
+
+    fun removeTrip(id: String) {
+        trips = trips.filterNot { it.id == id }.toMutableList()
+        persist()
+        publish()
+    }
+
+    fun endTrip(id: String, departure: LocalDate) {
+        val trip = trips.firstOrNull { it.id == id } ?: return
+        val last = TripModel.sortedStops(trip.stops).lastOrNull() ?: return
+        val safeDeparture = departure.takeIf { !it.isBefore(last.arrival) } ?: last.arrival
+        updateTrip(
+            trip.copy(
+                stops = trip.stops.map { stop ->
+                    when {
+                        stop.id == last.id -> stop.copy(departure = safeDeparture)
+                        stop.departure == null -> stop.copy(departure = safeDeparture)
+                        else -> stop
+                    }
+                },
+            ),
+        )
+    }
+
     // ---- persistence (JSON in the app's files dir) ----
     private val file get() = File(context.filesDir, "visavole_state.json")
 
     private fun persist() {
         try {
             val root = JSONObject()
+            root.put("schemaVersion", 2)
             root.put("home", homeIso ?: JSONObject.NULL)
             val arr = JSONArray()
             docs.forEach { arr.put(docToJson(it)) }
             root.put("docs", arr)
+            val tripArr = JSONArray()
+            trips.forEach { tripArr.put(tripToJson(it)) }
+            root.put("trips", tripArr)
             file.writeText(root.toString())
         } catch (_: Exception) {
         }
@@ -181,6 +248,30 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
             val list = mutableListOf<Document>()
             for (i in 0 until arr.length()) list.add(jsonToDoc(arr.getJSONObject(i)))
             docs = list
+            val tripArr = root.optJSONArray("trips") ?: JSONArray()
+            val tripList = mutableListOf<Trip>()
+            for (i in 0 until tripArr.length()) {
+                runCatching { tripArr.getJSONObject(i) }.getOrNull()?.let { o ->
+                    val stops = mutableListOf<TripStop>()
+                    val stopArr = o.optJSONArray("stops") ?: JSONArray()
+                    for (j in 0 until stopArr.length()) {
+                        runCatching {
+                            val so = stopArr.getJSONObject(j)
+                            TripStop(
+                                so.optString("id").ifBlank { UUID.randomUUID().toString() },
+                                so.getString("country"),
+                                LocalDate.parse(so.getString("arrival")),
+                                so.strOrNull("departure")?.let { LocalDate.parse(it) },
+                                so.strOrNull("documentId"),
+                            )
+                        }.getOrNull()?.let { stops.add(it) }
+                    }
+                    if (stops.isNotEmpty()) {
+                        tripList.add(Trip(o.optString("id").ifBlank { UUID.randomUUID().toString() }, stops, o.strOrNull("note")))
+                    }
+                }
+            }
+            trips = tripList
         } catch (_: Exception) {
         }
     }
@@ -197,6 +288,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
             }
             is DocKind.Holding -> {
                 put("kind", "holding"); put("holdingId", k.holdingId)
+                put("entryType", k.entryType ?: JSONObject.NULL)
             }
             is DocKind.Custom -> {
                 put("kind", "custom"); put("ckind", k.kind)
@@ -214,10 +306,26 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         return optString(key).takeIf { it.isNotEmpty() && it != "null" }
     }
 
+    private fun tripToJson(t: Trip): JSONObject = JSONObject().apply {
+        put("id", t.id)
+        put("note", t.note ?: JSONObject.NULL)
+        val stops = JSONArray()
+        t.stops.forEach { s ->
+            stops.put(JSONObject().apply {
+                put("id", s.id)
+                put("country", s.countryIso2)
+                put("arrival", s.arrival.toString())
+                put("departure", s.departure?.toString() ?: JSONObject.NULL)
+                put("documentId", s.documentId ?: JSONObject.NULL)
+            })
+        }
+        put("stops", stops)
+    }
+
     private fun jsonToDoc(o: JSONObject): Document {
         val kind = when (o.optString("kind")) {
             "passport" -> DocKind.Passport(o.getString("iso2"))
-            "holding" -> DocKind.Holding(o.getString("holdingId"))
+            "holding" -> DocKind.Holding(o.getString("holdingId"), o.strOrNull("entryType"))
             else -> {
                 val arr = o.getJSONArray("countries")
                 val set = LinkedHashSet<String>()

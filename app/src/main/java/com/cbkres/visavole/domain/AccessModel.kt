@@ -111,7 +111,7 @@ object AccessModel {
                 val benefitLevel = if (isResidence) VISA_FREE else COVERED
                 for (b in world.benefits[k.holdingId].orEmpty()) {
                     if (!AccessLevel.isEntryBenefit(b.type)) continue // skip transit-only rows
-                    if (!entryTypeSatisfied(b.entryTypes, null)) continue // a bare Holding has no entry type
+                    if (!entryTypeSatisfied(b.entryTypes, k.entryType)) continue
                     if (!residenceMinSatisfied(doc, world, b)) continue
                     merge(map, b.destination, Access(benefitLevel, b.days, "${h.name} (${b.type})", true))
                 }
@@ -220,6 +220,66 @@ object AccessModel {
             }
             .filter { it.access.level != UNKNOWN }
             .sortedByDescending { it.access.level.rank }
+
+    /**
+     * The id of the single held document to suggest for entry into [dest] on [today].
+     *
+     * Passports are preferred over weaker or redundant visas. A visa / residence / permit is
+     * preferred when it gives stronger access, or when it is the destination residence document —
+     * residents must present that permit at the border. A residence that only ties the best passport
+     * (for example a bloc residence granting short-stay access) is also preferred. Expired
+     * non-passport documents are ignored. Returns null when no held document has a documented rule.
+     */
+    fun bestDocumentId(
+        dest: String,
+        docs: List<Document>,
+        world: WorldData,
+        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+    ): String? {
+        val evaluated = docs
+            .mapNotNull { doc ->
+                if (doc.kind !is Passport && isExpired(doc, today)) return@mapNotNull null
+                val candidates = when (val k = doc.kind) {
+                    is Passport -> passportCandidates(k.iso2, world, isExpired(doc, today))
+                    else -> documentCandidates(doc, world)
+                }
+                candidates[dest]?.takeIf { it.level != UNKNOWN }?.let { doc to it }
+            }
+        val bestPassport = evaluated
+            .filter { it.first.kind is Passport }
+            .maxWithOrNull { a, b -> compareDocumentAccess(a.second, b.second) }
+        val bestOther = evaluated
+            .filter { it.first.kind !is Passport }
+            .maxWithOrNull { a, b -> compareDocumentAccess(a.second, b.second) }
+        return when {
+            bestPassport == null -> bestOther?.first?.id
+            bestOther == null -> bestPassport.first.id
+            else -> {
+                val (otherDoc, otherAccess) = bestOther
+                val passportAccess = bestPassport.second
+                when {
+                    otherAccess.level == RESIDENCE -> otherDoc.id
+                    compareDocumentAccess(otherAccess, passportAccess) > 0 -> otherDoc.id
+                    compareDocumentAccess(otherAccess, passportAccess) == 0 && isResidenceDocument(otherDoc, world) -> otherDoc.id
+                    else -> bestPassport.first.id
+                }
+            }
+        }
+    }
+
+    private fun isResidenceDocument(doc: Document, world: WorldData): Boolean = when (val k = doc.kind) {
+        is Passport -> false
+        is Holding -> world.holdings[k.holdingId]?.category in RESIDENCE_LIKE_HOLDING_CATEGORIES
+        is Custom -> k.kind == "residence"
+    }
+
+    private fun compareDocumentAccess(a: Access, b: Access): Int {
+        if (a.level.rank != b.level.rank) return a.level.rank - b.level.rank
+        if (a.days != b.days) return (a.days ?: -1).compareTo(b.days ?: -1)
+        val aClass = a.residenceClass?.ordinal ?: -1
+        val bClass = b.residenceClass?.ordinal ?: -1
+        return aClass - bClass
+    }
 
     /**
      * Effective access for every destination, given the held [docs] (passports included). [today]

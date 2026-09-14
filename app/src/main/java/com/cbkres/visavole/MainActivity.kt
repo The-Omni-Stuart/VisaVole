@@ -33,6 +33,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
@@ -51,6 +52,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -70,7 +72,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cbkres.visavole.domain.AccessLevel
 import com.cbkres.visavole.domain.AccessModel
@@ -79,6 +80,7 @@ import com.cbkres.visavole.ui.AppState
 import com.cbkres.visavole.ui.CountryDetailCard
 import com.cbkres.visavole.ui.DocumentsScreen
 import com.cbkres.visavole.ui.OnboardingScreen
+import com.cbkres.visavole.ui.TripsScreen
 import com.cbkres.visavole.ui.theme.Visa_VoleTheme
 import com.cbkres.visavole.ui.WorldMapCanvas
 import com.cbkres.visavole.ui.HOME
@@ -108,7 +110,7 @@ fun VisaVoleApp() {
     val vm: AccessViewModel = viewModel(
         factory = ViewModelProvider.AndroidViewModelFactory.getInstance(app),
     )
-    val state by vm.state.collectAsStateWithLifecycle()
+    val state by vm.state.collectAsState(initial = AppState.Loading)
     when (val s = state) {
         AppState.Loading -> LoadingScreen()
         is AppState.Ready -> {
@@ -159,6 +161,12 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
                     icon = { Icon(Icons.Filled.Face, contentDescription = null) },
                     label = { Text("Documents") },
                 )
+                NavigationBarItem(
+                    selected = tab == 2,
+                    onClick = { tab = 2 },
+                    icon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
+                    label = { Text("Trips") },
+                )
             }
         },
     ) { pad ->
@@ -180,6 +188,14 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
                     .fillMaxSize()
                     .alpha(if (tab == 1) 1f else 0f)
                     .zIndex(if (tab == 1) 1f else 0f),
+            )
+            TripsScreen(
+                vm,
+                s,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .alpha(if (tab == 2) 1f else 0f)
+                    .zIndex(if (tab == 2) 1f else 0f),
             )
         }
     }

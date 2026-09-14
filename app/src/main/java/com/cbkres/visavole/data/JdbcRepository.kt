@@ -104,20 +104,39 @@ object JdbcRepository {
     private fun loadStayRules(c: Connection): List<StayRule> {
         val out = mutableListOf<StayRule>()
         c.createStatement().use { st ->
-            st.executeQuery(
-                "SELECT zone_name, countries, window_type, window_days, window_period_days, multiple_entry, nationalities, note FROM stay_rules",
-            ).use { rs ->
+            st.executeQuery("SELECT * FROM stay_rules").use { rs ->
+                val meta = rs.metaData
+                val indices = HashMap<String, Int>()
+                for (i in 1..meta.columnCount) indices[meta.getColumnLabel(i).lowercase()] = i
+
+                fun str(col: String): String? {
+                    val i = indices[col] ?: return null
+                    val v = rs.getString(i)
+                    return if (rs.wasNull()) null else v
+                }
+                fun intv(col: String): Int? {
+                    val i = indices[col] ?: return null
+                    val v = rs.getInt(i)
+                    return if (rs.wasNull()) null else v
+                }
+
                 while (rs.next()) {
                     out.add(
                         StayRule(
-                            zoneName = rs.getString("zone_name") ?: "",
-                            countries = iso2Array(rs.getString("countries")).toSet(),
-                            windowType = rs.getString("window_type") ?: "",
-                            windowDays = intOrNull(rs, "window_days"),
-                            windowPeriodDays = intOrNull(rs, "window_period_days"),
-                            multipleEntry = rs.getInt("multiple_entry") != 0,
-                            nationalities = iso2Array(rs.getString("nationalities")).toSet(),
-                            note = rs.getString("note"),
+                            zoneName = str("zone_name") ?: str("zone") ?: "",
+                            countries = iso2Array(str("countries")).toSet(),
+                            windowType = str("window_type") ?: "",
+                            windowDays = intv("window_days"),
+                            windowPeriodDays = intv("window_period_days"),
+                            multipleEntry = (intv("multiple_entry") ?: 0) != 0,
+                            nationalities = iso2Array(str("nationalities")).toSet(),
+                            note = str("note"),
+                            id = str("id") ?: "",
+                            zoneId = str("zone"),
+                            extensionDays = intv("extension"),
+                            validFrom = str("valid_from"),
+                            validTo = str("valid_to"),
+                            source = str("source"),
                         ),
                     )
                 }

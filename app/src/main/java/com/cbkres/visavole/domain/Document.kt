@@ -6,7 +6,10 @@ sealed class DocKind {
     data class Passport(val iso2: String) : DocKind()
 
     /** A known VisaDB holding (the 13 bespoke documents, e.g. `schengen-residence`, `us-visa`). */
-    data class Holding(val holdingId: String) : DocKind()
+    data class Holding(
+        val holdingId: String,
+        val entryType: String? = null, // "single" | "double" | "multiple" (visa docs only)
+    ) : DocKind()
 
     /**
      * A fully custom document. [countries] are ISO2 codes it unlocks; [blocId] optionally adds a
@@ -34,3 +37,10 @@ data class Document(
     val validFrom: String? = null, // valid from — ISO-8601 date (YYYY-MM-DD)
     val residenceClass: ResidenceClass? = null, // residence docs only (temporary / long-term / permanent)
 )
+
+/** The document's entry type, if it carries one; passports and residence documents return null. */
+fun Document.entryType(): String? = when (val k = kind) {
+    is DocKind.Passport -> null
+    is DocKind.Holding -> k.entryType
+    is DocKind.Custom -> if (k.kind == "visa" || k.kind == "permit") k.entryType else null
+}

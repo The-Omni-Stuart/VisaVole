@@ -27,10 +27,10 @@ enum class AccessLevel(val rank: Int) {
     fun label(): String = when (this) {
         FREEDOM -> "Freedom of movement"
         RESIDENCE -> "Residence permit"
-        VISA_FREE -> "Visa free / On arrival"
+        VISA_FREE -> "Visa-free / on arrival"
         COVERED -> "Covered by a document"
         ETA -> "ETA (pre-authorisation)"
-        E_VISA -> "e-Visa (apply online)"
+        E_VISA -> "e-visa (apply online)"
         VISA_REQUIRED -> "Visa required"
         REFUSED -> "Entry refused"
         UNKNOWN -> "No documented rule"
