@@ -59,6 +59,20 @@ object TripModel {
         return out
     }
 
+    fun closeTrip(trip: Trip, departure: LocalDate): Trip {
+        val last = sortedStops(trip.stops).lastOrNull() ?: return trip
+        val safeDeparture = departure.takeIf { !it.isBefore(last.arrival) } ?: last.arrival
+        return trip.copy(
+            stops = trip.stops.map { stop ->
+                when {
+                    stop.id == last.id -> stop.copy(departure = safeDeparture)
+                    stop.departure == null -> stop.copy(departure = safeDeparture)
+                    else -> stop
+                }
+            },
+        )
+    }
+
     fun calculate(
         trips: List<Trip>,
         docs: List<Document>,

@@ -10,6 +10,7 @@ import com.cbkres.visavole.data.Holding as DataHolding
 import com.cbkres.visavole.domain.DocKind.Holding
 import com.cbkres.visavole.domain.DocKind.Passport
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -346,5 +347,25 @@ class TripModelTest {
 
         val blocked = warnings.first { it.title == "Entry blocked" }
         assertTrue(blocked.message.contains("visa required"))
+    }
+
+    @Test
+    fun closeTripAppendsDepartureToFinalOpenStop() {
+        val original = trip("t", stop("s1", "DE", today.minusDays(3), today), stop("s2", "FR", today.plusDays(1), null))
+
+        val closed = TripModel.closeTrip(original, today.plusDays(4))
+
+        assertEquals(today.plusDays(4), closed.stops.first { it.id == "s2" }.departure)
+        assertEquals(today, closed.stops.first { it.id == "s1" }.departure)
+        assertFalse(closed.isOpen)
+    }
+
+    @Test
+    fun closeTripClampsDepartureBeforeFinalArrival() {
+        val original = trip("t", stop("s1", "DE", today.plusDays(2), null))
+
+        val closed = TripModel.closeTrip(original, today.minusDays(1))
+
+        assertEquals(today.plusDays(2), closed.stops.first().departure)
     }
 }

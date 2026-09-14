@@ -293,8 +293,8 @@ private fun DocCard(
 ) {
     val effectiveExpiry = effectiveExpiryFor(doc, entryStatus)
     ElevatedCard(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(doc.label, style = MaterialTheme.typography.titleSmall)
                 Text(
                     docSubtitle(
@@ -310,7 +310,6 @@ private fun DocCard(
                 )
             }
             if (effectiveExpiry != null || entryStatus?.total != null) {
-                Spacer(Modifier.width(8.dp))
                 ExpiryStatusPill(doc, today, entryStatus)
             }
             IconButton(onClick = onEdit) {

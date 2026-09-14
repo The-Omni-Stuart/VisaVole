@@ -205,19 +205,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     fun endTrip(id: String, departure: LocalDate) {
         val trip = trips.firstOrNull { it.id == id } ?: return
-        val last = TripModel.sortedStops(trip.stops).lastOrNull() ?: return
-        val safeDeparture = departure.takeIf { !it.isBefore(last.arrival) } ?: last.arrival
-        updateTrip(
-            trip.copy(
-                stops = trip.stops.map { stop ->
-                    when {
-                        stop.id == last.id -> stop.copy(departure = safeDeparture)
-                        stop.departure == null -> stop.copy(departure = safeDeparture)
-                        else -> stop
-                    }
-                },
-            ),
-        )
+        updateTrip(TripModel.closeTrip(trip, departure))
     }
 
     // ---- persistence (JSON in the app's files dir) ----

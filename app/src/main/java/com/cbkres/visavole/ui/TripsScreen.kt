@@ -215,15 +215,15 @@ private fun AllowanceSection(
         Row(verticalAlignment = Alignment.CenterVertically) {
             AllowanceRing(it)
             Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(it.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 it.subtitle?.let { s -> Text(s, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                Text(allowanceSummary(it), style = MaterialTheme.typography.labelMedium, color = allowanceColor(it.status))
+                Text(allowanceSummary(it), style = MaterialTheme.typography.labelMedium, color = ringColor(it))
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(16.dp))
     }
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         allowances.forEach { a ->
             AllowanceCard(a, focused = a.key == focusedKey, onClick = { onFocus(a.key) })
         }
@@ -237,13 +237,6 @@ private fun zoneLabel(rule: StayRule?, fallback: String): String = when {
     rule.zoneName.isNotBlank() -> rule.zoneName
     rule.countries.size == 1 -> fallback
     else -> rule.displayName
-}
-
-private fun allowanceColor(status: AllowanceStatus): Color = when (status) {
-    AllowanceStatus.OK, AllowanceStatus.UNLIMITED -> STATUS_OK
-    AllowanceStatus.WARNING -> STATUS_WARN
-    AllowanceStatus.DANGER, AllowanceStatus.EXHAUSTED -> STATUS_BAD
-    AllowanceStatus.UNKNOWN -> Color(0xFF64748B)
 }
 
 private fun allowanceFraction(a: AllowanceSnapshot): Float = when {
@@ -313,16 +306,37 @@ private fun AllowanceRing(a: AllowanceSnapshot) {
 private fun AllowanceCard(a: AllowanceSnapshot, focused: Boolean, onClick: () -> Unit) {
     Surface(
         color = if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier
-            .width(160.dp)
+            .width(168.dp)
             .clickable(onClick = onClick),
     ) {
-        Column(Modifier.padding(10.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(a.title, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.height(2.dp))
-            Text(allowanceSummary(a), style = MaterialTheme.typography.labelSmall, color = allowanceColor(a.status))
+            Text(allowanceSummary(a), style = MaterialTheme.typography.labelSmall, color = ringColor(a))
         }
+    }
+}
+
+@Composable
+private fun StatusPill(text: String, color: Color) {
+    Surface(shape = RoundedCornerShape(50), color = color.copy(alpha = STATUS_CHIP_ALPHA)) {
+        Text(
+            text,
+            color = color,
+            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+        )
+    }
+}
+
+private fun tripTitle(trip: Trip, world: WorldData): String {
+    val names = TripModel.sortedStops(trip.stops).map { world.countries[it.countryIso2]?.name ?: it.countryIso2 }
+    return when {
+        names.size <= 1 -> names.firstOrNull().orEmpty()
+        names.first() == names.last() -> if (names.toSet().size == 1) names.first() else "${names.first()} → … → ${names.last()}"
+        else -> "${names.first()} → ${names.last()}"
     }
 }
 
@@ -339,12 +353,7 @@ private fun TripCard(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val sortedStops = TripModel.sortedStops(trip.stops)
-    val countryNames = sortedStops.map { world.countries[it.countryIso2]?.name ?: it.countryIso2 }
-    val title = when {
-        countryNames.size <= 1 -> countryNames.firstOrNull().orEmpty()
-        countryNames.first() == countryNames.last() -> if (countryNames.toSet().size == 1) countryNames.first() else "${countryNames.first()} → … → ${countryNames.last()}"
-        else -> "${countryNames.first()} → ${countryNames.last()}"
-    }
+    val title = tripTitle(trip, world)
     val stopCountLabel = if (sortedStops.size > 1) "${sortedStops.size} ${if (sortedStops.size == 1) "stop" else "stops"}" else null
     val docLabels = sortedStops.mapNotNull { it.documentId }.distinct().joinToString(", ") { id ->
         docs.firstOrNull { it.id == id }?.label ?: id
@@ -369,9 +378,9 @@ private fun TripCard(
             .fillMaxWidth()
             .clickable(onClick = { expanded = !expanded })
     ) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     AssistChip(onClick = {}, label = { Text(trip.statusAt(today).label) }, modifier = Modifier.height(24.dp))
                     Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     Text(
@@ -393,7 +402,7 @@ private fun TripCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (zones.isNotEmpty()) {
                         Text(
                             zones.joinToString(", "),
@@ -405,15 +414,15 @@ private fun TripCard(
                         )
                     }
                     allowanceHint?.let {
-                        Text(it, style = MaterialTheme.typography.labelSmall, color = allowanceHintColor, maxLines = 1)
+                        StatusPill(it, allowanceHintColor)
                     }
                 }
                 if (expanded) {
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(12.dp))
                     sortedStops.forEachIndexed { index, stop ->
                         val countryName = world.countries[stop.countryIso2]?.name ?: stop.countryIso2
                         val docLabel = stop.documentId?.let { id -> docs.firstOrNull { it.id == id }?.label ?: id }
-                        Column(Modifier.padding(vertical = 4.dp)) {
+                        Column(Modifier.padding(vertical = 6.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text("${index + 1}.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                                 Text(countryName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
@@ -444,7 +453,7 @@ private fun TripCard(
                     }
                 }
             }
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.padding(start = 4.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(start = 8.dp)) {
                 IconButton(onClick = onEdit) {
                     Icon(Icons.Filled.Edit, contentDescription = "Edit")
                 }
@@ -472,6 +481,8 @@ private data class GapKey(val prevId: String, val nextId: String, val departure:
 
 private data class StopSnapshot(val stops: List<TripStop>)
 
+private data class OngoingConflict(val candidate: Trip, val previous: Trip, val end: LocalDate)
+
 @Composable
 private fun TripAlertDialog(
     title: String,
@@ -496,15 +507,20 @@ private fun TripAlertDialog(
                 Spacer(Modifier.height(12.dp))
                 content()
                 Spacer(Modifier.height(20.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                    if (neutralLabel != null) {
-                        TextButton(onClick = { onNeutral?.invoke() ?: onDismiss() }) { Text(neutralLabel) }
-                        Spacer(Modifier.width(8.dp))
+                if (neutralLabel != null && confirmLabel != null) {
+                    Button(onClick = onConfirm, enabled = confirmEnabled, modifier = Modifier.fillMaxWidth()) { Text(confirmLabel) }
+                    Spacer(Modifier.height(12.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { onNeutral?.invoke() ?: onDismiss() }, modifier = Modifier.weight(1f)) { Text(neutralLabel) }
+                        OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text(dismissLabel) }
                     }
-                    OutlinedButton(onClick = onDismiss) { Text(dismissLabel) }
-                    if (confirmLabel != null) {
-                        Spacer(Modifier.width(12.dp))
-                        Button(onClick = onConfirm, enabled = confirmEnabled) { Text(confirmLabel) }
+                } else {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedButton(onClick = onDismiss) { Text(dismissLabel) }
+                        if (confirmLabel != null) {
+                            Spacer(Modifier.width(12.dp))
+                            Button(onClick = onConfirm, enabled = confirmEnabled) { Text(confirmLabel) }
+                        }
                     }
                 }
             }
@@ -610,21 +626,60 @@ private fun AddTripDialog(
     var acknowledgedGap by remember { mutableStateOf<GapKey?>(null) }
     var lastStopSnapshot by remember { mutableStateOf<StopSnapshot?>(null) }
     var saveWarnings by remember { mutableStateOf<Pair<List<TripWarning>, Boolean>?>(null) }
+    var ongoingConflict by remember { mutableStateOf<OngoingConflict?>(null) }
 
     fun candidate(): Trip = Trip(currentTripId, stops, note.ifBlank { null })
 
-    fun save() {
-        val trip = candidate()
+    fun save(trip: Trip = candidate()) {
         if (isEditingExisting) vm.updateTrip(trip) else vm.addTrip(trip)
         onDismiss()
     }
 
-    fun warningsFor(trip: Trip): List<TripWarning> {
-        val others = ready.trips.filter { it.id != trip.id }
+    fun warningsFor(trip: Trip, tripsOverride: List<Trip> = ready.trips): List<TripWarning> {
+        val others = tripsOverride.filter { it.id != trip.id }
         return TripModel.validateTrip(trip, ready.world, today) +
             TripModel.gapWarningsFor(trip, today) +
             TripModel.overlapWarningsFor(trip, others, ready.docs, ready.world, today) +
             TripModel.projectionWarningsFor(trip, others, ready.docs, ready.world, today)
+    }
+
+    fun ongoingConflictFor(trip: Trip): OngoingConflict? {
+        if (trip.statusAt(today) != TripStatus.ONGOING) return null
+        val previous = ready.trips
+            .filter { it.id != trip.id && it.isOpen }
+            .minByOrNull { it.firstArrival }
+            ?: return null
+        val end = when {
+            trip.firstArrival.isBefore(previous.firstArrival) -> previous.firstArrival
+            trip.firstArrival.isAfter(today) -> today
+            else -> trip.firstArrival
+        }
+        return OngoingConflict(trip, previous, end)
+    }
+
+    fun continueValidation(trip: Trip) {
+        val conflict = ongoingConflictFor(trip)
+        if (conflict != null) {
+            ongoingConflict = conflict
+            return
+        }
+        val warnings = warningsFor(trip)
+        if (warnings.isEmpty()) save(trip) else saveWarnings = warnings to true
+    }
+
+    fun resolveOngoingConflict(closePrevious: Boolean) {
+        val conflict = ongoingConflict ?: return
+        ongoingConflict = null
+        if (closePrevious) {
+            val closed = TripModel.closeTrip(conflict.previous, conflict.end)
+            vm.updateTrip(closed)
+            val updatedTrips = ready.trips.map { if (it.id == closed.id) closed else it }
+            val warnings = warningsFor(conflict.candidate, updatedTrips)
+            if (warnings.isEmpty()) save(conflict.candidate) else saveWarnings = warnings to true
+        } else {
+            val warnings = warningsFor(conflict.candidate)
+            if (warnings.isEmpty()) save(conflict.candidate) else saveWarnings = warnings to true
+        }
     }
 
     fun trySave() {
@@ -634,18 +689,21 @@ private fun AddTripDialog(
             saveWarnings = hard to false
             return
         }
+        val conflict = ongoingConflictFor(trip)
+        if (conflict != null) {
+            ongoingConflict = conflict
+            return
+        }
         if (trip.stops.any { it.departure == null } && initial?.isOpen != true) {
             showOngoingConfirm = true
             return
         }
-        val warnings = warningsFor(trip)
-        if (warnings.isEmpty()) save() else saveWarnings = warnings to true
+        continueValidation(trip)
     }
 
     fun confirmOngoing() {
         showOngoingConfirm = false
-        val warnings = warningsFor(candidate())
-        if (warnings.isEmpty()) save() else saveWarnings = warnings to true
+        continueValidation(candidate())
     }
 
     fun addDepartureFromOngoing() {
@@ -862,6 +920,24 @@ private fun AddTripDialog(
             onBack = { showOngoingConfirm = false },
             onDone = { confirmOngoing() },
             onDismiss = { showOngoingConfirm = false },
+        )
+    }
+    ongoingConflict?.let { conflict ->
+        TripAlertDialog(
+            title = "Another trip is ongoing",
+            confirmLabel = "Close previous & add",
+            onConfirm = { resolveOngoingConflict(true) },
+            neutralLabel = "Keep both",
+            onNeutral = { resolveOngoingConflict(false) },
+            dismissLabel = "Cancel",
+            onDismiss = { ongoingConflict = null },
+            content = {
+                Text(
+                    "“${tripTitle(conflict.previous, ready.world)}” is still open. Close it on ${conflict.end} and add this trip, or keep both.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
         )
     }
     gapIndex?.let { idx ->
