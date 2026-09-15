@@ -27,8 +27,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.zIndex
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import com.cbkres.visavole.ui.HazeBox
@@ -87,6 +85,16 @@ import com.cbkres.visavole.ui.theme.Visa_VoleTheme
 import com.cbkres.visavole.ui.WorldMapCanvas
 import com.cbkres.visavole.ui.HOME
 import com.cbkres.visavole.ui.colorFor
+import com.cbkres.visavole.ui.Focus
+import com.cbkres.visavole.ui.IsoShape
+import com.cbkres.visavole.ui.buildFocus
+import com.cbkres.visavole.ui.buildShapes
+import com.cbkres.visavole.ui.defaultCenter
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.geometry.Offset
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -143,6 +151,12 @@ private fun LoadingScreen() {
 private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
     var tab by remember { mutableIntStateOf(0) }
     var selected by remember { mutableStateOf<String?>(null) }
+    val mapShapes = remember(s.geometry) { buildShapes(s.geometry) }
+    val mapFocus = remember(s.geometry) { buildFocus(s.geometry) }
+    val mapZoom = remember { mutableFloatStateOf(1f) }
+    val mapCenter = remember(s.geometry) { mutableStateOf(defaultCenter(s.geometry)) }
+    val docsScroll = rememberLazyListState()
+    val tripsScroll = rememberLazyListState()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -173,32 +187,31 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
         },
     ) { pad ->
         Box(Modifier.fillMaxSize().padding(pad)) {
-            MapTab(
-                s,
-                selected,
-                { selected = it },
-                active = tab == 0,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .alpha(if (tab == 0) 1f else 0f)
-                    .zIndex(if (tab == 0) 1f else 0f),
-            )
-            DocumentsScreen(
-                vm,
-                s,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .alpha(if (tab == 1) 1f else 0f)
-                    .zIndex(if (tab == 1) 1f else 0f),
-            )
-            TripsScreen(
-                vm,
-                s,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .alpha(if (tab == 2) 1f else 0f)
-                    .zIndex(if (tab == 2) 1f else 0f),
-            )
+            when (tab) {
+                0 -> MapTab(
+                    s,
+                    selected,
+                    { selected = it },
+                    active = true,
+                    shapes = mapShapes,
+                    focus = mapFocus,
+                    zoomState = mapZoom,
+                    centerState = mapCenter,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                1 -> DocumentsScreen(
+                    vm,
+                    s,
+                    scrollState = docsScroll,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                2 -> TripsScreen(
+                    vm,
+                    s,
+                    scrollState = tripsScroll,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 }
@@ -209,6 +222,10 @@ private fun MapTab(
     selected: String?,
     onSelect: (String?) -> Unit,
     active: Boolean = true,
+    shapes: List<IsoShape>,
+    focus: Map<String, Focus>,
+    zoomState: MutableFloatState,
+    centerState: MutableState<Offset>,
     modifier: Modifier = Modifier,
 ) {
     val focusManager = LocalFocusManager.current
@@ -236,6 +253,10 @@ private fun MapTab(
         WorldMapCanvas(
             geometry = s.geometry,
             access = s.access,
+            shapes = shapes,
+            focus = focus,
+            zoomState = zoomState,
+            centerState = centerState,
             selected = selected,
             onCountryTap = pick,
             homeCountries = s.homeCountries,

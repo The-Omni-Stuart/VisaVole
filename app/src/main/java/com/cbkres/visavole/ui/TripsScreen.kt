@@ -17,8 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -93,6 +93,7 @@ private fun LocalDate.toUtcMillis(): Long =
 fun TripsScreen(
     vm: AccessViewModel,
     ready: AppState.Ready,
+    scrollState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
     val today = remember { LocalDate.now(ZoneOffset.UTC) }
@@ -136,7 +137,7 @@ fun TripsScreen(
                 modifier = Modifier.padding(vertical = 16.dp),
             )
         } else {
-            val tripsListState = rememberLazyListState()
+            val tripsListState = scrollState
             val (tripsTop, tripsEnd) = tripsListState.hazeAlphas()
             HazeBox(tripsTop, tripsEnd, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
                 LazyColumn(state = tripsListState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {

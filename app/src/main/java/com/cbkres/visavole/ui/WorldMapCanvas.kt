@@ -22,6 +22,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -104,7 +106,7 @@ private const val ENABLE_VIEWPORT_CULLING = true
  */
 private val FOCUS_MARGIN_OVERRIDE: Map<String, Float> = mapOf("GB" to 0.03f)
 
-private data class IsoShape(
+internal data class IsoShape(
     val iso: String,
     val rings: List<FloatArray>,
     val path: Path,
@@ -119,7 +121,7 @@ private data class DrawShape(
     val fill: Color,
 )
 
-private data class BBox(
+internal data class BBox(
     val minX: Float,
     val minY: Float,
     val maxX: Float,
@@ -135,7 +137,49 @@ private data class BBox(
 }
 
 /** The world point to centre on, plus the bbox used to choose the zoom level for it. */
-private data class Focus(val point: Offset, val bbox: BBox)
+internal data class Focus(val point: Offset, val bbox: BBox)
+
+internal fun buildShapes(geometry: WorldMapData): List<IsoShape> =
+    geometry.countries.map { (iso, shape) ->
+        val path = Path()
+        var area = 0f
+        for (ring in shape.rings) {
+            for (i in ring.indices step 2) {
+                val x = ring[i]
+                val y = ring[i + 1]
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            path.close()
+            area += polygonArea(ring)
+        }
+        IsoShape(iso, shape.rings, path, area, bboxOf(shape.rings))
+    }
+
+/**
+ * Focus = the country's main body: its largest landmass ring plus any rings that sit close to it
+ * (islands hugging the mainland), but not far-flung overseas territories. The margin is tuned so
+ * a colonial power's distant holdings (e.g. the UK's Cyprus bases) don't drag the view out with
+ * them; those bits stay highlighted on the map, they just don't drive the zoom.
+ */
+internal fun buildFocus(geometry: WorldMapData): Map<String, Focus> =
+    geometry.countries.mapValues { (iso, shape) ->
+        val margin = (FOCUS_MARGIN_OVERRIDE[iso] ?: 0.07f) * geometry.width
+        val core = shape.rings.maxByOrNull { ring -> polygonArea(ring) } ?: shape.rings.first()
+        val cb = bboxOf(listOf(core))
+        val exMinX = cb.minX - margin
+        val exMinY = cb.minY - margin
+        val exMaxX = cb.maxX + margin
+        val exMaxY = cb.maxY + margin
+        val included = shape.rings.filter { ring ->
+            val rb = bboxOf(listOf(ring))
+            rb.minX <= exMaxX && rb.maxX >= exMinX && rb.minY <= exMaxY && rb.maxY >= exMinY
+        }
+        val fb = bboxOf(included)
+        Focus(Offset(fb.cx, fb.cy), fb)
+    }
+
+internal fun defaultCenter(geometry: WorldMapData): Offset =
+    Offset(geometry.width * DEFAULT_CENTER_X_FRACTION, geometry.height / 2f)
 
 /**
  * Robinson world choropleth. Each country is filled by the traveller's [Access] level for it.
@@ -147,9 +191,13 @@ private data class Focus(val point: Offset, val bbox: BBox)
  * button resets. Tapping a country (or picking one from the search box) smoothly centres and zooms in.
  */
 @Composable
-fun WorldMapCanvas(
+internal fun WorldMapCanvas(
     geometry: WorldMapData,
     access: Map<String, Access>,
+    shapes: List<IsoShape>,
+    focus: Map<String, Focus>,
+    zoomState: MutableFloatState,
+    centerState: MutableState<Offset>,
     selected: String?,
     onCountryTap: (String?) -> Unit,
     homeCountries: Set<String> = emptySet(),
@@ -168,22 +216,6 @@ fun WorldMapCanvas(
     } else {
         0f
     }
-    val shapes: List<IsoShape> = remember(geometry) {
-        geometry.countries.map { (iso, shape) ->
-            val path = Path()
-            var area = 0f
-            for (ring in shape.rings) {
-                for (i in ring.indices step 2) {
-                    val x = ring[i]
-                    val y = ring[i + 1]
-                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-                }
-                path.close()
-                area += polygonArea(ring)
-            }
-            IsoShape(iso, shape.rings, path, area, bboxOf(shape.rings))
-        }
-    }
     val drawShapes: List<DrawShape> = remember(shapes, access, homeCountries, ownVisaCountries) {
         shapes.map { s ->
             val lvl = access[s.iso]?.level
@@ -200,37 +232,13 @@ fun WorldMapCanvas(
             )
         }
     }
-    // Focus = the country's main body: its largest landmass ring plus any rings that sit close to it
-    // (islands hugging the mainland), but not far-flung overseas territories. The margin is tuned so
-    // a colonial power's distant holdings (e.g. the UK's Cyprus bases) don't drag the view out with
-    // them; those bits stay highlighted on the map, they just don't drive the zoom.
-    val focus: Map<String, Focus> = remember(geometry) {
-        geometry.countries.mapValues { (iso, shape) ->
-            val margin = (FOCUS_MARGIN_OVERRIDE[iso] ?: 0.07f) * geometry.width
-            val core = shape.rings.maxByOrNull { ring -> polygonArea(ring) } ?: shape.rings.first()
-            val cb = bboxOf(listOf(core))
-            val exMinX = cb.minX - margin
-            val exMinY = cb.minY - margin
-            val exMaxX = cb.maxX + margin
-            val exMaxY = cb.maxY + margin
-            val included = shape.rings.filter { ring ->
-                val rb = bboxOf(listOf(ring))
-                rb.minX <= exMaxX && rb.maxX >= exMinX && rb.minY <= exMaxY && rb.maxY >= exMinY
-            }
-            val fb = bboxOf(included)
-            Focus(Offset(fb.cx, fb.cy), fb)
-        }
-    }
-
     val latestOnTap by rememberUpdatedState(onCountryTap)
     val latestSelected by rememberUpdatedState(selected)
     val pointerScope = rememberCoroutineScope()
 
     var canvasSize by remember { mutableStateOf(Size.Zero) }
-    var zoom by remember { mutableStateOf(1f) }
-    var centerWorld by remember {
-        mutableStateOf(Offset(geometry.width * DEFAULT_CENTER_X_FRACTION, geometry.height / 2f))
-    }
+    var zoom by zoomState
+    var centerWorld by centerState
 
     // The scale at which the world fits the canvas at the minimum zoom (zoom == 1).
     val baseScale = if (canvasSize.width > 0f) baseScaleFor(geometry, canvasSize.width, canvasSize.height) else 1f

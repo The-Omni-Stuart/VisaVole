@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -167,6 +168,7 @@ private fun docSubtitle(
 fun DocumentsScreen(
     vm: AccessViewModel,
     ready: AppState.Ready,
+    scrollState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
     var showAdd by remember { mutableStateOf(false) }
@@ -199,7 +201,7 @@ fun DocumentsScreen(
             val today = LocalDate.now(ZoneOffset.UTC)
             val active = ready.docs.filter { !isExpired(it, ready.documentEntryStatus[it.id], today) }
             val archived = ready.docs.filter { isExpired(it, ready.documentEntryStatus[it.id], today) }
-            val docsListState = rememberLazyListState()
+            val docsListState = scrollState
             val (docsTop, docsEnd) = docsListState.hazeAlphas()
             HazeBox(docsTop, docsEnd, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
                 LazyColumn(state = docsListState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
