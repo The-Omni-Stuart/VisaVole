@@ -68,6 +68,7 @@ import com.cbkres.visavole.domain.AccessModel
 import com.cbkres.visavole.domain.AllowanceKind
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.AllowanceStatus
+import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripModel
@@ -76,6 +77,8 @@ import com.cbkres.visavole.domain.TripStatus
 import com.cbkres.visavole.domain.TripWarning
 import com.cbkres.visavole.domain.WarningSeverity
 import com.cbkres.visavole.domain.entryType
+import com.cbkres.visavole.domain.passportCountsByIso
+import com.cbkres.visavole.domain.passportNumbers
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -365,8 +368,10 @@ private fun TripCard(
     val sortedStops = TripModel.sortedStops(trip.stops)
     val title = tripTitle(trip, world)
     val stopCountLabel = if (sortedStops.size > 1) "${sortedStops.size} ${if (sortedStops.size == 1) "stop" else "stops"}" else null
+    val passportCounts = remember(docs) { passportCountsByIso(docs) }
+    val passportNumbers = remember(docs) { passportNumbers(docs) }
     val docLabels = sortedStops.mapNotNull { it.documentId }.distinct().joinToString(", ") { id ->
-        docs.firstOrNull { it.id == id }?.label ?: id
+        docs.firstOrNull { it.id == id }?.displayLabel(passportCounts, passportNumbers) ?: id
     }
     val zones = sortedStops
         .map { stop ->
@@ -431,7 +436,7 @@ private fun TripCard(
                     Spacer(Modifier.height(12.dp))
                     sortedStops.forEachIndexed { index, stop ->
                         val countryName = world.countries[stop.countryIso2]?.name ?: stop.countryIso2
-                        val docLabel = stop.documentId?.let { id -> docs.firstOrNull { it.id == id }?.label ?: id }
+                        val docLabel = stop.documentId?.let { id -> docs.firstOrNull { it.id == id }?.displayLabel(passportCounts, passportNumbers) ?: id }
                         Column(Modifier.padding(vertical = 6.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 Text("${index + 1}.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
@@ -1024,6 +1029,19 @@ private fun AddTripDialog(
     }
 }
 
+/** Display label for [doc]; when the holder keeps several passports of one nationality, append a
+ * stable "(N)" (e.g. "Passport · United Kingdom (2)") so it's clear which passport a stop refers to. */
+private fun Document.displayLabel(counts: Map<String, Int>, numbers: Map<String, Int>): String {
+    val iso = (kind as? DocKind.Passport)?.iso2 ?: return label
+    val n = numbers[id] ?: return label
+    return if ((counts[iso] ?: 0) >= 2) "$label  ($n)" else label
+}
+
+/** Width-safe [displayLabel] for the collapsed preview field: a passport drops the "Passport · "
+ * prefix so the nationality and "(N)" number both fit (e.g. "United Kingdom (1)"). */
+private fun Document.compactDisplayLabel(counts: Map<String, Int>, numbers: Map<String, Int>): String =
+    displayLabel(counts, numbers).removePrefix("Passport · ")
+
 @Composable
 private fun StopRow(
     stop: TripStop,
@@ -1034,6 +1052,8 @@ private fun StopRow(
     onRemove: () -> Unit,
 ) {
     val rule = world.stayRuleFor(stop.countryIso2, AccessModel.homeCountries(docs), today)
+    val passportCounts = remember(docs) { passportCountsByIso(docs) }
+    val passportNumbers = remember(docs) { passportNumbers(docs) }
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = RoundedCornerShape(12.dp),
@@ -1045,7 +1065,7 @@ private fun StopRow(
             Column(Modifier.weight(1f)) {
                 Text(world.countries[stop.countryIso2]?.name ?: stop.countryIso2, style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "${stop.arrival} → ${stop.departure ?: "open"}${docs.firstOrNull { it.id == stop.documentId }?.let { " · ${it.label}" } ?: ""}",
+                    "${stop.arrival} → ${stop.departure ?: "open"}${docs.firstOrNull { it.id == stop.documentId }?.let { " · ${it.displayLabel(passportCounts, passportNumbers)}" } ?: ""}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1100,6 +1120,8 @@ private fun StopEditorDialog(
     }
     val selectedDoc = docs.firstOrNull { it.id == stop.documentId }
     val countrySelected = stop.countryIso2 in world.countries
+    val passportCounts = remember(docs) { passportCountsByIso(docs) }
+    val passportNumbers = remember(docs) { passportNumbers(docs) }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1145,7 +1167,7 @@ private fun StopEditorDialog(
                     Text("Departure: ${stop.departure ?: "open"}", maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Spacer(Modifier.height(8.dp))
-                SelectionField(label = "Document", value = selectedDoc?.label ?: "None") { onSelected ->
+                SelectionField(label = "Document", value = selectedDoc?.compactDisplayLabel(passportCounts, passportNumbers) ?: "None") { onSelected ->
                     DropdownMenuItem(
                         text = { Text("None") },
                         onClick = {
@@ -1156,7 +1178,7 @@ private fun StopEditorDialog(
                     )
                     docs.forEach { d ->
                         DropdownMenuItem(
-                            text = { Text(d.label) },
+                            text = { Text(d.displayLabel(passportCounts, passportNumbers)) },
                             onClick = {
                                 stop = stop.copy(documentId = d.id)
                                 docTouched = true
