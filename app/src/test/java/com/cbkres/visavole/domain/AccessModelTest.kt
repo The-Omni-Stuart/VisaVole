@@ -576,6 +576,77 @@ class AccessModelTest {
         assertEquals(VISA_REQUIRED, bd[0].access.level)
     }
 
+    // ---- relevantDocuments: the stop-editor dropdown's relevance set (mirrors the map breakdown) ----
+
+    @Test fun relevantDocumentsKeepOnlyDocsThatUnlockDest() {
+        val w = world(
+            baseline = mapOf(
+                "GB" to listOf(corridor("GB", "DE", "visa-free", 90)), // GB passport unlocks DE
+                "FR" to listOf(corridor("FR", "SY", "visa-free", 90)), // FR passport does not
+            ),
+        )
+        val docs = listOf(doc("pGB", Passport("GB")), doc("pFR", Passport("FR")))
+        assertEquals(listOf("pGB"), AccessModel.relevantDocuments("DE", docs, w).map { it.id })
+    }
+
+    @Test fun relevantDocumentsDropsUnrelatedVisaResidence() {
+        val w = world(
+            baseline = mapOf("GB" to listOf(corridor("GB", "FR", "visa-free", 90))),
+            holdings = mapOf("ab-res" to DataHolding("ab-res", "Abkhazia Residence", "residency", "AB")),
+        )
+        val docs = listOf(doc("pGB", Passport("GB")), doc("ab", Holding("ab-res")))
+        // The Abkhazia residence unlocks AB (its issuing country), not FR.
+        assertEquals(listOf("pGB"), AccessModel.relevantDocuments("FR", docs, w).map { it.id })
+        // But it IS relevant to its own country — where the GB passport has no rule.
+        assertEquals(listOf("ab"), AccessModel.relevantDocuments("AB", docs, w).map { it.id })
+    }
+
+    @Test fun relevantDocumentsCoversWholeTravelBloc() {
+        // A Schengen visa is relevant to every Schengen member, not just the one it names.
+        val w = world(
+            baseline = mapOf("IN" to listOf(corridor("IN", "DE", "visa-required"))),
+            regimes = listOf(regime("schengen", "Schengen", "visa-free", "DE", "FR", "IT")),
+        )
+        val docs = listOf(doc("v", Custom(setOf("DE"), "schengen", "visa", "schengen-visa")))
+        assertTrue(AccessModel.relevantDocuments("FR", docs, w).isNotEmpty())
+        assertTrue(AccessModel.relevantDocuments("IT", docs, w).isNotEmpty())
+    }
+
+    @Test fun relevantDocumentsDropsExpiredNonPassport() {
+        val w = world(
+            holdings = mapOf("x" to DataHolding("x", "X Visa", "short_term_visa", "SY")),
+            benefits = mapOf("x" to listOf(Benefit("x", "SY", "visa-free", 90))),
+        )
+        val today = LocalDate.of(2026, 9, 8)
+        val docs = listOf(docEx("expired", Holding("x"), "2020-01-01"), docEx("valid", Holding("x"), "2030-01-01"))
+        assertEquals(listOf("valid"), AccessModel.relevantDocuments("SY", docs, w, today).map { it.id })
+    }
+
+    @Test fun relevantDocumentsKeepsExpiredPassportForHomeOnly() {
+        val w = world(
+            baseline = mapOf("CZ" to listOf(corridor("CZ", "JP", "visa-free", 90))),
+            regimes = listOf(regime("eu", "EU", "freedom-of-movement", "CZ", "DE")),
+        )
+        val today = LocalDate.of(2026, 9, 8)
+        val docs = listOf(docEx("p", Passport("CZ"), "2020-01-01"))
+        // Home (CZ) + freedom bloc (DE) stay relevant; the baseline corridor (JP) is dropped.
+        assertTrue(AccessModel.relevantDocuments("CZ", docs, w, today).isNotEmpty())
+        assertTrue(AccessModel.relevantDocuments("DE", docs, w, today).isNotEmpty())
+        assertTrue(AccessModel.relevantDocuments("JP", docs, w, today).isEmpty())
+    }
+
+    @Test fun relevantDocumentsPreservesDocsOrder() {
+        val w = world(
+            baseline = mapOf(
+                "GB" to listOf(corridor("GB", "DE", "visa-free", 90)),
+                "IE" to listOf(corridor("IE", "DE", "visa-free", 90)),
+            ),
+        )
+        val docs = listOf(doc("pIE", Passport("IE")), doc("pGB", Passport("GB")))
+        // Both unlock DE; the original docs order is kept (not re-sorted by rank).
+        assertEquals(listOf("pIE", "pGB"), AccessModel.relevantDocuments("DE", docs, w).map { it.id })
+    }
+
     @Test fun stayLabelForUsesMatchingStayRule() {
         val rolling = StayRule("Western Balkans", setOf("BA"), "rolling", 90, 180, false, setOf("*"), null)
         val passport90 = Access(VISA_FREE, 90, "Passport rule")

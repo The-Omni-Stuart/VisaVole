@@ -222,6 +222,29 @@ object AccessModel {
             .sortedByDescending { it.access.level.rank }
 
     /**
+     * The held documents relevant to entering [dest] — the same set the map's "enter with"
+     * breakdown ([breakdownFor]) shows, kept in the original [docs] order. A passport is always a
+     * candidate (an expired one still counts for its home country / freedom-of-movement blocs); any
+     * other document must be unexpired and have a documented, non-UNKNOWN rule for [dest]. A
+     * document that unlocks nothing for [dest] (e.g. an Abkhazia residence for France) is dropped.
+     */
+    fun relevantDocuments(
+        dest: String,
+        docs: List<Document>,
+        world: WorldData,
+        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+    ): List<Document> =
+        docs.filter { d ->
+            val expired = isExpired(d, today)
+            if (d.kind !is Passport && expired) return@filter false
+            val candidates = when (val k = d.kind) {
+                is Passport -> passportCandidates(k.iso2, world, expired)
+                else -> documentCandidates(d, world)
+            }
+            (candidates[dest]?.level ?: UNKNOWN) != UNKNOWN
+        }
+
+    /**
      * The id of the single held document to suggest for entry into [dest] on [today].
      *
      * Passports are preferred over weaker or redundant visas. A visa / residence / permit is

@@ -1122,6 +1122,14 @@ private fun StopEditorDialog(
     val countrySelected = stop.countryIso2 in world.countries
     val passportCounts = remember(docs) { passportCountsByIso(docs) }
     val passportNumbers = remember(docs) { passportNumbers(docs) }
+    // Mirror the map's country-card: only offer documents that actually unlock the destination.
+    val relevantDocs = remember(stop.countryIso2, stop.arrival, docs) {
+        if (stop.countryIso2 in world.countries) {
+            AccessModel.relevantDocuments(stop.countryIso2, docs, world, stop.arrival)
+        } else {
+            docs
+        }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1176,7 +1184,7 @@ private fun StopEditorDialog(
                             onSelected()
                         },
                     )
-                    docs.forEach { d ->
+                    relevantDocs.forEach { d ->
                         DropdownMenuItem(
                             text = { Text(d.displayLabel(passportCounts, passportNumbers)) },
                             onClick = {
