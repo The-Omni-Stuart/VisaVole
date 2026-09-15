@@ -915,7 +915,11 @@ internal fun CountryPicker(
         .sortedBy { it.value.name }
     LaunchedEffect(list, selected) {
         val selectedIndex = list.indexOfFirst { selected.contains(it.key) }
-        if (selectedIndex >= 0) listState.scrollToItem(selectedIndex)
+        if (selectedIndex < 0) return@LaunchedEffect
+        // Scroll only when the selection is off-screen (e.g. opening in edit mode). Tapping an
+        // already-visible country must not yank it to the top of the list.
+        val visible = listState.layoutInfo.visibleItemsInfo
+        if (visible.none { it.index == selectedIndex }) listState.scrollToItem(selectedIndex)
     }
     Column {
         OutlinedTextField(
