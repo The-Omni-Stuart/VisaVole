@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
@@ -52,6 +53,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -201,6 +203,12 @@ fun DocumentsScreen(
             val today = LocalDate.now(ZoneOffset.UTC)
             val active = ready.docs.filter { !isExpired(it, ready.documentEntryStatus[it.id], today) }
             val archived = ready.docs.filter { isExpired(it, ready.documentEntryStatus[it.id], today) }
+            // How many VALID (non-expired) passports the user holds of each nationality. The primary
+            // star only makes sense when two or more valid passports of the same country compete.
+            val validPassportIsoCounts = active
+                .filter { it.kind is DocKind.Passport }
+                .groupingBy { (it.kind as DocKind.Passport).iso2 }
+                .eachCount()
             val docsListState = scrollState
             val (docsTop, docsEnd) = docsListState.hazeAlphas()
             HazeBox(docsTop, docsEnd, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
@@ -208,6 +216,10 @@ fun DocumentsScreen(
                     if (active.isNotEmpty()) {
                         item(key = "header-active") { SectionLabel("Active") }
                         items(active, key = { it.id }) { doc ->
+                            val iso = (doc.kind as? DocKind.Passport)?.iso2
+                            val sameNatCount = iso?.let { validPassportIsoCounts[it] ?: 0 } ?: 0
+                            val star: (() -> Unit)? =
+                                if (doc.kind is DocKind.Passport && sameNatCount >= 2) { { vm.setPrimary(doc.id) } } else null
                             DocCard(
                                 doc,
                                 ready.world,
@@ -215,6 +227,8 @@ fun DocumentsScreen(
                                 ready.documentEntryStatus[doc.id],
                                 onRemove = { vm.removeDocument(doc.id) },
                                 onEdit = { editing = doc },
+                                isPrimary = doc.id == ready.primaryDocId,
+                                onStar = star,
                             )
                         }
                     }
@@ -228,6 +242,8 @@ fun DocumentsScreen(
                                 ready.documentEntryStatus[doc.id],
                                 onRemove = { vm.removeDocument(doc.id) },
                                 onEdit = { editing = doc },
+                                isPrimary = false,
+                                onStar = null,
                             )
                         }
                     }
@@ -296,6 +312,8 @@ private fun DocCard(
     entryStatus: EntryStatus? = null,
     onRemove: () -> Unit,
     onEdit: () -> Unit,
+    isPrimary: Boolean = false,
+    onStar: (() -> Unit)? = null,
 ) {
     val effectiveExpiry = effectiveExpiryFor(doc, entryStatus)
     ElevatedCard(Modifier.fillMaxWidth()) {
@@ -317,6 +335,17 @@ private fun DocCard(
             }
             if (effectiveExpiry != null || entryStatus?.total != null) {
                 ExpiryStatusPill(doc, today, entryStatus)
+            }
+            if (onStar != null) {
+                IconButton(onClick = onStar) {
+                    Icon(
+                        Icons.Filled.Star,
+                        contentDescription = if (isPrimary) "Primary passport" else "Set as primary",
+                        // material-icons-core has no true Star outline (bug), so the non-primary
+                        // star is the same solid star in a faded grey to stay monochrome.
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isPrimary) 1f else DIM_ALPHA),
+                    )
+                }
             }
             IconButton(onClick = onEdit) {
                 Icon(Icons.Filled.Edit, contentDescription = "Edit")

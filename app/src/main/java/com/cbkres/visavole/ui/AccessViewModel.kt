@@ -13,6 +13,7 @@ import com.cbkres.visavole.domain.Access
 import com.cbkres.visavole.domain.AccessModel
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.Document
+import com.cbkres.visavole.domain.DocumentMigration
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.EntryStatus
 import com.cbkres.visavole.domain.ResidenceClass
@@ -24,6 +25,7 @@ import com.cbkres.visavole.domain.TripStop
 import com.cbkres.visavole.domain.residenceClassFor
 import java.io.File
 import java.time.LocalDate
+import java.time.ZoneOffset
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,9 +35,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-
-/** Stable id for the traveller's home (primary) passport document. */
-const val HOME_DOC_ID = "home"
 
 sealed interface AppState {
     data object Loading : AppState
@@ -50,6 +49,7 @@ sealed interface AppState {
         val tripSections: TripSections = TripSections(emptyList(), emptyList(), emptyList()),
         val allowances: List<AllowanceSnapshot> = emptyList(),
         val documentEntryStatus: Map<String, EntryStatus> = emptyMap(),
+        val primaryDocId: String? = null,
     ) : AppState
 }
 
@@ -57,9 +57,9 @@ sealed interface AppState {
  * Owns the traveller's passports + documents, loads the bundled world once (on a background
  * dispatcher) and recomputes the per-country access map whenever inputs change. Every passport is
  * a "home" country (blue on the map) — see [AccessModel.homeCountries] — and onboarding gates on
- * there being none. The onboarding passport is kept as a first-class [Document] (id
- * [HOME_DOC_ID]) so it appears in, and can be removed from, the documents list like any other.
- * User state is persisted as a small JSON file.
+ * there being none. Each passport is a first-class [Document] with a stable UUID; one of them is
+ * the "primary" ([AppState.Ready.primaryDocId]), used only as a tie-breaker when several held
+ * documents grant equal access to a destination. User state is persisted as a small JSON file.
  */
 class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -73,11 +73,9 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     private var docs: MutableList<Document> = mutableListOf()
     private var trips: MutableList<Trip> = mutableListOf()
+    private var primaryDocId: String? = null
     private var pendingHome: String? = null
     private var reloadGeneration = 0
-
-    private val homeIso: String?
-        get() = (docs.firstOrNull { it.id == HOME_DOC_ID }?.kind as? DocKind.Passport)?.iso2
 
     init {
         readPersisted()
@@ -85,8 +83,8 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
             withContext(Dispatchers.IO) {
                 world = repository.loadWorld(AccessModel.homeCountries(docs))
                 geometry
+                migrateState(world!!)
                 normalizeResidenceClasses(world!!)
-                migrateHomeDoc(world!!)
                 world = repository.loadWorld(AccessModel.homeCountries(docs))
             }
             publish()
@@ -106,14 +104,36 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Promote a legacy "home" string (pre home-as-document) into a first-class document. */
-    private fun migrateHomeDoc(w: WorldData) {
-        val iso = pendingHome ?: return
-        pendingHome = null
-        if (docs.none { it.id == HOME_DOC_ID }) {
-            docs = (listOf(Document(HOME_DOC_ID, "Passport · ${w.countries[iso]?.name ?: iso}", DocKind.Passport(iso))) + docs).toMutableList()
-            persist()
+    /**
+     * One-time upgrade to the UUID-based passport model: convert the legacy `id="home"` passport
+     * into a fresh UUID (remapping any trips that referenced it), create a document for a legacy
+     * home iso that never became a document, and make sure a primary passport is set. Idempotent.
+     */
+    private fun migrateState(w: WorldData) {
+        var changed = false
+        val (newDocs, newTrips, newHomeId) = DocumentMigration.legacyHomeToUuid(docs, trips)
+        if (newHomeId != null) {
+            docs = newDocs.toMutableList()
+            trips = newTrips.toMutableList()
+            if (primaryDocId == null) primaryDocId = newHomeId
+            changed = true
         }
+        pendingHome?.let { iso ->
+            if (docs.none { (it.kind as? DocKind.Passport)?.iso2 == iso }) {
+                val newId = UUID.randomUUID().toString()
+                docs = (listOf(Document(newId, "Passport · ${w.countries[iso]?.name ?: iso}", DocKind.Passport(iso))) + docs).toMutableList()
+                if (primaryDocId == null) primaryDocId = newId
+                changed = true
+            }
+            pendingHome = null
+        }
+        if (primaryDocId == null) {
+            docs.firstOrNull { it.kind is DocKind.Passport }?.let {
+                primaryDocId = it.id
+                changed = true
+            }
+        }
+        if (changed) persist()
     }
 
     private fun publish() {
@@ -135,8 +155,16 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
             tripSections = calc.sections,
             allowances = calc.allowances,
             documentEntryStatus = calc.entryStatus,
+            primaryDocId = effectivePrimaryId(),
         )
     }
+
+    /**
+     * The effective primary passport: the starred one if it's still a valid (non-expired) passport,
+     * otherwise the first valid passport. Used only as a tie-breaker by [AccessModel.bestDocumentId].
+     */
+    private fun effectivePrimaryId(): String? =
+        DocumentMigration.effectivePrimaryId(docs, primaryDocId, LocalDate.now(ZoneOffset.UTC))
 
     private fun updateDocs(nextDocs: List<Document>) {
         val oldHomes = AccessModel.homeCountries(docs)
@@ -160,29 +188,33 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setHome(iso2: String, expiry: String? = null) {
-        val homeDoc = Document(HOME_DOC_ID, "Passport · ${world?.countries?.get(iso2)?.name ?: iso2}", DocKind.Passport(iso2), null, expiry)
-        updateDocs(listOf(homeDoc) + docs.filterNot { it.id == HOME_DOC_ID })
+        val newId = UUID.randomUUID().toString()
+        val homeDoc = Document(newId, "Passport · ${world?.countries?.get(iso2)?.name ?: iso2}", DocKind.Passport(iso2), null, expiry)
+        primaryDocId = newId
+        updateDocs(listOf(homeDoc) + docs.filterNot { (it.kind as? DocKind.Passport)?.iso2 == iso2 })
     }
 
     fun addDocument(doc: Document) {
+        if (primaryDocId == null && doc.kind is DocKind.Passport) primaryDocId = doc.id
         updateDocs(docs.filterNot { it.id == doc.id } + doc)
     }
 
     fun updateDocument(doc: Document) = addDocument(doc)
 
     fun removeDocument(id: String) {
-        val next = if (id != HOME_DOC_ID) {
-            docs.filterNot { it.id == id }
-        } else {
-            var nextDocs = docs.filterNot { it.id == id }
-            docs.firstOrNull { it.kind is DocKind.Passport }?.let { p ->
-                val iso = (p.kind as DocKind.Passport).iso2
-                val promoted = p.copy(id = HOME_DOC_ID, label = "Passport · ${world?.countries?.get(iso)?.name ?: iso}")
-                nextDocs = nextDocs.map { if (it.id == p.id) promoted else it }
-            }
-            nextDocs
-        }
+        val next = docs.filterNot { it.id == id }
+        if (primaryDocId == id) primaryDocId = next.firstOrNull { it.kind is DocKind.Passport }?.id
         updateDocs(next)
+    }
+
+    /** Star/un-star [id] as the primary passport (a pure tie-breaker). Tapping the current one clears it. */
+    fun setPrimary(id: String?) {
+        val target = if (id != null && id != primaryDocId) id else null
+        if (target != primaryDocId) {
+            primaryDocId = target
+            persist()
+            publish()
+        }
     }
 
     fun addTrip(trip: Trip) {
@@ -214,8 +246,8 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     private fun persist() {
         try {
             val root = JSONObject()
-            root.put("schemaVersion", 2)
-            root.put("home", homeIso ?: JSONObject.NULL)
+            root.put("schemaVersion", 3)
+            root.put("primaryDocId", primaryDocId ?: JSONObject.NULL)
             val arr = JSONArray()
             docs.forEach { arr.put(docToJson(it)) }
             root.put("docs", arr)
@@ -231,7 +263,8 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         try {
             if (!file.exists()) return
             val root = JSONObject(file.readText())
-            pendingHome = if (root.isNull("home")) null else root.optString("home").ifEmpty { null }
+            primaryDocId = root.strOrNull("primaryDocId")
+            pendingHome = if (primaryDocId == null) (if (root.isNull("home")) null else root.optString("home").ifEmpty { null }) else null
             val arr = root.optJSONArray("docs") ?: JSONArray()
             val list = mutableListOf<Document>()
             for (i in 0 until arr.length()) list.add(jsonToDoc(arr.getJSONObject(i)))

@@ -341,6 +341,46 @@ class AccessModelTest {
         assertEquals("p", AccessModel.bestDocumentId("AD", docs, w))
     }
 
+    // ---- primary passport: a pure tie-breaker (star wins only on an exact access tie) ----
+
+    @Test fun bestDocumentPrimaryBreaksTieBetweenIdenticalPassports() {
+        val w = world(baseline = mapOf("RU" to listOf(corridor("RU", "DE", "visa-free", 90))))
+        val docs = listOf(doc("p1", Passport("RU")), doc("p2", Passport("RU")))
+        // No primary: the first passport wins the tie (previous behaviour).
+        assertEquals("p1", AccessModel.bestDocumentId("DE", docs, w))
+        // Star the second passport: it now wins the tie.
+        assertEquals("p2", AccessModel.bestDocumentId("DE", docs, w, primaryId = "p2"))
+        // Star the first: it still wins.
+        assertEquals("p1", AccessModel.bestDocumentId("DE", docs, w, primaryId = "p1"))
+        // A primary that isn't among the tied docs: falls back to the first.
+        assertEquals("p1", AccessModel.bestDocumentId("DE", docs, w, primaryId = "pX"))
+    }
+
+    @Test fun bestDocumentPrimaryNeverOverridesAStrongerPassport() {
+        val w = world(
+            baseline = mapOf(
+                "GB" to listOf(corridor("GB", "SY", "visa-required")),
+                "IE" to listOf(corridor("IE", "SY", "visa-free", 90)),
+            ),
+        )
+        val docs = listOf(doc("pGB", Passport("GB")), doc("pIE", Passport("IE")))
+        // Star the WEAK passport: the stronger non-starred passport still wins.
+        assertEquals("pIE", AccessModel.bestDocumentId("SY", docs, w, primaryId = "pGB"))
+        // Star the strong one: it wins (as before).
+        assertEquals("pIE", AccessModel.bestDocumentId("SY", docs, w, primaryId = "pIE"))
+    }
+
+    @Test fun bestDocumentPrimaryBreaksTieWithinDocuments() {
+        val w = world(
+            holdings = mapOf("x" to DataHolding("x", "X Visa", "short_term_visa", "SY")),
+            benefits = mapOf("x" to listOf(Benefit("x", "SY", "visa-free", 90))),
+        )
+        // Two identical visas: the starred one wins the tie.
+        val docs = listOf(doc("v1", Holding("x")), doc("v2", Holding("x")))
+        assertEquals("v1", AccessModel.bestDocumentId("SY", docs, w))
+        assertEquals("v2", AccessModel.bestDocumentId("SY", docs, w, primaryId = "v2"))
+    }
+
     @Test fun mobilityBlocPrefersFreedomThenLargest() {
         val w = world(
             regimes = listOf(

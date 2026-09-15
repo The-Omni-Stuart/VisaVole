@@ -882,6 +882,7 @@ private fun AddTripDialog(
                 isFinal = ordered.last().id == stop.id,
                 carryDocumentId = ordered.getOrNull(stopIndex - 1)?.documentId,
                 initiallyEditingDeparture = departureFocusStopId == stop.id,
+                primaryDocId = ready.primaryDocId,
                 onDone = { updated ->
                     editingStopId = null
                     departureFocusStopId = null
@@ -908,6 +909,7 @@ private fun AddTripDialog(
             docs = ready.docs,
             isFinal = true,
             carryDocumentId = TripModel.sortedStops(stops).lastOrNull()?.documentId,
+            primaryDocId = ready.primaryDocId,
             onDone = { updated ->
                 pendingNewStop = null
                 lastStopSnapshot = StopSnapshot(stops)
@@ -1074,6 +1076,7 @@ private fun StopEditorDialog(
     onDismiss: () -> Unit,
     carryDocumentId: String? = null,
     initiallyEditingDeparture: Boolean = false,
+    primaryDocId: String? = null,
 ) {
     var stop by remember { mutableStateOf(initial) }
     var countryQuery by remember { mutableStateOf("") }
@@ -1084,7 +1087,7 @@ private fun StopEditorDialog(
     LaunchedEffect(stop, docs, carryDocumentId) {
         if (docTouched) return@LaunchedEffect
         val preferred = carryDocumentId?.takeIf { id -> docs.any { it.id == id } }
-            ?: AccessModel.bestDocumentId(stop.countryIso2, docs, world, stop.arrival)
+            ?: AccessModel.bestDocumentId(stop.countryIso2, docs, world, stop.arrival, primaryDocId)
         if (preferred != stop.documentId) {
             stop = stop.copy(documentId = preferred)
         }

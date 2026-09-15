@@ -66,7 +66,7 @@ object AccessModel {
     }
 
     /** True when [doc] carries an expiry date already in the past (relative to [today]). */
-    private fun isExpired(doc: Document, today: LocalDate): Boolean {
+    internal fun isExpired(doc: Document, today: LocalDate): Boolean {
         val iso = doc.expiry ?: return false
         return runCatching { LocalDate.parse(iso) }.getOrNull()?.let { it.isBefore(today) } ?: false
     }
@@ -235,6 +235,7 @@ object AccessModel {
         docs: List<Document>,
         world: WorldData,
         today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        primaryId: String? = null,
     ): String? {
         val evaluated = docs
             .mapNotNull { doc ->
@@ -245,12 +246,8 @@ object AccessModel {
                 }
                 candidates[dest]?.takeIf { it.level != UNKNOWN }?.let { doc to it }
             }
-        val bestPassport = evaluated
-            .filter { it.first.kind is Passport }
-            .maxWithOrNull { a, b -> compareDocumentAccess(a.second, b.second) }
-        val bestOther = evaluated
-            .filter { it.first.kind !is Passport }
-            .maxWithOrNull { a, b -> compareDocumentAccess(a.second, b.second) }
+        val bestPassport = bestWithPrimary(evaluated.filter { it.first.kind is Passport }, primaryId)
+        val bestOther = bestWithPrimary(evaluated.filter { it.first.kind !is Passport }, primaryId)
         return when {
             bestPassport == null -> bestOther?.first?.id
             bestOther == null -> bestPassport.first.id
@@ -265,6 +262,21 @@ object AccessModel {
                 }
             }
         }
+    }
+
+    /**
+     * The strongest of [cands]; on an exact access tie the [primaryId] document wins. This is a pure
+     * tie-breaker (e.g. choosing a favourite among several identical passports) and never overrides
+     * the passport-vs-residence resolution, which runs on the access objects alone.
+     */
+    private fun bestWithPrimary(
+        cands: List<Pair<Document, Access>>,
+        primaryId: String?,
+    ): Pair<Document, Access>? {
+        if (cands.isEmpty()) return null
+        val top = cands.maxWithOrNull { a, b -> compareDocumentAccess(a.second, b.second) } ?: return null
+        val tied = cands.filter { compareDocumentAccess(it.second, top.second) == 0 }
+        return tied.firstOrNull { it.first.id == primaryId } ?: tied.first()
     }
 
     private fun isResidenceDocument(doc: Document, world: WorldData): Boolean = when (val k = doc.kind) {

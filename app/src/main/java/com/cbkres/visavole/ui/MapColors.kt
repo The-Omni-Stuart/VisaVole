@@ -35,6 +35,10 @@ fun colorFor(level: AccessLevel?): Color = when (level) {
 // Accessible text/pill tones derived from the map palette. The bright map fills are for the
 // canvas; these darker shades are for labels and tonal chips on theme-driven surfaces.
 const val STATUS_CHIP_ALPHA = 0.16f
+// The standard dimming for an inactive/disabled control — e.g. the delete button while a doc
+// is in use, or a non-primary passport star. One shared value so every "greyed out" element
+// reads with the same tone.
+const val DIM_ALPHA = 0.35f
 val STATUS_OK = Color(0xFF15803D)
 val STATUS_WARN = Color(0xFFC2410C)
 val STATUS_BAD = Color(0xFFB91C1C)
