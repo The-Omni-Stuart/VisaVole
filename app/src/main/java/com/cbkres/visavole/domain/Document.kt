@@ -65,6 +65,21 @@ fun Document.duplicateSignature(): String = when (val k = kind) {
 }
 
 /**
+ * The document's structural identity — what makes it "the same document in the world": its type and
+ * the country / bloc / holding it belongs to. Deliberately excludes its attributes (number, dates,
+ * entry type, residence class), which are harmless to change. Two documents whose keys differ are a
+ * different document (e.g. a UK passport vs a French one, a visa vs a residence). Used to stop a
+ * document that a trip still references from being re-identified, which would silently change what
+ * the trip was entered with and how its stay allowance is calculated.
+ */
+fun Document.identityKey(): String = when (val k = kind) {
+    is DocKind.Passport -> "P|${k.iso2}"
+    is DocKind.Holding -> "H|${k.holdingId}"
+    is DocKind.Custom ->
+        "C|${k.countries.sorted().joinToString(",")}|${k.blocId.orEmpty()}|${k.kind}|${k.holdingId.orEmpty()}"
+}
+
+/**
  * The non-passport document's category for the "one valid visa/residence per country" rule:
  * "residence" or "visa". Passports return null — their multiplicity is allowed (they are numbered
  * instead and governed by [duplicateSignature]).

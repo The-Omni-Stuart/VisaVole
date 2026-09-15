@@ -77,6 +77,70 @@ class DocumentTest {
         assertNotEquals(a.duplicateSignature(), c.duplicateSignature())
     }
 
+    // ---- identityKey: what counts as "the same document" for the in-use edit guard ----
+
+    @Test fun passportIdentityIsItsCountry() {
+        val a = Document("a", "Passport · GB", DocKind.Passport("GB"))
+        val b = Document("b", "Passport · GB", DocKind.Passport("GB"))
+        assertEquals(a.identityKey(), b.identityKey())
+    }
+
+    @Test fun passportDifferentCountryIsDifferentIdentity() {
+        val a = Document("a", "Passport · GB", DocKind.Passport("GB"))
+        val b = Document("b", "Passport · FR", DocKind.Passport("FR"))
+        assertNotEquals(a.identityKey(), b.identityKey())
+    }
+
+    @Test fun passportDatesAndNumberDoNotChangeIdentity() {
+        val a = Document("a", "Passport · GB", DocKind.Passport("GB"), countryNumber = "123", expiry = "2031-05-01", validFrom = "2021-05-01")
+        val b = Document("b", "Passport · GB", DocKind.Passport("GB"), countryNumber = "456", expiry = "2035-05-01", validFrom = "2022-01-01")
+        assertEquals(a.identityKey(), b.identityKey())
+    }
+
+    @Test fun passportChangedToVisaIsDifferentIdentity() {
+        val a = Document("a", "Passport · FR", DocKind.Passport("FR"))
+        val b = Document("b", "Visa: FR", DocKind.Custom(setOf("FR"), kind = "visa"))
+        assertNotEquals(a.identityKey(), b.identityKey())
+    }
+
+    @Test fun holdingIdentityIsItsHoldingId() {
+        val a = Document("a", "Schengen Visa", DocKind.Holding("schengen-visa"))
+        val b = Document("b", "Schengen Visa", DocKind.Holding("schengen-visa"))
+        assertEquals(a.identityKey(), b.identityKey())
+    }
+
+    @Test fun holdingChangedIsDifferentIdentity() {
+        val a = Document("a", "FR Residence", DocKind.Holding("fr-res"))
+        val b = Document("b", "FR Visa", DocKind.Holding("fr-visa"))
+        assertNotEquals(a.identityKey(), b.identityKey())
+    }
+
+    @Test fun customIdentityNormalisesCountryOrder() {
+        val a = Document("a", "residence: FR, DE", DocKind.Custom(setOf("FR", "DE"), kind = "residence"))
+        val b = Document("b", "residence: DE, FR", DocKind.Custom(setOf("DE", "FR"), kind = "residence"))
+        assertEquals(a.identityKey(), b.identityKey())
+    }
+
+    @Test fun customEntryTypeDoesNotChangeIdentity() {
+        val a = Document("a", "Visa: FR", DocKind.Custom(setOf("FR"), kind = "visa", entryType = "single"))
+        val b = Document("b", "Visa: FR", DocKind.Custom(setOf("FR"), kind = "visa", entryType = "multiple"))
+        assertEquals(a.identityKey(), b.identityKey())
+    }
+
+    @Test fun customBlocOrHoldingChangeIsDifferentIdentity() {
+        val base = Document("a", "residence: FR", DocKind.Custom(setOf("FR"), kind = "residence"))
+        val withBloc = Document("b", "residence: FR", DocKind.Custom(setOf("FR"), blocId = "eu", kind = "residence"))
+        val withHolding = Document("c", "residence: FR", DocKind.Custom(setOf("FR"), kind = "residence", holdingId = "fr-res"))
+        assertNotEquals(base.identityKey(), withBloc.identityKey())
+        assertNotEquals(base.identityKey(), withHolding.identityKey())
+    }
+
+    @Test fun customKindChangeIsDifferentIdentity() {
+        val a = Document("a", "Visa: FR", DocKind.Custom(setOf("FR"), kind = "visa"))
+        val b = Document("b", "Residence: FR", DocKind.Custom(setOf("FR"), kind = "residence"))
+        assertNotEquals(a.identityKey(), b.identityKey())
+    }
+
     // ---- docCategory / coveredCountries ----
 
     @Test fun passportHasNoCategoryAndCoversItsCountry() {

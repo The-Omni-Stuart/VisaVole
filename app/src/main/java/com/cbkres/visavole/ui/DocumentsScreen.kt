@@ -77,6 +77,7 @@ import com.cbkres.visavole.domain.coveredCountries
 import com.cbkres.visavole.domain.defaultResidenceClassFor
 import com.cbkres.visavole.domain.docCategory
 import com.cbkres.visavole.domain.duplicateSignature
+import com.cbkres.visavole.domain.identityKey
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.domain.referencedDocumentIds
@@ -302,6 +303,7 @@ fun DocumentsScreen(
             onAdd = { vm.updateDocument(it) },
             onDismiss = { editing = null },
             onEditExisting = { editing = it },
+            inUse = editing?.let { it.id in referencedDocumentIds(ready.trips) } == true,
         )
     }
 }
@@ -476,6 +478,7 @@ fun AddDocumentDialog(
     initial: Document? = null,
     existingDocs: List<Document> = emptyList(),
     onEditExisting: (Document) -> Unit,
+    inUse: Boolean = false,
 ) {
     val countries = world.countries
     val initPassport = initial?.kind as? DocKind.Passport
@@ -537,6 +540,7 @@ fun AddDocumentDialog(
     var expiryDate by remember { mutableStateOf(initial?.expiry?.toUtcMillis()) }
     var validFromDate by remember { mutableStateOf(initial?.validFrom?.toUtcMillis()) }
     var showMultiCountryWarning by remember { mutableStateOf(false) }
+    var identityLocked by remember { mutableStateOf(false) }
 
     // A residence/visa earns short-stay travel, not freedom of movement — infer the visa-free
     // travel bloc (e.g. Schengen for an EU residence) rather than the freedom-of-movement bloc.
@@ -615,6 +619,14 @@ fun AddDocumentDialog(
     // ignored), so changing only the dates turns a duplicate into a distinct document.
     fun commit() {
         val doc = build()
+        // A trip references this document by id, so its identity (type / country / bloc / holding)
+        // can't change — that would silently re-point the trip's "entered with" and its allowance
+        // math. Harmless attribute edits (number, dates, entry type, residence class) are still
+        // allowed. The check re-runs on every Save, so reverting the identity unblocks it.
+        if (inUse && initial != null && doc.identityKey() != initial.identityKey()) {
+            identityLocked = true
+            return
+        }
         val duplicate = existingDocs.firstOrNull {
             it.id != doc.id && it.duplicateSignature() == doc.duplicateSignature()
         }
@@ -870,6 +882,23 @@ fun AddDocumentDialog(
                         }
                         append(". Are you sure you want to save?")
                     },
+                )
+            },
+        )
+    }
+    if (identityLocked) {
+        AlertDialog(
+            onDismissRequest = { identityLocked = false },
+            confirmButton = {
+                TextButton(onClick = { identityLocked = false }) { Text("Got it") }
+            },
+            title = { Text("In use by a trip") },
+            text = {
+                Text(
+                    "This document is used by a trip, so its type or country can't be changed here — " +
+                        "doing so would silently change what the trip was entered with and how its stay " +
+                        "allowance is calculated. To change it, re-point that trip to a different document " +
+                        "(or delete the trip) first. You can still edit its dates, number, and entry type.",
                 )
             },
         )
