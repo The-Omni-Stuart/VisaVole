@@ -125,6 +125,14 @@ data class WorldData(
         "SA" to "gcc",          // GCC residency (SA/QA/OM/BH/KW)
     )
 
+    /** The ISO2 countries a [Holding] applies to: a known bloc's members when it issues for a bloc code, else just its issuing country. */
+    fun holdingCountries(holdingId: String): Set<String> {
+        val h = holdings[holdingId] ?: return emptySet()
+        return blocHoldings[h.issuingCountry]
+            ?.let { id -> regimes.firstOrNull { it.id == id }?.members?.toSet() }
+            ?: setOf(h.issuingCountry)
+    }
+
     /**
      * The known holding that best matches a custom document built from [countries] + [kind], so its
      * travel perks apply automatically (e.g. a Czech residence → `schengen-residence`). Returns null

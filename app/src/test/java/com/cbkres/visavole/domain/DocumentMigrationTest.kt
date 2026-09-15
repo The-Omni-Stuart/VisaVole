@@ -117,4 +117,23 @@ class DocumentMigrationTest {
         val docs = listOf(Document("p1", "Passport · RU", DocKind.Passport("RU"), expiry = "2020-01-01"))
         assertNull(DocumentMigration.effectivePrimaryId(docs, primaryId = null, today = LocalDate.parse("2026-01-01")))
     }
+
+    // ---- deletion guard: a doc referenced by any stop of any trip cannot be removed ----
+
+    @Test fun referencedDocumentIdsCollectsAllStopDocsAcrossTrips() {
+        val t1 = Trip("t1", listOf(
+            TripStop("s1", "DE", LocalDate.parse("2026-10-01"), LocalDate.parse("2026-10-07"), documentId = "p1"),
+            TripStop("s2", "FR", LocalDate.parse("2026-10-07"), null, documentId = "p2"),
+        ))
+        val t2 = Trip("t2", listOf(
+            TripStop("s3", "IT", LocalDate.parse("2025-01-01"), LocalDate.parse("2025-01-05"), documentId = "p1"), // duplicate + past trip
+            TripStop("s4", "ES", LocalDate.parse("2025-01-05"), null), // no doc
+        ))
+        assertEquals(setOf("p1", "p2"), referencedDocumentIds(listOf(t1, t2)))
+    }
+
+    @Test fun referencedDocumentIdsIsEmptyWhenNoStopHasADoc() {
+        val trips = listOf(Trip("t1", listOf(TripStop("s1", "DE", LocalDate.parse("2026-10-01"), null))))
+        assertTrue(referencedDocumentIds(trips).isEmpty())
+    }
 }

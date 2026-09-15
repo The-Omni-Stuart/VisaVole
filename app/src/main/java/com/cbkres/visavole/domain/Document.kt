@@ -1,5 +1,8 @@
 package com.cbkres.visavole.domain
 
+import com.cbkres.visavole.data.WorldData
+import java.time.LocalDate
+
 /** What a document is, and what it unlocks. */
 sealed class DocKind {
     /** A nationality. Contributes the passport's baseline corridors + its bloc (regime) freedom. */
@@ -44,3 +47,77 @@ fun Document.entryType(): String? = when (val k = kind) {
     is DocKind.Holding -> k.entryType
     is DocKind.Custom -> if (k.kind == "visa" || k.kind == "permit") k.entryType else null
 }
+
+/**
+ * Identity used to detect duplicate documents. Two documents are a true duplicate when they share
+ * this signature. A passport is keyed by nationality + validity window, so the same country with
+ * different valid-from/expiry dates is a distinct (allowed) passport; a holding by its holding id +
+ * validity window; a custom doc by its unlocked countries/bloc/kind + validity window.
+ */
+fun Document.duplicateSignature(): String = when (val k = kind) {
+    is DocKind.Passport ->
+        "P|${k.iso2}|${countryNumber.orEmpty()}|${validFrom.orEmpty()}|${expiry.orEmpty()}"
+    is DocKind.Holding ->
+        "H|${k.holdingId}|${k.entryType.orEmpty()}|${validFrom.orEmpty()}|${expiry.orEmpty()}"
+    is DocKind.Custom ->
+        "C|${k.countries.sorted().joinToString(",")}|${k.blocId.orEmpty()}|${k.kind}|" +
+            "${k.holdingId.orEmpty()}|${k.entryType.orEmpty()}|${validFrom.orEmpty()}|${expiry.orEmpty()}"
+}
+
+/**
+ * The non-passport document's category for the "one valid visa/residence per country" rule:
+ * "residence" or "visa". Passports return null — their multiplicity is allowed (they are numbered
+ * instead and governed by [duplicateSignature]).
+ */
+fun Document.docCategory(world: WorldData): String? = when (val k = kind) {
+    is DocKind.Passport -> null
+    is DocKind.Holding -> world.holdings[k.holdingId]?.let { h ->
+        if (h.category == "residency" || h.category == "long_term_visa") "residence" else "visa"
+    }
+    is DocKind.Custom -> if (k.kind == "residence") "residence" else "visa"
+}
+
+/**
+ * The ISO2 countries a document applies to: a passport's nationality, a holding's coverage
+ * ([WorldData.holdingCountries]), or a custom document's explicit [DocKind.Custom.countries].
+ */
+fun Document.coveredCountries(world: WorldData): Set<String> = when (val k = kind) {
+    is DocKind.Passport -> setOf(k.iso2)
+    is DocKind.Holding -> world.holdingCountries(k.holdingId)
+    is DocKind.Custom -> k.countries
+}
+
+/**
+ * The existing document that blocks [candidate] under the "at most one valid visa/residence per
+ * country" rule, or null. A visa/residence candidate is blocked by a still-valid (not-yet-expired)
+ * existing document of the SAME category (residence vs residence, visa vs visa) that shares at least
+ * one country. Passports return null (their multiplicity is allowed and handled by numbering).
+ */
+fun Document.conflictsWith(existing: List<Document>, world: WorldData, today: LocalDate): Document? {
+    val category = docCategory(world) ?: return null
+    val mine = coveredCountries(world)
+    return existing.firstOrNull { o ->
+        o.id != id &&
+            o.docCategory(world) == category &&
+            o.coveredCountries(world).any { c -> c in mine } &&
+            !AccessModel.isExpired(o, today)
+    }
+}
+
+/**
+ * A stable 1-based number for each passport, per nationality, in the given (insertion) order. The
+ * first passport added of a country is (1), the second (2), and so on. Numbering every passport —
+ * valid and expired alike — keeps each one identifiable (e.g. still "(2)") even after it lapses, at
+ * which point it is further distinguished by its expiry date.
+ */
+fun passportNumbers(docs: List<Document>): Map<String, Int> =
+    docs.filter { it.kind is DocKind.Passport }
+        .groupBy { (it.kind as DocKind.Passport).iso2 }
+        .flatMap { (_, list) -> list.mapIndexed { i, d -> d.id to (i + 1) } }
+        .toMap()
+
+/** The total number of passports held (valid and expired) per nationality. */
+fun passportCountsByIso(docs: List<Document>): Map<String, Int> =
+    docs.filter { it.kind is DocKind.Passport }
+        .groupingBy { (it.kind as DocKind.Passport).iso2 }
+        .eachCount()

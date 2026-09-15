@@ -49,6 +49,15 @@ data class TripSections(
     val previous: List<Trip>,
 )
 
+/**
+ * The set of document ids referenced by any stop of any trip (across all trip statuses).
+ * A document in this set cannot be deleted until the referencing stop is re-pointed to
+ * another document or the trip is removed. Ending a trip does not free its document —
+ * the stop keeps its [TripStop.documentId].
+ */
+fun referencedDocumentIds(trips: List<Trip>): Set<String> =
+    trips.flatMap { t -> t.stops.mapNotNull { s -> s.documentId } }.toSet()
+
 enum class AllowanceKind {
     ROLLING,
     PER_ENTRY,

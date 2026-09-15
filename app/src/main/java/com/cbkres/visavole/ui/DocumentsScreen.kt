@@ -72,7 +72,14 @@ import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.EntryState
 import com.cbkres.visavole.domain.EntryStatus
 import com.cbkres.visavole.domain.ResidenceClass
+import com.cbkres.visavole.domain.conflictsWith
+import com.cbkres.visavole.domain.coveredCountries
 import com.cbkres.visavole.domain.defaultResidenceClassFor
+import com.cbkres.visavole.domain.docCategory
+import com.cbkres.visavole.domain.duplicateSignature
+import com.cbkres.visavole.domain.passportCountsByIso
+import com.cbkres.visavole.domain.passportNumbers
+import com.cbkres.visavole.domain.referencedDocumentIds
 import com.cbkres.visavole.domain.residenceClassFor
 import java.time.Instant
 import java.time.LocalDate
@@ -175,6 +182,7 @@ fun DocumentsScreen(
 ) {
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Document?>(null) }
+    var blockedRemove by remember { mutableStateOf(false) }
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         Text("Documents", style = MaterialTheme.typography.headlineSmall)
         Text(
@@ -201,6 +209,7 @@ fun DocumentsScreen(
             )
         } else {
             val today = LocalDate.now(ZoneOffset.UTC)
+            val referencedDocIds = remember(ready.trips) { referencedDocumentIds(ready.trips) }
             val active = ready.docs.filter { !isExpired(it, ready.documentEntryStatus[it.id], today) }
             val archived = ready.docs.filter { isExpired(it, ready.documentEntryStatus[it.id], today) }
             // How many VALID (non-expired) passports the user holds of each nationality. The primary
@@ -209,6 +218,12 @@ fun DocumentsScreen(
                 .filter { it.kind is DocKind.Passport }
                 .groupingBy { (it.kind as DocKind.Passport).iso2 }
                 .eachCount()
+            // A stable "(N)" number for every passport: its 1-based position within its nationality,
+            // in insertion order (the order documents were added). Numbering all passports — valid and
+            // expired alike — keeps each one identifiable (e.g. still "(2)") even after it lapses, at
+            // which point its expiry date further distinguishes it.
+            val passportIsoTotal = remember(ready.docs) { passportCountsByIso(ready.docs) }
+            val passportNumber = remember(ready.docs) { passportNumbers(ready.docs) }
             val docsListState = scrollState
             val (docsTop, docsEnd) = docsListState.hazeAlphas()
             HazeBox(docsTop, docsEnd, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
@@ -220,14 +235,18 @@ fun DocumentsScreen(
                             val sameNatCount = iso?.let { validPassportIsoCounts[it] ?: 0 } ?: 0
                             val star: (() -> Unit)? =
                                 if (doc.kind is DocKind.Passport && sameNatCount >= 2) { { vm.setPrimary(doc.id) } } else null
+                            val number = iso?.let { if ((passportIsoTotal[it] ?: 0) >= 2) passportNumber[doc.id] else null }
                             DocCard(
                                 doc,
                                 ready.world,
                                 today,
                                 ready.documentEntryStatus[doc.id],
-                                onRemove = { vm.removeDocument(doc.id) },
-                                onEdit = { editing = doc },
+                                canRemove = doc.id !in referencedDocIds,
+                                passportNumber = number,
                                 isPrimary = doc.id == ready.primaryDocId,
+                                onRemove = { vm.removeDocument(doc.id) },
+                                onRemoveBlocked = { blockedRemove = true },
+                                onEdit = { editing = doc },
                                 onStar = star,
                             )
                         }
@@ -235,14 +254,21 @@ fun DocumentsScreen(
                     if (archived.isNotEmpty()) {
                         item(key = "header-archive") { SectionLabel("Archive") }
                         items(archived, key = { it.id }) { doc ->
+                            // An expired passport can never be the primary, so it shows no star — but
+                            // it keeps its stable "(N)" number so it stays identifiable after expiry.
+                            val iso = (doc.kind as? DocKind.Passport)?.iso2
+                            val number = iso?.let { if ((passportIsoTotal[it] ?: 0) >= 2) passportNumber[doc.id] else null }
                             DocCard(
                                 doc,
                                 ready.world,
                                 today,
                                 ready.documentEntryStatus[doc.id],
-                                onRemove = { vm.removeDocument(doc.id) },
-                                onEdit = { editing = doc },
+                                canRemove = doc.id !in referencedDocIds,
+                                passportNumber = number,
                                 isPrimary = false,
+                                onRemove = { vm.removeDocument(doc.id) },
+                                onRemoveBlocked = { blockedRemove = true },
+                                onEdit = { editing = doc },
                                 onStar = null,
                             )
                         }
@@ -251,19 +277,31 @@ fun DocumentsScreen(
             }
         }
     }
+    if (blockedRemove) {
+        AlertDialog(
+            onDismissRequest = { blockedRemove = false },
+            title = { Text("In use") },
+            text = { Text("This document is used by a trip, so it can't be removed. Change that trip to use a different document, or delete the trip.") },
+            confirmButton = { TextButton(onClick = { blockedRemove = false }) { Text("OK") } },
+        )
+    }
     if (showAdd) {
         AddDocumentDialog(
             world = ready.world,
+            existingDocs = ready.docs,
             onAdd = { vm.addDocument(it) },
             onDismiss = { showAdd = false },
+            onEditExisting = { showAdd = false; editing = it },
         )
     }
     if (editing != null) {
         AddDocumentDialog(
             world = ready.world,
+            existingDocs = ready.docs,
             initial = editing,
             onAdd = { vm.updateDocument(it) },
             onDismiss = { editing = null },
+            onEditExisting = { editing = it },
         )
     }
 }
@@ -310,16 +348,31 @@ private fun DocCard(
     world: WorldData,
     today: LocalDate,
     entryStatus: EntryStatus? = null,
-    onRemove: () -> Unit,
-    onEdit: () -> Unit,
+    canRemove: Boolean = true,
+    passportNumber: Int? = null,
     isPrimary: Boolean = false,
+    onRemove: () -> Unit,
+    onRemoveBlocked: () -> Unit = {},
+    onEdit: () -> Unit,
     onStar: (() -> Unit)? = null,
 ) {
     val effectiveExpiry = effectiveExpiryFor(doc, entryStatus)
+    val isPassport = doc.kind is DocKind.Passport
+    val surface = MaterialTheme.colorScheme.onSurface
     ElevatedCard(Modifier.fillMaxWidth()) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(doc.label, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    buildAnnotatedString {
+                        append(doc.label)
+                        if (isPassport && passportNumber != null) {
+                            withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
+                                append("  ($passportNumber)")
+                            }
+                        }
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                )
                 Text(
                     docSubtitle(
                         doc,
@@ -350,8 +403,15 @@ private fun DocCard(
             IconButton(onClick = onEdit) {
                 Icon(Icons.Filled.Edit, contentDescription = "Edit")
             }
-            IconButton(onClick = onRemove) {
-                Icon(Icons.Filled.Close, contentDescription = "Remove")
+            IconButton(
+                onClick = { if (canRemove) onRemove() else onRemoveBlocked() },
+                modifier = Modifier.alpha(if (canRemove) 1f else DIM_ALPHA),
+            ) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = if (canRemove) "Remove" else "In use by a trip",
+                    tint = if (canRemove) surface else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -398,6 +458,15 @@ internal fun SelectionField(
     }
 }
 
+/** Explains a per-country visa/residence conflict for the "Document already exists" dialog. */
+private fun conflictMessage(candidate: Document, existing: Document, world: WorldData): String {
+    val kind = candidate.docCategory(world) ?: "document"
+    val shared = (candidate.coveredCountries(world) intersect existing.coveredCountries(world))
+        .joinToString(", ") { world.countries[it]?.name ?: it }
+    return "You already hold a valid $kind covering $shared, and you can only hold one valid " +
+        "$kind per country. Edit the existing one, or discard this entry."
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddDocumentDialog(
@@ -405,6 +474,8 @@ fun AddDocumentDialog(
     onAdd: (Document) -> Unit,
     onDismiss: () -> Unit,
     initial: Document? = null,
+    existingDocs: List<Document> = emptyList(),
+    onEditExisting: (Document) -> Unit,
 ) {
     val countries = world.countries
     val initPassport = initial?.kind as? DocKind.Passport
@@ -512,6 +583,8 @@ fun AddDocumentDialog(
     }
     val expiryOrNull = expiryDate?.let { it.toUtcIsoDate() }
     val validFromOrNull = validFromDate?.let { it.toUtcIsoDate() }
+    var duplicateOf by remember { mutableStateOf<Document?>(null) }
+    var duplicateReason by remember { mutableStateOf<String?>(null) }
 
     fun build(): Document {
         val id = initial?.id ?: UUID.randomUUID().toString()
@@ -535,6 +608,31 @@ fun AddDocumentDialog(
                 Document(id, "${docType.label}: $names$typeSuffix", DocKind.Custom(customIso, effectiveBloc, docType.kind, effectiveHolding, entry), null, exp, vfrom, rc)
             }
         }
+    }
+
+    // Persist the doc unless it is a true duplicate of one already held (same identity,
+    // see Document.duplicateSignature). Editing the doc itself is allowed (its own id is
+    // ignored), so changing only the dates turns a duplicate into a distinct document.
+    fun commit() {
+        val doc = build()
+        val duplicate = existingDocs.firstOrNull {
+            it.id != doc.id && it.duplicateSignature() == doc.duplicateSignature()
+        }
+        if (duplicate != null) {
+            duplicateOf = duplicate
+            duplicateReason = null
+            return
+        }
+        // Beyond exact duplicates, a visa/residence can't be added when a still-valid one of the same
+        // kind already covers the same country — you can only hold one valid visa/residence per country.
+        val conflict = doc.conflictsWith(existingDocs, world, LocalDate.now(ZoneOffset.UTC))
+        if (conflict != null) {
+            duplicateOf = conflict
+            duplicateReason = conflictMessage(doc, conflict, world)
+            return
+        }
+        onAdd(doc)
+        onDismiss()
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -737,12 +835,7 @@ fun AddDocumentDialog(
                     Spacer(Modifier.width(12.dp))
                     Button(
                         onClick = {
-                            if (visaMulti) {
-                                showMultiCountryWarning = true
-                            } else {
-                                onAdd(build())
-                                onDismiss()
-                            }
+                            if (visaMulti) showMultiCountryWarning = true else commit()
                         },
                         enabled = valid,
                     ) { Text(if (initial == null) "Add" else "Save") }
@@ -758,8 +851,7 @@ fun AddDocumentDialog(
             confirmButton = {
                 TextButton(onClick = {
                     showMultiCountryWarning = false
-                    onAdd(build())
-                    onDismiss()
+                    commit()
                 }) { Text("Save anyway") }
             },
             dismissButton = {
@@ -778,6 +870,28 @@ fun AddDocumentDialog(
                         }
                         append(". Are you sure you want to save?")
                     },
+                )
+            },
+        )
+    }
+    if (duplicateOf != null) {
+        AlertDialog(
+            onDismissRequest = { duplicateOf = null; onDismiss() },
+            confirmButton = {
+                TextButton(onClick = {
+                    val d = duplicateOf
+                    duplicateOf = null
+                    if (d != null) onEditExisting(d)
+                }) { Text("Edit existing") }
+            },
+            dismissButton = {
+                TextButton(onClick = { duplicateOf = null; onDismiss() }) { Text("Discard") }
+            },
+            title = { Text("Document already exists") },
+            text = {
+                Text(
+                    duplicateReason ?: "You already have this document. Edit the existing one to " +
+                        "change its details, or discard this entry.",
                 )
             },
         )
