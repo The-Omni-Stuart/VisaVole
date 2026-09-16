@@ -23,13 +23,17 @@ data class GuardFinding(
 )
 
 /**
- * A transform the engine wants applied together with the pending action (expiring a superseded
+ * A transform the engine wants applied together with the pending action (superseding a replaced
  * document, ending an ongoing trip). Mutations never block: they ride along with the action and
  * the UI confirms them before the ViewModel applies candidate + mutations atomically.
  */
 sealed class GuardMutation {
-    /** Mark document [docId] expired as of [onDate]. */
-    data class ExpireDocument(val docId: String, val onDate: LocalDate) : GuardMutation()
+    /**
+     * Mark document [oldId] as superseded by the new document [newId]. The old document keeps its
+     * own dates; its effective expiry derives live from the replacement's `validFrom` (see
+     * [DocStatus]), so it follows the replacement's edits and revives if the replacement is deleted.
+     */
+    data class SupersedeDocument(val oldId: String, val newId: String) : GuardMutation()
     /** End trip [tripId], clamping its last departure to [onDate]. */
     data class EndTrip(val tripId: String, val onDate: LocalDate) : GuardMutation()
 }
@@ -293,50 +297,38 @@ object GuardEngine {
     }
 
     /**
-     * `doc.single.perCountry` — at most one valid visa/residence per country/category; the older
-     * one is auto-expired at the newer one's start (MUTATE + WARN, replaces the old hard block).
+     * `doc.single.perCountry` — at most one valid visa/residence per country/category. Every
+     * existing document of the same category that overlaps the candidate's countries and is still
+     * valid at the candidate's start is superseded by the candidate (MUTATE + WARN per document,
+     * replaces the old hard block).
      */
     private fun singlePerCountryRule(candidate: Document, ctx: GuardContext): GuardResult? {
         val category = candidate.docCategory(ctx.world) ?: return null
         val mine = candidate.coveredCountries(ctx.world)
         if (mine.isEmpty()) return null
         val start = parseIso(candidate.validFrom) ?: ctx.today
-        val old = ctx.docs.firstOrNull { o ->
+        val oldOnes = ctx.docs.filter { o ->
             o.id != candidate.id &&
                 o.docCategory(ctx.world) == category &&
                 o.coveredCountries(ctx.world).any { it in mine } &&
-                stillValidAt(o, start)
-        } ?: return null
+                !DocStatus.of(o, ctx.docs, ctx.trips, ctx.world, start).expired
+        }
+        if (oldOnes.isEmpty()) return null
         return GuardResult(
-            findings = listOf(
+            findings = oldOnes.map { old ->
                 GuardFinding(
-                    "doc.single.perCountry", GuardSeverity.WARN, "Expires your existing document",
-                    "This will expire your ${old.label} on $start, since you can only hold one valid $category " +
-                        "per country.",
-                ),
-            ),
-            mutations = listOf(GuardMutation.ExpireDocument(old.id, start)),
+                    "doc.single.perCountry", GuardSeverity.WARN, "Replaces your existing document",
+                    "This will supersede your ${old.label} from $start, since you can only hold one valid " +
+                        "$category per country. It stays in your archive, marked as replaced.",
+                )
+            },
+            mutations = oldOnes.map { GuardMutation.SupersedeDocument(it.id, candidate.id) },
         )
     }
 
-    /** The old document's date window still covers [at] (per §13.3). */
-    private fun stillValidAt(doc: Document, at: LocalDate): Boolean {
-        val expiry = parseIso(doc.expiry) ?: return true
-        return !expiry.isBefore(at)
-    }
-
-    /** True when the document is not archived as of today (date expiry or entry exhaustion). */
-    private fun heldAndValid(doc: Document, ctx: GuardContext): Boolean {
-        val entry = TripModel.entryStatusFor(doc, ctx.trips, ctx.world, ctx.today)
-        val original = parseIso(doc.expiry)
-        val effective = listOfNotNull(original, entry?.effectiveExpiry).minOrNull()
-        if (effective != null && effective.isBefore(ctx.today)) return false
-        val collapsed = entry?.effectiveExpiry ?: effective
-        if (entry?.state == EntryState.EXHAUSTED && collapsed != null && !collapsed.isAfter(ctx.today)) {
-            return false
-        }
-        return true
-    }
+    /** True when the document is not archived as of today (date, entries, or supersession). */
+    private fun heldAndValid(doc: Document, ctx: GuardContext): Boolean =
+        !DocStatus.of(doc, ctx.docs, ctx.trips, ctx.world, ctx.today).expired
 
     /** `doc.inUse.removable` — the document is referenced by a trip. */
     private fun removeDocumentRule(action: GuardAction.RemoveDocument, ctx: GuardContext): GuardResult? {

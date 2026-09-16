@@ -884,6 +884,7 @@ private fun AddTripDialog(
                 initial = stop,
                 world = ready.world,
                 docs = ready.docs,
+                trips = ready.trips,
                 isFinal = ordered.last().id == stop.id,
                 carryDocumentId = ordered.getOrNull(stopIndex - 1)?.documentId,
                 initiallyEditingDeparture = departureFocusStopId == stop.id,
@@ -912,6 +913,7 @@ private fun AddTripDialog(
             initial = stop,
             world = ready.world,
             docs = ready.docs,
+            trips = ready.trips,
             isFinal = true,
             carryDocumentId = TripModel.sortedStops(stops).lastOrNull()?.documentId,
             primaryDocId = ready.primaryDocId,
@@ -1090,6 +1092,7 @@ private fun StopEditorDialog(
     initial: TripStop,
     world: WorldData,
     docs: List<Document>,
+    trips: List<Trip> = emptyList(),
     isFinal: Boolean,
     onDone: (TripStop) -> Unit,
     onRemove: (() -> Unit)? = null,
@@ -1107,7 +1110,7 @@ private fun StopEditorDialog(
     LaunchedEffect(stop, docs, carryDocumentId) {
         if (docTouched) return@LaunchedEffect
         val preferred = carryDocumentId?.takeIf { id -> docs.any { it.id == id } }
-            ?: AccessModel.bestDocumentId(stop.countryIso2, docs, world, stop.arrival, primaryDocId)
+            ?: AccessModel.bestDocumentId(stop.countryIso2, docs, world, stop.arrival, primaryDocId, trips)
         if (preferred != stop.documentId) {
             stop = stop.copy(documentId = preferred)
         }
@@ -1115,17 +1118,17 @@ private fun StopEditorDialog(
     val rule = remember(stop.countryIso2, stop.arrival, docs) {
         world.stayRuleFor(stop.countryIso2, AccessModel.homeCountries(docs), stop.arrival)
     }
-    val stopAccess = remember(stop.countryIso2, stop.arrival, docs) {
-        AccessModel.compute(docs, world, stop.arrival)[stop.countryIso2]
+    val stopAccess = remember(stop.countryIso2, stop.arrival, docs, trips) {
+        AccessModel.compute(docs, world, stop.arrival, trips)[stop.countryIso2]
     }
     val selectedDoc = docs.firstOrNull { it.id == stop.documentId }
     val countrySelected = stop.countryIso2 in world.countries
     val passportCounts = remember(docs) { passportCountsByIso(docs) }
     val passportNumbers = remember(docs) { passportNumbers(docs) }
     // Mirror the map's country-card: only offer documents that actually unlock the destination.
-    val relevantDocs = remember(stop.countryIso2, stop.arrival, docs) {
+    val relevantDocs = remember(stop.countryIso2, stop.arrival, docs, trips) {
         if (stop.countryIso2 in world.countries) {
-            AccessModel.relevantDocuments(stop.countryIso2, docs, world, stop.arrival)
+            AccessModel.relevantDocuments(stop.countryIso2, docs, world, stop.arrival, trips)
         } else {
             docs
         }

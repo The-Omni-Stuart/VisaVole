@@ -434,7 +434,7 @@ class GuardTest {
         val v2 = visa("v2", setOf("CA"), "multiple", "2028-01-01", "2026-10-01")
         val r = add(v2, listOf(v1))
         assertTrue(r.canProceed)
-        assertEquals(listOf(GuardMutation.ExpireDocument("v1", LocalDate.of(2026, 10, 1))), r.mutations)
+        assertEquals(listOf(GuardMutation.SupersedeDocument("v1", "v2")), r.mutations)
         val f = r.warnings.firstOrNull { it.code == "doc.single.perCountry" }
         assertNotNull(f)
         assertTrue("msg=${f!!.message}", f.message.contains("Visa: CA"))
@@ -447,7 +447,7 @@ class GuardTest {
         val v2 = visa("v2", setOf("CA"), "multiple", "2028-01-01")
         val r = add(v2, listOf(v1))
         assertTrue(r.canProceed)
-        assertEquals(listOf(GuardMutation.ExpireDocument("v1", today)), r.mutations)
+        assertEquals(listOf(GuardMutation.SupersedeDocument("v1", "v2")), r.mutations)
     }
 
     @Test fun differentCountryDoesNotSupersede() {
@@ -467,6 +467,40 @@ class GuardTest {
         assertTrue(r.mutations.isEmpty())
     }
 
+    @Test fun eachOverlappingDocumentGetsItsOwnSupersession() {
+        val v1 = visa("v1", setOf("CA"), "multiple", "2027-06-30")
+        val v2 = visa("v2", setOf("CA", "DE"), "multiple", "2028-01-01")
+        val v3 = visa("v3", setOf("CA"), "multiple", "2028-06-01", "2026-10-01")
+        val r = add(v3, listOf(v1, v2))
+        assertTrue(r.canProceed)
+        assertEquals(
+            listOf(GuardMutation.SupersedeDocument("v1", "v3"), GuardMutation.SupersedeDocument("v2", "v3")),
+            r.mutations,
+        )
+        assertEquals(2, r.warnings.count { it.code == "doc.single.perCountry" })
+    }
+
+    @Test fun alreadySupersededDocumentIsNotSupersededAgain() {
+        // v1 was superseded by v2 in January, so as of the new candidate's start it is already lapsed.
+        val v1 = visa("v1", setOf("CA"), "multiple", "2027-06-30").copy(supersededBy = "v2")
+        val v2 = visa("v2", setOf("CA"), "multiple", "2028-01-01", "2026-01-01")
+        val v3 = visa("v3", setOf("CA"), "multiple", "2028-06-01", "2026-10-01")
+        val r = add(v3, listOf(v1, v2))
+        assertTrue(r.canProceed)
+        assertEquals(listOf(GuardMutation.SupersedeDocument("v2", "v3")), r.mutations)
+    }
+
+    @Test fun supersededDocumentsDoNotCountTowardVisaCap() {
+        val valid = (1..9).map { i ->
+            visa("v$i", setOf("CA"), "multiple", "2027-%02d-01".format(i), if (i == 1) "2026-01-01" else null)
+        }
+        val superseded = visa("vold", setOf("CA"), "multiple", "2027-06-30").copy(supersededBy = "v1")
+        val candidate = visa("vnew", setOf("CA"), "multiple", "2028-01-01")
+        val r = add(candidate, valid + superseded)
+        assertTrue("codes=${codes(r)}", r.canProceed)
+        assertFalse(codes(r).contains("doc.cap.visaTotal"))
+    }
+
     @Test fun differentCategoryDoesNotSupersede() {
         val r1 = residence("r1", setOf("CA"), "2027-06-30")
         val v2 = visa("v2", setOf("CA"), "multiple", "2028-01-01", "2026-10-01")
@@ -484,7 +518,7 @@ class GuardTest {
             ctx(docs = listOf(v1, v2)),
         )
         assertTrue(r.canProceed)
-        assertEquals(listOf(GuardMutation.ExpireDocument("v1", LocalDate.of(2027, 2, 1))), r.mutations)
+        assertEquals(listOf(GuardMutation.SupersedeDocument("v1", "v2")), r.mutations)
     }
 
     @Test fun passportsAreNotSubjectToSinglePerCountry() {

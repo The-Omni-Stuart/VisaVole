@@ -143,9 +143,11 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     private fun publish() {
         val w = world ?: return
         val homeCountries = AccessModel.homeCountries(docs)
-        val ownVisaCountries = if (homeCountries.isNotEmpty()) AccessModel.ownVisaCountries(docs, w) else emptySet()
+        val ownVisaCountries =
+            if (homeCountries.isNotEmpty()) AccessModel.ownVisaCountries(docs, w, trips = trips.toList()) else emptySet()
         val effectiveDocs = if (homeCountries.isNotEmpty()) TripModel.effectiveDocs(docs, trips, w) else docs
-        val access = if (homeCountries.isNotEmpty()) AccessModel.compute(effectiveDocs, w) else emptyMap()
+        val access =
+            if (homeCountries.isNotEmpty()) AccessModel.compute(effectiveDocs, w, trips = trips.toList()) else emptyMap()
         val calc = if (homeCountries.isNotEmpty()) TripModel.calculate(trips, docs, w)
         else TripCalculation(TripSections(emptyList(), emptyList(), emptyList()), emptyList(), emptyMap())
         _state.value = AppState.Ready(
@@ -207,13 +209,13 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         return GuardEngine.evaluate(action, ctx).canProceed
     }
 
-    /** Applies the guard's accompanying mutations (expiring a superseded document, ending a trip). */
+    /** Applies the guard's accompanying mutations (superseding a replaced document, ending a trip). */
     private fun applyMutations(mutations: List<GuardMutation>) {
         if (mutations.isEmpty()) return
         for (m in mutations) {
             when (m) {
-                is GuardMutation.ExpireDocument ->
-                    docs = docs.map { if (it.id == m.docId) it.copy(expiry = m.onDate.toString()) else it }.toMutableList()
+                is GuardMutation.SupersedeDocument ->
+                    docs = docs.map { if (it.id == m.oldId) it.copy(supersededBy = m.newId) else it }.toMutableList()
                 is GuardMutation.EndTrip ->
                     trips = trips.map { t -> if (t.id == m.tripId) TripModel.closeTrip(t, m.onDate) else t }.toMutableList()
             }
@@ -243,7 +245,9 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     fun removeDocument(id: String) {
         if (!guardAllows(GuardAction.RemoveDocument(id))) return
-        val next = docs.filterNot { it.id == id }
+        var next = docs.filterNot { it.id == id }
+        // Deleting a replacement revives the documents it superseded: clear the dangling pointers.
+        next = next.map { if (it.supersededBy == id) it.copy(supersededBy = null) else it }
         if (primaryDocId == id) primaryDocId = next.firstOrNull { it.kind is DocKind.Passport }?.id
         updateDocs(next)
     }
@@ -345,6 +349,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         put("expiry", d.expiry ?: JSONObject.NULL)
         put("validFrom", d.validFrom ?: JSONObject.NULL)
         put("residenceClass", d.residenceClass?.id ?: JSONObject.NULL)
+        put("supersededBy", d.supersededBy ?: JSONObject.NULL)
         when (val k = d.kind) {
             is DocKind.Passport -> {
                 put("kind", "passport"); put("iso2", k.iso2)
@@ -405,6 +410,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         val expiry = o.strOrNull("expiry")
         val validFrom = o.strOrNull("validFrom")
         val residenceClass = ResidenceClass.fromId(o.strOrNull("residenceClass"))
-        return Document(o.getString("id"), o.getString("label"), kind, null, expiry, validFrom, residenceClass)
+        val supersededBy = o.strOrNull("supersededBy")
+        return Document(o.getString("id"), o.getString("label"), kind, null, expiry, validFrom, residenceClass, supersededBy)
     }
 }

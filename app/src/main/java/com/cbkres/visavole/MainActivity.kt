@@ -287,7 +287,7 @@ private fun MapTab(
             CountryDetailCard(
                 countryName = selName,
                 access = selectedAccess,
-                breakdown = AccessModel.breakdownFor(selected, s.docs, s.world),
+                breakdown = AccessModel.breakdownFor(selected, s.docs, s.world, trips = s.trips),
                 onDismiss = { pick(null) },
                 isHome = selected in s.homeCountries,
                 isOwnCovered = selected in s.ownVisaCountries,

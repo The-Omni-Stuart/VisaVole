@@ -59,7 +59,14 @@ object DocumentMigration {
         return docs.firstOrNull { it.kind is DocKind.Passport && !isExpiredDoc(it, today) }?.id
     }
 
-    /** True when a passport is past its expiry (non-passports are never "expired"). */
-    fun isExpiredDoc(doc: Document, today: LocalDate = LocalDate.now()): Boolean =
-        doc.kind is DocKind.Passport && AccessModel.isExpired(doc, today)
+    /**
+     * True when a passport is past its expiry (non-passports are never "expired"). For passports
+     * the unified [DocStatus] reduces to exactly this date check (no entry counts, never
+     * superseded), so this helper needs no trip/world context.
+     */
+    fun isExpiredDoc(doc: Document, today: LocalDate = LocalDate.now()): Boolean {
+        if (doc.kind !is DocKind.Passport) return false
+        val iso = doc.expiry ?: return false
+        return runCatching { LocalDate.parse(iso) }.getOrNull()?.let { it.isBefore(today) } ?: false
+    }
 }

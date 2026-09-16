@@ -115,25 +115,20 @@ object TripModel {
     ): EntryStatus? =
         if (isVisaLike(doc, world) || doc.entryType() != null) computeEntryStatus(doc, trips, today) else null
 
+    /**
+     * The docs with their `expiry` clamped to their unified effective expiry (earliest of date
+     * expiry, entry exhaustion, and supersession — see [DocStatus]), so date-only consumers (map,
+     * projections) see the same validity. Unconstrained docs pass through unchanged.
+     */
     fun effectiveDocs(
         docs: List<Document>,
         trips: List<Trip>,
         world: WorldData,
         today: LocalDate = LocalDate.now(ZoneOffset.UTC),
     ): List<Document> {
-        val statuses = entryStatusFor(docs, trips, world, today)
+        val statuses = DocStatus.all(docs, trips, world, today)
         return docs.map { doc ->
-            val st = statuses[doc.id]
-            if (st != null && st.effectiveExpiry != null) {
-                val original = iso(doc.expiry)
-                if (original == null || st.effectiveExpiry.isBefore(original)) {
-                    doc.copy(expiry = st.effectiveExpiry.toString())
-                } else {
-                    doc
-                }
-            } else {
-                doc
-            }
+            statuses[doc.id]?.effectiveExpiry?.let { doc.copy(expiry = it.toString()) } ?: doc
         }
     }
 

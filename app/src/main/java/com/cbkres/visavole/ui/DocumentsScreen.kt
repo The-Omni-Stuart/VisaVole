@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -69,8 +70,9 @@ import com.cbkres.visavole.data.Country
 import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.DocKind
+import com.cbkres.visavole.domain.DocStatus
 import com.cbkres.visavole.domain.EntryState
-import com.cbkres.visavole.domain.EntryStatus
+import com.cbkres.visavole.domain.ExpiryReason
 import com.cbkres.visavole.domain.GuardAction
 import com.cbkres.visavole.domain.GuardContext
 import com.cbkres.visavole.domain.GuardEngine
@@ -103,26 +105,6 @@ private val STATUS_RED = STATUS_BAD
 /** Days from [today] until [date]; null when unset. */
 private fun daysUntil(date: LocalDate?, today: LocalDate): Long? =
     date?.let { ChronoUnit.DAYS.between(today, it) }
-
-private fun effectiveExpiryFor(doc: Document, entry: EntryStatus?): LocalDate? {
-    val original = doc.expiry?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-    val effective = entry?.effectiveExpiry
-    return when {
-        effective == null -> original
-        original == null -> effective
-        effective.isBefore(original) -> effective
-        else -> original
-    }
-}
-
-/** True when the document's effective expiry (including entry exhaustion) is no longer usable. */
-private fun isExpired(doc: Document, entry: EntryStatus?, today: LocalDate): Boolean {
-    val effective = effectiveExpiryFor(doc, entry)
-    val pastExpiry = daysUntil(effective, today)?.let { it < 0 } ?: false
-    val exhaustedToday = entry?.state == EntryState.EXHAUSTED &&
-        daysUntil(entry.effectiveExpiry ?: effective, today)?.let { it <= 0 } ?: false
-    return pastExpiry || exhaustedToday
-}
 
 /**
  * The document subtitle: kind/summary and the valid-from / valid-to dates in the neutral base
@@ -218,8 +200,12 @@ fun DocumentsScreen(
                 modifier = Modifier.padding(vertical = 16.dp),
             )
         } else {
-            val active = ready.docs.filter { !isExpired(it, ready.documentEntryStatus[it.id], today) }
-            val archived = ready.docs.filter { isExpired(it, ready.documentEntryStatus[it.id], today) }
+            // Unified validity for every document (date expiry, entry exhaustion, supersession).
+            val statuses = remember(ready.docs, ready.trips, ready.world, today) {
+                DocStatus.all(ready.docs, ready.trips, ready.world, today)
+            }
+            val active = ready.docs.filter { !statuses.getValue(it.id).expired }
+            val archived = ready.docs.filter { statuses.getValue(it.id).expired }
             // How many VALID (non-expired) passports the user holds of each nationality. The primary
             // star only makes sense when two or more valid passports of the same country compete.
             val validPassportIsoCounts = active
@@ -248,7 +234,8 @@ fun DocumentsScreen(
                                 doc,
                                 ready.world,
                                 today,
-                                ready.documentEntryStatus[doc.id],
+                                statuses[doc.id],
+                                supersededByLabel = doc.supersededBy?.let { id -> ready.docs.firstOrNull { d -> d.id == id }?.label },
                                 canRemove = removeBlockings[doc.id]?.canProceed == true,
                                 passportNumber = number,
                                 isPrimary = doc.id == ready.primaryDocId,
@@ -270,7 +257,8 @@ fun DocumentsScreen(
                                 doc,
                                 ready.world,
                                 today,
-                                ready.documentEntryStatus[doc.id],
+                                statuses[doc.id],
+                                supersededByLabel = doc.supersededBy?.let { id -> ready.docs.firstOrNull { d -> d.id == id }?.label },
                                 canRemove = removeBlockings[doc.id]?.canProceed == true,
                                 passportNumber = number,
                                 isPrimary = false,
@@ -324,22 +312,44 @@ private fun SectionLabel(text: String) {
     )
 }
 
+/**
+ * The per-document status pill, driven by the unified [DocStatus]: the reason (date, entries, or
+ * supersession) attached to the effective expiry decides the text — "Expired on …" / "Entries used
+ * up" / "Replaced by …" — so a lapsed document always says *why* it is in the archive.
+ */
 @Composable
-private fun ExpiryStatusPill(doc: Document, today: LocalDate, entry: EntryStatus? = null) {
-    val effective = effectiveExpiryFor(doc, entry)
+private fun ExpiryStatusPill(
+    today: LocalDate,
+    status: DocStatus?,
+    supersededByLabel: String? = null,
+) {
+    val effective = status?.effectiveExpiry
+    val entry = status?.entries
     val days = daysUntil(effective, today)
+    val replacedBy = supersededByLabel ?: "a newer document"
     val (text, color, bold) = when {
         entry?.total != null && entry.state == EntryState.IN_USE -> Triple("In use", STATUS_GREEN, false)
-        entry?.total != null && entry.remaining == 0 && days != null && days <= 0 ->
-            Triple("Expired on ${entry.effectiveExpiry ?: effective}", STATUS_BAD, true)
+        status?.reason == ExpiryReason.SUPERSEDED && status.expired ->
+            Triple("Replaced by $replacedBy", STATUS_BAD, true)
+        status?.expired == true && status.reason == ExpiryReason.ENTRIES ->
+            Triple("Entries used up", STATUS_BAD, true)
+        status?.expired == true -> Triple("Expired on $effective", STATUS_BAD, true)
+        status?.reason == ExpiryReason.SUPERSEDED ->
+            Triple("Replaced by $replacedBy from $effective", STATUS_ORANGE, false)
         entry?.total != null && entry.remaining != null && entry.remaining > 0 ->
             Triple("${entry.remaining} ${if (entry.remaining == 1) "entry" else "entries"} left", STATUS_GREEN, false)
         days == null -> Triple("No expiry", STATUS_GREEN, false)
-        days < 0 -> Triple("Expired on $effective", STATUS_BAD, true)
         days <= 7 -> Triple("Expiring soon ($days days)", STATUS_ORANGE, false)
         else -> Triple("Valid for $days days", STATUS_GREEN, false)
     }
-    Surface(shape = RoundedCornerShape(50), color = color.copy(alpha = STATUS_CHIP_ALPHA)) {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = color.copy(alpha = STATUS_CHIP_ALPHA),
+        // Long pills (e.g. "Replaced by <label>") must wrap instead of
+        // squeezing the card's weighted text column; the cap keeps the title
+        // column wide enough to stay readable for the longest labels.
+        modifier = Modifier.widthIn(max = 120.dp),
+    ) {
         Text(
             text,
             color = color,
@@ -355,7 +365,8 @@ private fun DocCard(
     doc: Document,
     world: WorldData,
     today: LocalDate,
-    entryStatus: EntryStatus? = null,
+    status: DocStatus? = null,
+    supersededByLabel: String? = null,
     canRemove: Boolean = true,
     passportNumber: Int? = null,
     isPrimary: Boolean = false,
@@ -364,7 +375,7 @@ private fun DocCard(
     onEdit: () -> Unit,
     onStar: (() -> Unit)? = null,
 ) {
-    val effectiveExpiry = effectiveExpiryFor(doc, entryStatus)
+    val effectiveExpiry = status?.effectiveExpiry
     val isPassport = doc.kind is DocKind.Passport
     val surface = MaterialTheme.colorScheme.onSurface
     ElevatedCard(Modifier.fillMaxWidth()) {
@@ -394,8 +405,10 @@ private fun DocCard(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            if (effectiveExpiry != null || entryStatus?.total != null) {
-                ExpiryStatusPill(doc, today, entryStatus)
+            if (status != null &&
+                (effectiveExpiry != null || status.entries?.total != null || doc.supersededBy != null)
+            ) {
+                ExpiryStatusPill(today, status, supersededByLabel)
             }
             if (onStar != null) {
                 IconButton(onClick = onStar) {

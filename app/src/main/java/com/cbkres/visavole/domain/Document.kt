@@ -38,6 +38,11 @@ data class Document(
     val expiry: String? = null, // valid to — ISO-8601 date (YYYY-MM-DD)
     val validFrom: String? = null, // valid from — ISO-8601 date (YYYY-MM-DD)
     val residenceClass: ResidenceClass? = null, // residence docs only (temporary / long-term / permanent)
+    // Id of the newer document that superseded this one (one valid visa/residence per country, §13.3).
+    // The superseded doc keeps its own dates; its effective expiry derives live from the replacement's
+    // `validFrom` (see DocStatus), so it follows the replacement's edits and revives when the
+    // replacement is deleted (the ViewModel clears dangling pointers). Passports are never superseded.
+    val supersededBy: String? = null,
 )
 
 /** The document's entry type, if it carries one; passports and residence documents return null. */
