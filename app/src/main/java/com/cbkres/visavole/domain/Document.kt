@@ -1,7 +1,6 @@
 package com.cbkres.visavole.domain
 
 import com.cbkres.visavole.data.WorldData
-import java.time.LocalDate
 
 /** What a document is, and what it unlocks. */
 sealed class DocKind {
@@ -100,23 +99,6 @@ fun Document.coveredCountries(world: WorldData): Set<String> = when (val k = kin
     is DocKind.Passport -> setOf(k.iso2)
     is DocKind.Holding -> world.holdingCountries(k.holdingId)
     is DocKind.Custom -> k.countries
-}
-
-/**
- * The existing document that blocks [candidate] under the "at most one valid visa/residence per
- * country" rule, or null. A visa/residence candidate is blocked by a still-valid (not-yet-expired)
- * existing document of the SAME category (residence vs residence, visa vs visa) that shares at least
- * one country. Passports return null (their multiplicity is allowed and handled by numbering).
- */
-fun Document.conflictsWith(existing: List<Document>, world: WorldData, today: LocalDate): Document? {
-    val category = docCategory(world) ?: return null
-    val mine = coveredCountries(world)
-    return existing.firstOrNull { o ->
-        o.id != id &&
-            o.docCategory(world) == category &&
-            o.coveredCountries(world).any { c -> c in mine } &&
-            !AccessModel.isExpired(o, today)
-    }
 }
 
 /**

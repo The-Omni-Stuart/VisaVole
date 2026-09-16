@@ -3,7 +3,6 @@ package com.cbkres.visavole.domain
 import com.cbkres.visavole.data.Country
 import com.cbkres.visavole.data.Holding
 import com.cbkres.visavole.data.WorldData
-import java.time.LocalDate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
@@ -25,7 +24,6 @@ class DocumentTest {
         ),
         benefits = emptyMap(),
     )
-    private val today = LocalDate.parse("2026-01-01")
 
     // ---- duplicateSignature: identity behind the "document already exists" guard ----
 
@@ -164,57 +162,6 @@ class DocumentTest {
         val h = Document("h", "FR Residence", DocKind.Holding("fr-res"))
         assertEquals("residence", h.docCategory(world))
         assertEquals(setOf("FR"), h.coveredCountries(world))
-    }
-
-    // ---- conflictsWith: the "one valid visa/residence per country" rule ----
-
-    @Test fun secondResidenceSameCountryIsBlocked() {
-        val existing = Document("e", "Residence: AF", DocKind.Custom(setOf("AF"), kind = "residence"), expiry = "2030-01-01")
-        val candidate = Document("c", "Residence: AF", DocKind.Custom(setOf("AF"), kind = "residence"), expiry = "2029-01-01")
-        assertEquals("e", candidate.conflictsWith(listOf(existing), world, today)?.id)
-    }
-
-    @Test fun residenceDifferentCountryIsNotBlocked() {
-        val existing = Document("e", "Residence: FR", DocKind.Custom(setOf("FR"), kind = "residence"), expiry = "2030-01-01")
-        val candidate = Document("c", "Residence: DE", DocKind.Custom(setOf("DE"), kind = "residence"), expiry = "2029-01-01")
-        assertNull(candidate.conflictsWith(listOf(existing), world, today))
-    }
-
-    @Test fun visaAndResidenceSameCountryAreNotBlocked() {
-        // Same-category rule: a visa and a residence for the same country do not conflict.
-        val existing = Document("e", "Residence: FR", DocKind.Custom(setOf("FR"), kind = "residence"), expiry = "2030-01-01")
-        val candidate = Document("c", "Visa: FR", DocKind.Custom(setOf("FR"), kind = "visa"), expiry = "2029-01-01")
-        assertNull(candidate.conflictsWith(listOf(existing), world, today))
-    }
-
-    @Test fun secondVisaSameCountryIsBlocked() {
-        val existing = Document("e", "Visa: FR", DocKind.Custom(setOf("FR"), kind = "visa"), expiry = "2030-01-01")
-        val candidate = Document("c", "Visa: FR", DocKind.Custom(setOf("FR"), kind = "visa"), expiry = "2029-01-01")
-        assertEquals("e", candidate.conflictsWith(listOf(existing), world, today)?.id)
-    }
-
-    @Test fun expiredExistingDoesNotBlock() {
-        val existing = Document("e", "Residence: AF", DocKind.Custom(setOf("AF"), kind = "residence"), expiry = "2020-01-01")
-        val candidate = Document("c", "Residence: AF", DocKind.Custom(setOf("AF"), kind = "residence"), expiry = "2029-01-01")
-        assertNull(candidate.conflictsWith(listOf(existing), world, today))
-    }
-
-    @Test fun passportCandidateNeverConflicts() {
-        val existing = Document("e", "Residence: AF", DocKind.Custom(setOf("AF"), kind = "residence"), expiry = "2030-01-01")
-        val candidate = Document("c", "Passport · AF", DocKind.Passport("AF"))
-        assertNull(candidate.conflictsWith(listOf(existing), world, today))
-    }
-
-    @Test fun editingTheSameDocDoesNotSelfConflict() {
-        val doc = Document("e", "Residence: AF", DocKind.Custom(setOf("AF"), kind = "residence"), expiry = "2030-01-01")
-        val edited = doc.copy(expiry = "2031-01-01") // same id
-        assertNull(edited.conflictsWith(listOf(doc), world, today))
-    }
-
-    @Test fun holdingResidenceSameCountryIsBlocked() {
-        val existing = Document("e", "FR Residence", DocKind.Holding("fr-res"), expiry = "2030-01-01")
-        val candidate = Document("c", "FR Residence", DocKind.Holding("fr-res"), expiry = "2029-01-01")
-        assertEquals("e", candidate.conflictsWith(listOf(existing), world, today)?.id)
     }
 
     // ---- passportNumbers / passportCountsByIso: the stable "(N)" marker ----

@@ -16,6 +16,10 @@ import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.DocumentMigration
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.EntryStatus
+import com.cbkres.visavole.domain.GuardAction
+import com.cbkres.visavole.domain.GuardContext
+import com.cbkres.visavole.domain.GuardEngine
+import com.cbkres.visavole.domain.GuardMutation
 import com.cbkres.visavole.domain.ResidenceClass
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripCalculation
@@ -187,7 +191,38 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** The guard context for the current state (null while the world is still loading). */
+    private fun guardCtx(): GuardContext? {
+        val w = world ?: return null
+        return GuardContext(docs.toList(), trips.toList(), w, LocalDate.now(ZoneOffset.UTC), effectivePrimaryId())
+    }
+
+    /**
+     * Backstop for a guarded mutation: re-run the same [GuardEngine] rules the screens ran and
+     * drop the action if they now block (e.g. state changed between the tap and the commit).
+     * Returns true when the action may proceed.
+     */
+    private fun guardAllows(action: GuardAction): Boolean {
+        val ctx = guardCtx() ?: return true
+        return GuardEngine.evaluate(action, ctx).canProceed
+    }
+
+    /** Applies the guard's accompanying mutations (expiring a superseded document, ending a trip). */
+    private fun applyMutations(mutations: List<GuardMutation>) {
+        if (mutations.isEmpty()) return
+        for (m in mutations) {
+            when (m) {
+                is GuardMutation.ExpireDocument ->
+                    docs = docs.map { if (it.id == m.docId) it.copy(expiry = m.onDate.toString()) else it }.toMutableList()
+                is GuardMutation.EndTrip ->
+                    trips = trips.map { t -> if (t.id == m.tripId) TripModel.closeTrip(t, m.onDate) else t }.toMutableList()
+            }
+        }
+        persist()
+    }
+
     fun setHome(iso2: String, expiry: String? = null) {
+        if (!guardAllows(GuardAction.SetHome(iso2, expiry))) return
         val newId = UUID.randomUUID().toString()
         val homeDoc = Document(newId, "Passport · ${world?.countries?.get(iso2)?.name ?: iso2}", DocKind.Passport(iso2), null, expiry)
         primaryDocId = newId
@@ -195,6 +230,11 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun addDocument(doc: Document) {
+        val original = docs.firstOrNull { it.id == doc.id }
+        val action = if (original != null) GuardAction.UpdateDocument(doc, original) else GuardAction.AddDocument(doc)
+        val result = guardCtx()?.let { GuardEngine.evaluate(action, it) }
+        if (result != null && !result.canProceed) return
+        if (result != null) applyMutations(result.mutations)
         if (primaryDocId == null && doc.kind is DocKind.Passport) primaryDocId = doc.id
         updateDocs(docs.filterNot { it.id == doc.id } + doc)
     }
@@ -202,6 +242,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     fun updateDocument(doc: Document) = addDocument(doc)
 
     fun removeDocument(id: String) {
+        if (!guardAllows(GuardAction.RemoveDocument(id))) return
         val next = docs.filterNot { it.id == id }
         if (primaryDocId == id) primaryDocId = next.firstOrNull { it.kind is DocKind.Passport }?.id
         updateDocs(next)
@@ -211,6 +252,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     fun setPrimary(id: String?) {
         val target = if (id != null && id != primaryDocId) id else null
         if (target != primaryDocId) {
+            if (!guardAllows(GuardAction.SetPrimary(target))) return
             primaryDocId = target
             persist()
             publish()

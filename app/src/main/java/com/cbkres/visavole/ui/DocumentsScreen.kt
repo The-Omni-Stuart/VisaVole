@@ -71,16 +71,16 @@ import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.EntryState
 import com.cbkres.visavole.domain.EntryStatus
+import com.cbkres.visavole.domain.GuardAction
+import com.cbkres.visavole.domain.GuardContext
+import com.cbkres.visavole.domain.GuardEngine
+import com.cbkres.visavole.domain.GuardFinding
+import com.cbkres.visavole.domain.GuardResult
 import com.cbkres.visavole.domain.ResidenceClass
-import com.cbkres.visavole.domain.conflictsWith
-import com.cbkres.visavole.domain.coveredCountries
 import com.cbkres.visavole.domain.defaultResidenceClassFor
-import com.cbkres.visavole.domain.docCategory
 import com.cbkres.visavole.domain.duplicateSignature
-import com.cbkres.visavole.domain.identityKey
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
-import com.cbkres.visavole.domain.referencedDocumentIds
 import com.cbkres.visavole.domain.residenceClassFor
 import java.time.Instant
 import java.time.LocalDate
@@ -183,7 +183,16 @@ fun DocumentsScreen(
 ) {
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Document?>(null) }
-    var blockedRemove by remember { mutableStateOf(false) }
+    var blockedRemove by remember { mutableStateOf<GuardFinding?>(null) }
+    val today = LocalDate.now(ZoneOffset.UTC)
+    // One shared guard context for the whole screen; every add/remove/star decision below goes
+    // through the same GuardEngine the ViewModel backstops with.
+    val guardCtx = remember(ready.docs, ready.trips, ready.world, today) {
+        GuardContext(ready.docs, ready.trips, ready.world, today)
+    }
+    val removeBlockings: Map<String, GuardResult> = remember(guardCtx) {
+        ready.docs.associateBy({ it.id }, { d -> GuardEngine.evaluate(GuardAction.RemoveDocument(d.id), guardCtx) })
+    }
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         Text("Documents", style = MaterialTheme.typography.headlineSmall)
         Text(
@@ -209,8 +218,6 @@ fun DocumentsScreen(
                 modifier = Modifier.padding(vertical = 16.dp),
             )
         } else {
-            val today = LocalDate.now(ZoneOffset.UTC)
-            val referencedDocIds = remember(ready.trips) { referencedDocumentIds(ready.trips) }
             val active = ready.docs.filter { !isExpired(it, ready.documentEntryStatus[it.id], today) }
             val archived = ready.docs.filter { isExpired(it, ready.documentEntryStatus[it.id], today) }
             // How many VALID (non-expired) passports the user holds of each nationality. The primary
@@ -242,11 +249,11 @@ fun DocumentsScreen(
                                 ready.world,
                                 today,
                                 ready.documentEntryStatus[doc.id],
-                                canRemove = doc.id !in referencedDocIds,
+                                canRemove = removeBlockings[doc.id]?.canProceed == true,
                                 passportNumber = number,
                                 isPrimary = doc.id == ready.primaryDocId,
                                 onRemove = { vm.removeDocument(doc.id) },
-                                onRemoveBlocked = { blockedRemove = true },
+                                onRemoveBlocked = { blockedRemove = removeBlockings[doc.id]?.findings?.firstOrNull() },
                                 onEdit = { editing = doc },
                                 onStar = star,
                             )
@@ -264,11 +271,11 @@ fun DocumentsScreen(
                                 ready.world,
                                 today,
                                 ready.documentEntryStatus[doc.id],
-                                canRemove = doc.id !in referencedDocIds,
+                                canRemove = removeBlockings[doc.id]?.canProceed == true,
                                 passportNumber = number,
                                 isPrimary = false,
                                 onRemove = { vm.removeDocument(doc.id) },
-                                onRemoveBlocked = { blockedRemove = true },
+                                onRemoveBlocked = { blockedRemove = removeBlockings[doc.id]?.findings?.firstOrNull() },
                                 onEdit = { editing = doc },
                                 onStar = null,
                             )
@@ -278,18 +285,18 @@ fun DocumentsScreen(
             }
         }
     }
-    if (blockedRemove) {
+    blockedRemove?.let { finding ->
         AlertDialog(
-            onDismissRequest = { blockedRemove = false },
-            title = { Text("In use") },
-            text = { Text("This document is used by a trip, so it can't be removed. Change that trip to use a different document, or delete the trip.") },
-            confirmButton = { TextButton(onClick = { blockedRemove = false }) { Text("OK") } },
+            onDismissRequest = { blockedRemove = null },
+            title = { Text(finding.title) },
+            text = { Text(finding.message) },
+            confirmButton = { TextButton(onClick = { blockedRemove = null }) { Text("OK") } },
         )
     }
     if (showAdd) {
         AddDocumentDialog(
             world = ready.world,
-            existingDocs = ready.docs,
+            guard = guardCtx,
             onAdd = { vm.addDocument(it) },
             onDismiss = { showAdd = false },
             onEditExisting = { showAdd = false; editing = it },
@@ -298,12 +305,11 @@ fun DocumentsScreen(
     if (editing != null) {
         AddDocumentDialog(
             world = ready.world,
-            existingDocs = ready.docs,
+            guard = guardCtx,
             initial = editing,
             onAdd = { vm.updateDocument(it) },
             onDismiss = { editing = null },
             onEditExisting = { editing = it },
-            inUse = editing?.let { it.id in referencedDocumentIds(ready.trips) } == true,
         )
     }
 }
@@ -460,25 +466,15 @@ internal fun SelectionField(
     }
 }
 
-/** Explains a per-country visa/residence conflict for the "Document already exists" dialog. */
-private fun conflictMessage(candidate: Document, existing: Document, world: WorldData): String {
-    val kind = candidate.docCategory(world) ?: "document"
-    val shared = (candidate.coveredCountries(world) intersect existing.coveredCountries(world))
-        .joinToString(", ") { world.countries[it]?.name ?: it }
-    return "You already hold a valid $kind covering $shared, and you can only hold one valid " +
-        "$kind per country. Edit the existing one, or discard this entry."
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddDocumentDialog(
     world: WorldData,
+    guard: GuardContext,
     onAdd: (Document) -> Unit,
     onDismiss: () -> Unit,
     initial: Document? = null,
-    existingDocs: List<Document> = emptyList(),
     onEditExisting: (Document) -> Unit,
-    inUse: Boolean = false,
 ) {
     val countries = world.countries
     val initPassport = initial?.kind as? DocKind.Passport
@@ -539,8 +535,15 @@ fun AddDocumentDialog(
     var residenceClass by remember { mutableStateOf(initial?.residenceClass ?: ResidenceClass.TEMPORARY) } // residence only
     var expiryDate by remember { mutableStateOf(initial?.expiry?.toUtcMillis()) }
     var validFromDate by remember { mutableStateOf(initial?.validFrom?.toUtcMillis()) }
-    var showMultiCountryWarning by remember { mutableStateOf(false) }
-    var identityLocked by remember { mutableStateOf(false) }
+    // Guard-driven dialog state: [blocked] is the blocking finding shown to the user,
+    // [blockedDuplicate] the existing document an "Edit existing" button can jump to,
+    // [pendingMutationDoc]/[pendingMutationWarn] the pending action + its accompanying mutation
+    // awaiting confirmation, and [multiCountryDoc] the visa awaiting the multi-country confirm.
+    var blocked by remember { mutableStateOf<GuardFinding?>(null) }
+    var blockedDuplicate by remember { mutableStateOf<Document?>(null) }
+    var pendingMutationDoc by remember { mutableStateOf<Document?>(null) }
+    var pendingMutationWarn by remember { mutableStateOf<GuardFinding?>(null) }
+    var multiCountryDoc by remember { mutableStateOf<Document?>(null) }
 
     // A residence/visa earns short-stay travel, not freedom of movement — infer the visa-free
     // travel bloc (e.g. Schengen for an EU residence) rather than the freedom-of-movement bloc.
@@ -587,8 +590,6 @@ fun AddDocumentDialog(
     }
     val expiryOrNull = expiryDate?.let { it.toUtcIsoDate() }
     val validFromOrNull = validFromDate?.let { it.toUtcIsoDate() }
-    var duplicateOf by remember { mutableStateOf<Document?>(null) }
-    var duplicateReason by remember { mutableStateOf<String?>(null) }
 
     fun build(): Document {
         val id = initial?.id ?: UUID.randomUUID().toString()
@@ -614,33 +615,31 @@ fun AddDocumentDialog(
         }
     }
 
-    // Persist the doc unless it is a true duplicate of one already held (same identity,
-    // see Document.duplicateSignature). Editing the doc itself is allowed (its own id is
-    // ignored), so changing only the dates turns a duplicate into a distinct document.
-    fun commit() {
-        val doc = build()
-        // A trip references this document by id, so its identity (type / country / bloc / holding)
-        // can't change — that would silently re-point the trip's "entered with" and its allowance
-        // math. Harmless attribute edits (number, dates, entry type, residence class) are still
-        // allowed. The check re-runs on every Save, so reverting the identity unblocks it.
-        if (inUse && initial != null && doc.identityKey() != initial.identityKey()) {
-            identityLocked = true
+    // Run the pending document through the centralised guard. Blocks stop the save; the
+    // multi-country warning asks once; accompanying mutations (e.g. expiring a superseded doc)
+    // get their own confirm. [skipMultiCountry] lets "Save anyway" re-run the rest. The
+    // ViewModel backstops the very same rules before persisting.
+    fun saveDoc(doc: Document, skipMultiCountry: Boolean) {
+        val action = if (initial != null) GuardAction.UpdateDocument(doc, initial) else GuardAction.AddDocument(doc)
+        val result = GuardEngine.evaluate(action, guard)
+        if (result.blocks.isNotEmpty()) {
+            val block = result.blocks.first()
+            blocked = block
+            blockedDuplicate = if (block.code == "doc.duplicate") {
+                guard.docs.firstOrNull { it.id != doc.id && it.duplicateSignature() == doc.duplicateSignature() }
+            } else {
+                null
+            }
             return
         }
-        val duplicate = existingDocs.firstOrNull {
-            it.id != doc.id && it.duplicateSignature() == doc.duplicateSignature()
-        }
-        if (duplicate != null) {
-            duplicateOf = duplicate
-            duplicateReason = null
+        if (!skipMultiCountry && result.warnings.any { it.code == "doc.visa.multiCountry" }) {
+            multiCountryDoc = doc
             return
         }
-        // Beyond exact duplicates, a visa/residence can't be added when a still-valid one of the same
-        // kind already covers the same country — you can only hold one valid visa/residence per country.
-        val conflict = doc.conflictsWith(existingDocs, world, LocalDate.now(ZoneOffset.UTC))
-        if (conflict != null) {
-            duplicateOf = conflict
-            duplicateReason = conflictMessage(doc, conflict, world)
+        if (result.mutations.isNotEmpty()) {
+            pendingMutationDoc = doc
+            pendingMutationWarn = result.warnings.firstOrNull { it.code == "doc.single.perCountry" }
+                ?: result.warnings.firstOrNull()
             return
         }
         onAdd(doc)
@@ -845,35 +844,32 @@ fun AddDocumentDialog(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     OutlinedButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(Modifier.width(12.dp))
-                    Button(
-                        onClick = {
-                            if (visaMulti) showMultiCountryWarning = true else commit()
-                        },
-                        enabled = valid,
-                    ) { Text(if (initial == null) "Add" else "Save") }
+                    Button(onClick = { saveDoc(build(), false) }, enabled = valid) {
+                        Text(if (initial == null) "Add" else "Save")
+                    }
                 }
             }
             }
         }
     }
 
-    if (showMultiCountryWarning) {
+    multiCountryDoc?.let { doc ->
+        val names = (doc.kind as? DocKind.Custom)?.countries?.sortedBy { countries[it]?.name ?: it } ?: emptyList()
         AlertDialog(
-            onDismissRequest = { showMultiCountryWarning = false },
+            onDismissRequest = { multiCountryDoc = null },
             confirmButton = {
                 TextButton(onClick = {
-                    showMultiCountryWarning = false
-                    commit()
+                    multiCountryDoc = null
+                    saveDoc(doc, true)
                 }) { Text("Save anyway") }
             },
             dismissButton = {
-                TextButton(onClick = { showMultiCountryWarning = false }) { Text("Go back") }
+                TextButton(onClick = { multiCountryDoc = null }) { Text("Go back") }
             },
             text = {
                 Text(
                     buildAnnotatedString {
                         append("You have multiple countries selected for this visa: ")
-                        val names = customIso.sortedBy { countries[it]?.name ?: it }
                         names.forEachIndexed { index, iso ->
                             withStyle(SpanStyle(color = STATUS_WARN, fontWeight = FontWeight.SemiBold)) {
                                 append(countries[iso]?.name ?: iso)
@@ -886,43 +882,46 @@ fun AddDocumentDialog(
             },
         )
     }
-    if (identityLocked) {
+    pendingMutationDoc?.let { doc ->
         AlertDialog(
-            onDismissRequest = { identityLocked = false },
-            confirmButton = {
-                TextButton(onClick = { identityLocked = false }) { Text("Got it") }
-            },
-            title = { Text("In use by a trip") },
-            text = {
-                Text(
-                    "This document is used by a trip, so its type or country can't be changed here — " +
-                        "doing so would silently change what the trip was entered with and how its stay " +
-                        "allowance is calculated. To change it, re-point that trip to a different document " +
-                        "(or delete the trip) first. You can still edit its dates, number, and entry type.",
-                )
-            },
-        )
-    }
-    if (duplicateOf != null) {
-        AlertDialog(
-            onDismissRequest = { duplicateOf = null; onDismiss() },
+            onDismissRequest = { pendingMutationDoc = null },
             confirmButton = {
                 TextButton(onClick = {
-                    val d = duplicateOf
-                    duplicateOf = null
-                    if (d != null) onEditExisting(d)
-                }) { Text("Edit existing") }
+                    pendingMutationDoc = null
+                    onAdd(doc)
+                    onDismiss()
+                }) { Text("Confirm") }
             },
             dismissButton = {
-                TextButton(onClick = { duplicateOf = null; onDismiss() }) { Text("Discard") }
+                TextButton(onClick = { pendingMutationDoc = null }) { Text("Go back") }
             },
-            title = { Text("Document already exists") },
-            text = {
-                Text(
-                    duplicateReason ?: "You already have this document. Edit the existing one to " +
-                        "change its details, or discard this entry.",
-                )
+            title = { Text(pendingMutationWarn?.title ?: "Heads up") },
+            text = { Text(pendingMutationWarn?.message ?: "This action will also change another of your documents.") },
+        )
+    }
+    blocked?.let { finding ->
+        AlertDialog(
+            onDismissRequest = {
+                if (blockedDuplicate != null) onDismiss()
+                blocked = null
             },
+            confirmButton = {
+                TextButton(onClick = {
+                    val dup = blockedDuplicate
+                    blocked = null
+                    if (dup != null) onEditExisting(dup)
+                }) { Text(if (blockedDuplicate != null) "Edit existing" else "Got it") }
+            },
+            dismissButton = {
+                if (blockedDuplicate != null) {
+                    TextButton(onClick = {
+                        blocked = null
+                        onDismiss()
+                    }) { Text("Discard") }
+                }
+            },
+            title = { Text(finding.title) },
+            text = { Text(finding.message) },
         )
     }
 }

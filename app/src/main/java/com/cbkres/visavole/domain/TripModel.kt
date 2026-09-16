@@ -103,6 +103,18 @@ object TripModel {
             .filter { isVisaLike(it, world) || it.entryType() != null }
             .associate { it.id to computeEntryStatus(it, trips, today) }
 
+    /**
+     * The entry status of a single document, or null when it carries no entry count and is not
+     * visa-like (e.g. a passport). The per-document form of [entryStatusFor].
+     */
+    fun entryStatusFor(
+        doc: Document,
+        trips: List<Trip>,
+        world: WorldData,
+        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+    ): EntryStatus? =
+        if (isVisaLike(doc, world) || doc.entryType() != null) computeEntryStatus(doc, trips, today) else null
+
     fun effectiveDocs(
         docs: List<Document>,
         trips: List<Trip>,
@@ -533,7 +545,8 @@ object TripModel {
         is Custom -> k.kind == "visa" || k.kind == "permit"
     }
 
-    private fun entryTotalFor(type: String?): Int? = when (type) {
+    /** The fixed entry count an entry type carries ("single" = 1, "double" = 2, null = unlimited). */
+    fun entryTotalFor(type: String?): Int? = when (type) {
         "single" -> 1
         "double" -> 2
         else -> null
