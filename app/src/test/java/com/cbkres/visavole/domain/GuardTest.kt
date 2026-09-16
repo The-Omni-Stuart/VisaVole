@@ -530,27 +530,32 @@ class GuardTest {
     }
 
     // ------------------------------------------------------------------
-    // doc.home.*
+    // doc.passport.unknownCountry
     // ------------------------------------------------------------------
 
-    @Test fun unknownHomeCountryIsBlocked() {
-        val r = GuardEngine.evaluate(GuardAction.SetHome("XX"), ctx())
+    @Test fun unknownPassportCountryIsBlockedOnAdd() {
+        val r = add(passport("p1", "XX", "123", "2028-01-01"))
         assertFalse(r.canProceed)
-        assertTrue(codes(r).contains("doc.home.unknown"))
+        assertTrue(codes(r).contains("doc.passport.unknownCountry"))
     }
 
-    @Test fun duplicateHomePassportIsBlocked() {
+    @Test fun unknownPassportCountryIsBlockedOnUpdate() {
         val p1 = passport("p1", "FR", "123", "2028-01-01")
-        val r = GuardEngine.evaluate(GuardAction.SetHome("FR"), ctx(docs = listOf(p1)))
+        val r = GuardEngine.evaluate(GuardAction.UpdateDocument(p1.copy(kind = DocKind.Passport("XX")), p1), ctx(docs = listOf(p1)))
         assertFalse(r.canProceed)
-        val f = r.findings.firstOrNull { it.code == "doc.home.duplicate" }
-        assertNotNull(f)
-        assertEquals("You already have a passport for France. Remove or edit it first.", f!!.message)
+        assertTrue(codes(r).contains("doc.passport.unknownCountry"))
     }
 
-    @Test fun freshHomeCountryIsAllowed() {
+    @Test fun secondPassportOfSameCountryIsAllowed() {
         val p1 = passport("p1", "FR", "123", "2028-01-01")
-        val r = GuardEngine.evaluate(GuardAction.SetHome("DE"), ctx(docs = listOf(p1)))
+        val p2 = passport("p2", "FR", "456", "2030-01-01")
+        val r = add(p2, listOf(p1))
+        assertTrue("codes=${codes(r)}", r.canProceed)
+    }
+
+    @Test fun freshPassportCountryIsAllowed() {
+        val p1 = passport("p1", "FR", "123", "2028-01-01")
+        val r = add(passport("p2", "DE", "789", "2028-01-01"), listOf(p1))
         assertTrue(r.canProceed)
         assertTrue(r.findings.isEmpty())
     }

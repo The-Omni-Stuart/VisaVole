@@ -57,7 +57,6 @@ sealed class GuardAction {
     data class AddDocument(val candidate: Document) : GuardAction()
     data class UpdateDocument(val candidate: Document, val original: Document) : GuardAction()
     data class RemoveDocument(val docId: String) : GuardAction()
-    data class SetHome(val iso2: String, val expiry: String? = null) : GuardAction()
     data class SetPrimary(val docId: String?) : GuardAction()
     data class AddTrip(val candidate: Trip) : GuardAction()
     data class UpdateTrip(val candidate: Trip) : GuardAction()
@@ -81,7 +80,6 @@ object GuardEngine {
             is GuardAction.AddDocument -> documentRules(action, ctx)
             is GuardAction.UpdateDocument -> documentRules(action, ctx)
             is GuardAction.RemoveDocument -> listOfNotNull(removeDocumentRule(action, ctx))
-            is GuardAction.SetHome -> listOfNotNull(setHomeRule(action, ctx))
             is GuardAction.SetPrimary -> listOfNotNull(setPrimaryRule(action, ctx))
             is GuardAction.AddTrip -> tripRules(action, ctx)
             is GuardAction.UpdateTrip -> tripRules(action, ctx)
@@ -105,6 +103,7 @@ object GuardEngine {
             else -> return emptyList()
         }
         return listOfNotNull(
+            passportUnknownCountryRule(candidate, ctx),
             duplicateRule(candidate, ctx),
             inUseIdentityRule(action, candidate, ctx),
             visaMultiCountryRule(candidate, ctx),
@@ -113,6 +112,18 @@ object GuardEngine {
             capRules(candidate, ctx),
             singlePerCountryRule(candidate, ctx),
         )
+    }
+
+    /** `doc.passport.unknownCountry` — a passport whose nationality isn't in the world data. */
+    private fun passportUnknownCountryRule(candidate: Document, ctx: GuardContext): GuardResult? {
+        val iso2 = (candidate.kind as? DocKind.Passport)?.iso2 ?: return null
+        if (ctx.world.countries[iso2] != null) return null
+        return GuardResult(listOf(
+            GuardFinding(
+                "doc.passport.unknownCountry", GuardSeverity.BLOCK, "Unknown country",
+                "No known country matches $iso2.",
+            ),
+        ))
     }
 
     /** `doc.duplicate` — the candidate is an exact duplicate of a held document. */
@@ -340,26 +351,6 @@ object GuardEngine {
                     "document, or delete the trip.",
             ),
         ))
-    }
-
-    /** `doc.home.*` — onboarding passport creation. */
-    private fun setHomeRule(action: GuardAction.SetHome, ctx: GuardContext): GuardResult? {
-        val country = ctx.world.countries[action.iso2]
-        return when {
-            country == null -> GuardResult(listOf(
-                GuardFinding(
-                    "doc.home.unknown", GuardSeverity.BLOCK, "Unknown country",
-                    "No known country matches ${action.iso2}.",
-                ),
-            ))
-            ctx.docs.any { (it.kind as? DocKind.Passport)?.iso2 == action.iso2 } -> GuardResult(listOf(
-                GuardFinding(
-                    "doc.home.duplicate", GuardSeverity.BLOCK, "Passport already exists",
-                    "You already have a passport for ${country.name}. Remove or edit it first.",
-                ),
-            ))
-            else -> null
-        }
     }
 
     /** `doc.primary.notPassport` — the primary (star) must be a passport. */

@@ -1,7 +1,6 @@
 package com.cbkres.visavole.domain
 
 import java.time.LocalDate
-import java.util.UUID
 
 /**
  * Pure, framework-free transformations for persisted access state. Kept outside the
@@ -9,28 +8,6 @@ import java.util.UUID
  * coroutines, or asset loading involved).
  */
 object DocumentMigration {
-
-    /**
-     * Convert legacy state (schema v2, where the home passport had the magic id "home")
-     * to the current shape (every document has a UUID). The home passport is given a fresh
-     * UUID and every trip stop referencing the old "home" id is remapped to it.
-     *
-     * No-op (returns the same list references) when no "home" document exists.
-     * [newId] is injectable so tests can assert the exact id used.
-     */
-    fun legacyHomeToUuid(
-        docs: List<Document>,
-        trips: List<Trip>,
-        newId: () -> String = { UUID.randomUUID().toString() },
-    ): Triple<List<Document>, List<Trip>, String?> {
-        val home = docs.firstOrNull { it.id == "home" } ?: return Triple(docs, trips, null)
-        val id = newId()
-        val migratedDocs = docs.map { d -> if (d.id == "home") d.copy(id = id) else d }
-        val migratedTrips = trips.map { t ->
-            t.copy(stops = t.stops.map { s -> if (s.documentId == "home") s.copy(documentId = id) else s })
-        }
-        return Triple(migratedDocs, migratedTrips, id)
-    }
 
     /**
      * The document that currently "counts" as the user's primary passport for tie-breaking:

@@ -26,6 +26,7 @@ import com.cbkres.visavole.domain.TripCalculation
 import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.TripSections
 import com.cbkres.visavole.domain.TripStop
+import com.cbkres.visavole.domain.passportDocument
 import com.cbkres.visavole.domain.residenceClassFor
 import java.io.File
 import java.time.LocalDate
@@ -78,7 +79,6 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     private var docs: MutableList<Document> = mutableListOf()
     private var trips: MutableList<Trip> = mutableListOf()
     private var primaryDocId: String? = null
-    private var pendingHome: String? = null
     private var reloadGeneration = 0
 
     init {
@@ -87,7 +87,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
             withContext(Dispatchers.IO) {
                 world = repository.loadWorld(AccessModel.homeCountries(docs))
                 geometry
-                migrateState(world!!)
+                ensurePrimaryPassport()
                 normalizeResidenceClasses(world!!)
                 world = repository.loadWorld(AccessModel.homeCountries(docs))
             }
@@ -108,36 +108,14 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /**
-     * One-time upgrade to the UUID-based passport model: convert the legacy `id="home"` passport
-     * into a fresh UUID (remapping any trips that referenced it), create a document for a legacy
-     * home iso that never became a document, and make sure a primary passport is set. Idempotent.
-     */
-    private fun migrateState(w: WorldData) {
-        var changed = false
-        val (newDocs, newTrips, newHomeId) = DocumentMigration.legacyHomeToUuid(docs, trips)
-        if (newHomeId != null) {
-            docs = newDocs.toMutableList()
-            trips = newTrips.toMutableList()
-            if (primaryDocId == null) primaryDocId = newHomeId
-            changed = true
+    /** Keeps the primary pointer on a held passport; a missing or dangling primary falls back to the first one. */
+    private fun ensurePrimaryPassport() {
+        val current = docs.firstOrNull { it.id == primaryDocId && it.kind is DocKind.Passport }
+        val next = current?.id ?: docs.firstOrNull { it.kind is DocKind.Passport }?.id
+        if (next != primaryDocId) {
+            primaryDocId = next
+            persist()
         }
-        pendingHome?.let { iso ->
-            if (docs.none { (it.kind as? DocKind.Passport)?.iso2 == iso }) {
-                val newId = UUID.randomUUID().toString()
-                docs = (listOf(Document(newId, "Passport · ${w.countries[iso]?.name ?: iso}", DocKind.Passport(iso))) + docs).toMutableList()
-                if (primaryDocId == null) primaryDocId = newId
-                changed = true
-            }
-            pendingHome = null
-        }
-        if (primaryDocId == null) {
-            docs.firstOrNull { it.kind is DocKind.Passport }?.let {
-                primaryDocId = it.id
-                changed = true
-            }
-        }
-        if (changed) persist()
     }
 
     private fun publish() {
@@ -223,12 +201,9 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         persist()
     }
 
-    fun setHome(iso2: String, expiry: String? = null) {
-        if (!guardAllows(GuardAction.SetHome(iso2, expiry))) return
-        val newId = UUID.randomUUID().toString()
-        val homeDoc = Document(newId, "Passport · ${world?.countries?.get(iso2)?.name ?: iso2}", DocKind.Passport(iso2), null, expiry)
-        primaryDocId = newId
-        updateDocs(listOf(homeDoc) + docs.filterNot { (it.kind as? DocKind.Passport)?.iso2 == iso2 })
+    /** Onboarding's "add your first passport": the same guarded add path as the documents tab. */
+    fun addOnboardingPassport(iso2: String, expiry: String? = null) {
+        addDocument(passportDocument(iso2, world?.countries?.get(iso2)?.name, expiry))
     }
 
     fun addDocument(doc: Document) {
@@ -310,7 +285,6 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
             if (!file.exists()) return
             val root = JSONObject(file.readText())
             primaryDocId = root.strOrNull("primaryDocId")
-            pendingHome = if (primaryDocId == null) (if (root.isNull("home")) null else root.optString("home").ifEmpty { null }) else null
             val arr = root.optJSONArray("docs") ?: JSONArray()
             val list = mutableListOf<Document>()
             for (i in 0 until arr.length()) list.add(jsonToDoc(arr.getJSONObject(i)))

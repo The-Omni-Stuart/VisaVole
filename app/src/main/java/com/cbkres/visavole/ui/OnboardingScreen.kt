@@ -47,7 +47,7 @@ private fun Long.toUtcIsoDate(): String {
 @Composable
 fun OnboardingScreen(
     countries: Map<String, Country>,
-    onPick: (String, String?) -> Unit,
+    onAddPassport: (String, String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var query by remember { mutableStateOf("") }
@@ -140,7 +140,7 @@ fun OnboardingScreen(
                     }) { Text("Choose date") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { onPick(iso, null) }) { Text("Skip") }
+                    TextButton(onClick = { onAddPassport(iso, null) }) { Text("Skip") }
                 },
             )
         }
@@ -158,7 +158,7 @@ fun OnboardingScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        onPick(iso, datePickerState.selectedDateMillis?.toUtcIsoDate())
+                        onAddPassport(iso, datePickerState.selectedDateMillis?.toUtcIsoDate())
                         showDatePicker = false
                         showExpiryDialog = false
                     }) { Text("Save") }

@@ -82,6 +82,7 @@ import com.cbkres.visavole.domain.ResidenceClass
 import com.cbkres.visavole.domain.defaultResidenceClassFor
 import com.cbkres.visavole.domain.duplicateSignature
 import com.cbkres.visavole.domain.passportCountsByIso
+import com.cbkres.visavole.domain.passportDocument
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.domain.residenceClassFor
 import java.time.Instant
@@ -611,7 +612,7 @@ fun AddDocumentDialog(
         return when {
             docType == DocType.PASSPORT -> {
                 val iso = lastIso ?: customIso.first()
-                Document(id, "Passport · ${countries[iso]?.name ?: iso}", DocKind.Passport(iso), null, exp, vfrom)
+                passportDocument(iso, countries[iso]?.name, exp, vfrom, id = id)
             }
             initHolding != null && customIso.isEmpty() -> {
                 val h = holdingChoice!!

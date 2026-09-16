@@ -1,6 +1,7 @@
 package com.cbkres.visavole.domain
 
 import com.cbkres.visavole.data.WorldData
+import java.util.UUID
 
 /** What a document is, and what it unlocks. */
 sealed class DocKind {
@@ -44,6 +45,15 @@ data class Document(
     // replacement is deleted (the ViewModel clears dangling pointers). Passports are never superseded.
     val supersededBy: String? = null,
 )
+
+/** A brand-new passport for [iso2]; [countryName] (from the world data) drives the default label. */
+fun passportDocument(
+    iso2: String,
+    countryName: String?,
+    expiry: String? = null,
+    validFrom: String? = null,
+    id: String = UUID.randomUUID().toString(),
+): Document = Document(id, "Passport · ${countryName ?: iso2}", DocKind.Passport(iso2), null, expiry, validFrom)
 
 /** The document's entry type, if it carries one; passports and residence documents return null. */
 fun Document.entryType(): String? = when (val k = kind) {
