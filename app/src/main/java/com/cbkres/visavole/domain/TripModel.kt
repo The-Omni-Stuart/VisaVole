@@ -311,15 +311,6 @@ object TripModel {
         return out
     }
 
-    fun splitBeforeStop(trip: Trip, index: Int, closeDate: LocalDate, newId: String): Pair<Trip, Trip>? {
-        if (index <= 0 || index >= trip.stops.size) return null
-        val ordered = sortedStops(trip.stops)
-        val left = ordered.take(index).map { if (it.departure == null) it.copy(departure = closeDate) else it }
-        val right = ordered.drop(index)
-        if (left.isEmpty() || right.isEmpty()) return null
-        return Trip(trip.id, left, trip.note) to Trip(newId, right, null)
-    }
-
     fun isShortStaySuppressed(access: Access?): Boolean =
         access?.level == FREEDOM || access?.level == RESIDENCE
 

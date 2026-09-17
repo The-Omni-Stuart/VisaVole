@@ -285,28 +285,6 @@ class TripModelTest {
     }
 
     @Test
-    fun splitBeforeStopClosesTheLeftTripAndStartsARightTrip() {
-        val t = trip(
-            "t",
-            stop("s1", "DE", today.minusDays(10), null),
-            stop("s2", "FR", today.plusDays(7), null),
-        )
-        val (left, right) = TripModel.splitBeforeStop(t, 1, today.plusDays(4), "new")!!
-        assertEquals("t", left.id)
-        assertEquals(listOf(today.plusDays(4)), left.stops.map { it.departure })
-        assertEquals("new", right.id)
-        assertEquals(listOf("s2"), right.stops.map { it.id })
-        assertNull(right.note)
-    }
-
-    @Test
-    fun splitBeforeStopRejectsInvalidIndexes() {
-        val t = trip("t", stop("s1", "DE", today, null))
-        assertNull(TripModel.splitBeforeStop(t, 0, today, "new"))
-        assertNull(TripModel.splitBeforeStop(t, 1, today, "new"))
-    }
-
-    @Test
     fun shortStaySuppressionAppliesOnlyToFreedomAndResidence() {
         assertTrue(TripModel.isShortStaySuppressed(Access(AccessLevel.FREEDOM, null, "freedom")))
         assertTrue(TripModel.isShortStaySuppressed(Access(AccessLevel.RESIDENCE, null, "residence")))

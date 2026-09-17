@@ -106,7 +106,7 @@ fun TripsScreen(
     scrollState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
-    val today = remember { LocalDate.now(ZoneOffset.UTC) }
+    val today = ready.today
     var focusedKey by remember { mutableStateOf<String?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var editingTrip by remember { mutableStateOf<Trip?>(null) }
@@ -634,7 +634,7 @@ private fun AddTripDialog(
     initial: Trip?,
     onDismiss: () -> Unit,
 ) {
-    val today = remember { LocalDate.now(ZoneOffset.UTC) }
+    val today = ready.today
     var stops by remember { mutableStateOf(TripModel.sortedStops(initial?.stops ?: emptyList())) }
     var note by remember { mutableStateOf(initial?.note ?: "") }
     var currentTripId by remember { mutableStateOf(initial?.id ?: UUID.randomUUID().toString()) }

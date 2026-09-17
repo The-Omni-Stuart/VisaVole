@@ -55,6 +55,7 @@ sealed interface AppState {
         val allowances: List<AllowanceSnapshot> = emptyList(),
         val documentEntryStatus: Map<String, EntryStatus> = emptyMap(),
         val primaryDocId: String? = null,
+        val today: LocalDate = LocalDate.now(ZoneOffset.UTC),
     ) : AppState
 }
 
@@ -118,15 +119,19 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** One "today" per publish cycle: screens, derived state and the guard backstop all read this. */
+    private var today: LocalDate = LocalDate.now(ZoneOffset.UTC)
+
     private fun publish() {
         val w = world ?: return
+        today = LocalDate.now(ZoneOffset.UTC)
         val homeCountries = AccessModel.homeCountries(docs)
         val ownVisaCountries =
             if (homeCountries.isNotEmpty()) AccessModel.ownVisaCountries(docs, w, trips = trips.toList()) else emptySet()
         val effectiveDocs = if (homeCountries.isNotEmpty()) TripModel.effectiveDocs(docs, trips, w) else docs
         val access =
-            if (homeCountries.isNotEmpty()) AccessModel.compute(effectiveDocs, w, trips = trips.toList()) else emptyMap()
-        val calc = if (homeCountries.isNotEmpty()) TripModel.calculate(trips, docs, w)
+            if (homeCountries.isNotEmpty()) AccessModel.compute(effectiveDocs, w, today, trips = trips.toList()) else emptyMap()
+        val calc = if (homeCountries.isNotEmpty()) TripModel.calculate(trips, docs, w, today)
         else TripCalculation(TripSections(emptyList(), emptyList(), emptyList()), emptyList(), emptyMap())
         _state.value = AppState.Ready(
             homeCountries = homeCountries,
@@ -139,7 +144,8 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
             tripSections = calc.sections,
             allowances = calc.allowances,
             documentEntryStatus = calc.entryStatus,
-            primaryDocId = effectivePrimaryId(),
+            primaryDocId = effectivePrimaryId(today),
+            today = today,
         )
     }
 
@@ -147,8 +153,8 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
      * The effective primary passport: the starred one if it's still a valid (non-expired) passport,
      * otherwise the first valid passport. Used only as a tie-breaker by [AccessModel.bestDocumentId].
      */
-    private fun effectivePrimaryId(): String? =
-        DocumentMigration.effectivePrimaryId(docs, primaryDocId, LocalDate.now(ZoneOffset.UTC))
+    private fun effectivePrimaryId(today: LocalDate): String? =
+        DocumentMigration.effectivePrimaryId(docs, primaryDocId, today)
 
     private fun updateDocs(nextDocs: List<Document>) {
         val oldHomes = AccessModel.homeCountries(docs)
@@ -171,10 +177,12 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** The guard context for the current state (null while the world is still loading). */
+    /** The guard context for the current state (null while the world is still loading). The
+     *  backstop re-evaluates with the same `today` the screens last published, so a tap straddling
+     *  midnight cannot disagree with what the user just saw. */
     private fun guardCtx(): GuardContext? {
         val w = world ?: return null
-        return GuardContext(docs.toList(), trips.toList(), w, LocalDate.now(ZoneOffset.UTC), effectivePrimaryId())
+        return GuardContext(docs.toList(), trips.toList(), w, today, effectivePrimaryId(today))
     }
 
     /**

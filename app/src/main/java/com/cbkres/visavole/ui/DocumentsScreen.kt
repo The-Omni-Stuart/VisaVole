@@ -167,7 +167,7 @@ fun DocumentsScreen(
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Document?>(null) }
     var blockedRemove by remember { mutableStateOf<GuardFinding?>(null) }
-    val today = LocalDate.now(ZoneOffset.UTC)
+    val today = ready.today
     // One shared guard context for the whole screen; every add/remove/star decision below goes
     // through the same GuardEngine the ViewModel backstops with.
     val guardCtx = remember(ready.docs, ready.trips, ready.world, today) {
