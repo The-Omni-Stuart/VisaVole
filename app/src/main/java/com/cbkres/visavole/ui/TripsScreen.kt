@@ -70,11 +70,18 @@ import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.AllowanceStatus
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.Document
+import com.cbkres.visavole.domain.DocumentMigration
+import com.cbkres.visavole.domain.GuardAction
+import com.cbkres.visavole.domain.GuardContext
+import com.cbkres.visavole.domain.GuardEngine
+import com.cbkres.visavole.domain.GuardFinding
+import com.cbkres.visavole.domain.GuardMutation
+import com.cbkres.visavole.domain.GuardResult
+import com.cbkres.visavole.domain.GuardSeverity
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.TripStop
 import com.cbkres.visavole.domain.TripStatus
-import com.cbkres.visavole.domain.TripWarning
 import com.cbkres.visavole.domain.WarningSeverity
 import com.cbkres.visavole.domain.entryType
 import com.cbkres.visavole.domain.passportCountsByIso
@@ -640,36 +647,35 @@ private fun AddTripDialog(
     var gapIndex by remember { mutableStateOf<Int?>(null) }
     var acknowledgedGap by remember { mutableStateOf<GapKey?>(null) }
     var lastStopSnapshot by remember { mutableStateOf<StopSnapshot?>(null) }
-    var saveWarnings by remember { mutableStateOf<Pair<List<TripWarning>, Boolean>?>(null) }
+    var saveWarnings by remember { mutableStateOf<Pair<List<GuardFinding>, Boolean>?>(null) }
+    var pendingMutations by remember { mutableStateOf<List<GuardMutation>>(emptyList()) }
     var ongoingConflict by remember { mutableStateOf<OngoingConflict?>(null) }
 
     fun candidate(): Trip = Trip(currentTripId, stops, note.ifBlank { null })
 
     fun save(trip: Trip = candidate()) {
-        if (isEditingExisting) vm.updateTrip(trip) else vm.addTrip(trip)
+        if (isEditingExisting) vm.updateTrip(trip, pendingMutations) else vm.addTrip(trip, pendingMutations)
+        pendingMutations = emptyList()
         onDismiss()
     }
 
-    fun warningsFor(trip: Trip, tripsOverride: List<Trip> = ready.trips): List<TripWarning> {
-        val others = tripsOverride.filter { it.id != trip.id }
-        return TripModel.validateTrip(trip, ready.world, today) +
-            TripModel.gapWarningsFor(trip, today) +
-            TripModel.overlapWarningsFor(trip, others, ready.docs, ready.world, today) +
-            TripModel.projectionWarningsFor(trip, others, ready.docs, ready.world, today)
+    /** The shared guard context for this dialog: the effective primary passport is the
+     *  tie-breaker document the `trip.passport.*` rules evaluate against. */
+    fun evaluate(trip: Trip, tripsOverride: List<Trip> = ready.trips): GuardResult {
+        val action = if (isEditingExisting) GuardAction.UpdateTrip(trip) else GuardAction.AddTrip(trip)
+        val ctx = GuardContext(
+            ready.docs, tripsOverride, ready.world, today,
+            DocumentMigration.effectivePrimaryId(ready.docs, ready.primaryDocId, today),
+        )
+        return GuardEngine.evaluate(action, ctx)
     }
 
+    /** The ongoing-cap finding/mutation from the engine, if any (§13.4). */
     fun ongoingConflictFor(trip: Trip): OngoingConflict? {
-        if (trip.statusAt(today) != TripStatus.ONGOING) return null
-        val previous = ready.trips
-            .filter { it.id != trip.id && it.isOpen }
-            .minByOrNull { it.firstArrival }
+        val end = evaluate(trip).mutations.firstOrNull { it is GuardMutation.EndTrip } as? GuardMutation.EndTrip
             ?: return null
-        val end = when {
-            trip.firstArrival.isBefore(previous.firstArrival) -> previous.firstArrival
-            trip.firstArrival.isAfter(today) -> today
-            else -> trip.firstArrival
-        }
-        return OngoingConflict(trip, previous, end)
+        val previous = ready.trips.firstOrNull { it.id == end.tripId } ?: return null
+        return OngoingConflict(trip, previous, end.onDate)
     }
 
     fun continueValidation(trip: Trip) {
@@ -678,30 +684,43 @@ private fun AddTripDialog(
             ongoingConflict = conflict
             return
         }
-        val warnings = warningsFor(trip)
-        if (warnings.isEmpty()) save(trip) else saveWarnings = warnings to true
+        val result = evaluate(trip)
+        pendingMutations = result.mutations
+        if (result.warnings.isEmpty()) save(trip) else saveWarnings = result.warnings to true
     }
 
     fun resolveOngoingConflict(closePrevious: Boolean) {
         val conflict = ongoingConflict ?: return
         ongoingConflict = null
         if (closePrevious) {
-            val closed = TripModel.closeTrip(conflict.previous, conflict.end)
-            vm.updateTrip(closed)
-            val updatedTrips = ready.trips.map { if (it.id == closed.id) closed else it }
-            val warnings = warningsFor(conflict.candidate, updatedTrips)
-            if (warnings.isEmpty()) save(conflict.candidate) else saveWarnings = warnings to true
+            // Re-evaluate against the list where the previous trip is already closed: the cap
+            // rule is then quiet and its mutation is gone. The EndTrip mutation only reaches the
+            // ViewModel when this trip is actually saved (atomically with the candidate).
+            val closedTrips = ready.trips.map {
+                if (it.id == conflict.previous.id) TripModel.closeTrip(it, conflict.end) else it
+            }
+            val result = evaluate(conflict.candidate, closedTrips)
+            if (result.blocks.isNotEmpty()) {
+                pendingMutations = emptyList()
+                saveWarnings = result.blocks to false
+                return
+            }
+            pendingMutations = listOf(GuardMutation.EndTrip(conflict.previous.id, conflict.end))
+            if (result.warnings.isEmpty()) save(conflict.candidate) else saveWarnings = result.warnings to true
         } else {
-            val warnings = warningsFor(conflict.candidate)
+            val result = evaluate(conflict.candidate)
+            pendingMutations = emptyList()
+            val warnings = result.warnings.filter { it.code != "trip.ongoing.cap" }
             if (warnings.isEmpty()) save(conflict.candidate) else saveWarnings = warnings to true
         }
     }
 
     fun trySave() {
         val trip = candidate()
-        val hard = TripModel.validateTrip(trip, ready.world, today).filter { it.severity == WarningSeverity.DANGER }
-        if (hard.isNotEmpty()) {
-            saveWarnings = hard to false
+        val result = evaluate(trip)
+        if (result.blocks.isNotEmpty()) {
+            pendingMutations = emptyList()
+            saveWarnings = result.blocks to false
             return
         }
         val conflict = ongoingConflictFor(trip)
@@ -1013,14 +1032,14 @@ private fun AddTripDialog(
             onDismiss = { saveWarnings = null },
             content = {
                 Column {
-                    warnings.forEach { w ->
+                    warnings.forEach { f ->
                         Text(
-                            "${w.title}: ${w.message}",
+                            "${f.title}: ${f.message}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = when (w.severity) {
-                                WarningSeverity.DANGER -> STATUS_BAD
-                                WarningSeverity.WARNING -> STATUS_WARN
-                                WarningSeverity.INFO -> MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (f.severity == GuardSeverity.BLOCK || f.code in SAVABLE_DANGER_CODES) {
+                                STATUS_BAD
+                            } else {
+                                STATUS_WARN
                             },
                             modifier = Modifier.padding(vertical = 3.dp),
                         )
@@ -1030,6 +1049,18 @@ private fun AddTripDialog(
         )
     }
 }
+
+/**
+ * Finding codes that were DANGERs before the unified guard (savable, per Q1): they stay WARN in
+ * the engine but are rendered in the danger colour so the visual weight is unchanged.
+ */
+private val SAVABLE_DANGER_CODES = setOf(
+    "trip.allowance.exceeded",
+    "trip.entries.over",
+    "trip.access.none",
+    "trip.access.blocked",
+    "trip.passport.expiringSoon3",
+)
 
 /** Display label for [doc]; when the holder keeps several passports of one nationality, append a
  * stable "(N)" (e.g. "Passport · United Kingdom (2)") so it's clear which passport a stop refers to. */

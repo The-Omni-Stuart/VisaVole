@@ -102,6 +102,14 @@ object AccessModel {
         return map
     }
 
+    /**
+     * The set of countries an expired passport of nationality [home] still unlocks: its own
+     * country and any freedom-of-movement bloc it belongs to. Used by the `trip.passport.*` guard
+     * rules to decide whether an expired passport can still support a trip.
+     */
+    fun expiredPassportFreedomSet(home: String, world: WorldData): Set<String> =
+        passportCandidates(home, world, expired = true).keys
+
     /** Candidates from a held document (residence / visa / permit / custom). */
     private fun documentCandidates(doc: Document, world: WorldData): Map<String, Access> {
         val map = LinkedHashMap<String, Access>()

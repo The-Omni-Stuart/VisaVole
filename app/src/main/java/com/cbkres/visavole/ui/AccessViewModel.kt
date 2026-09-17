@@ -238,13 +238,17 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun addTrip(trip: Trip) {
+    fun addTrip(trip: Trip, mutations: List<GuardMutation> = emptyList()) {
+        if (!guardAllows(GuardAction.AddTrip(trip))) return
+        applyMutations(mutations)
         trips = (trips + trip).toMutableList()
         persist()
         publish()
     }
 
-    fun updateTrip(trip: Trip) {
+    fun updateTrip(trip: Trip, mutations: List<GuardMutation> = emptyList()) {
+        if (!guardAllows(GuardAction.UpdateTrip(trip))) return
+        applyMutations(mutations)
         trips = trips.map { if (it.id == trip.id) trip else it }.toMutableList()
         persist()
         publish()
@@ -256,9 +260,12 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         publish()
     }
 
+    /** UX close of an ongoing trip — intentionally outside the guard (see spec §Phase 3). */
     fun endTrip(id: String, departure: LocalDate) {
         val trip = trips.firstOrNull { it.id == id } ?: return
-        updateTrip(TripModel.closeTrip(trip, departure))
+        trips = trips.map { if (it.id == id) TripModel.closeTrip(it, departure) else it }.toMutableList()
+        persist()
+        publish()
     }
 
     // ---- persistence (JSON in the app's files dir) ----

@@ -2,6 +2,7 @@ package com.cbkres.visavole.domain
 
 import com.cbkres.visavole.data.Country
 import com.cbkres.visavole.data.Holding
+import com.cbkres.visavole.data.Regime
 import com.cbkres.visavole.data.WorldData
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -33,7 +34,8 @@ class GuardTest {
         docs: List<Document> = emptyList(),
         trips: List<Trip> = emptyList(),
         w: WorldData = world(),
-    ) = GuardContext(docs, trips, w, today)
+        primaryId: String? = null,
+    ) = GuardContext(docs, trips, w, today, primaryId)
 
     private fun passport(
         id: String,
@@ -584,19 +586,229 @@ class GuardTest {
     }
 
     // ------------------------------------------------------------------
-    // Trip actions (stubs until the trip-side phase)
+    // Trip rules
     // ------------------------------------------------------------------
 
-    @Test fun tripActionsAreAcceptedForNow() {
-        val t = trip("t1", stop("s1", "DE", LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 15)))
-        val addR = GuardEngine.evaluate(GuardAction.AddTrip(t), ctx())
-        val updR = GuardEngine.evaluate(GuardAction.UpdateTrip(t), ctx())
-        val rmR = GuardEngine.evaluate(GuardAction.RemoveTrip("t1"), ctx())
-        val endR = GuardEngine.evaluate(GuardAction.EndTrip("t1"), ctx())
-        for (r in listOf(addR, updR, rmR, endR)) {
-            assertTrue(r.canProceed)
-            assertTrue(r.findings.isEmpty())
-            assertTrue(r.mutations.isEmpty())
+    private fun addTrip(
+        t: Trip,
+        docs: List<Document> = emptyList(),
+        trips: List<Trip> = emptyList(),
+        primaryId: String? = null,
+    ): GuardResult =
+        GuardEngine.evaluate(GuardAction.AddTrip(t), ctx(docs = docs, trips = trips, primaryId = primaryId))
+
+    @Test fun tripWithNoStopsIsBlocked() {
+        val r = addTrip(Trip("t1", emptyList()))
+        assertTrue(r.blocks.any { it.code == "trip.noStops" })
+        assertFalse(r.canProceed)
+    }
+
+    @Test fun tripToUnknownCountryIsBlocked() {
+        val r = addTrip(trip("t1", stop("s1", "XX", today.plusDays(10), today.plusDays(20))))
+        assertTrue(r.blocks.any { it.code == "trip.unknownCountry" })
+        assertFalse(r.canProceed)
+    }
+
+    @Test fun departureBeforeArrivalIsBlocked() {
+        val r = addTrip(trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(5))))
+        assertTrue(r.blocks.any { it.code == "trip.departureBeforeArrival" })
+        assertFalse(r.canProceed)
+    }
+
+    @Test fun nonFinalStopWithoutDepartureWarnsButIsSavable() {
+        val r = addTrip(
+            trip("t1", stop("s1", "DE", today.plusDays(10), null),
+                stop("s2", "CA", today.plusDays(20), today.plusDays(30))),
+        )
+        assertTrue(r.warnings.any { it.code == "trip.missingDeparture" })
+        assertTrue(r.canProceed)
+    }
+
+    @Test fun gapBetweenStopsWarns() {
+        val r = addTrip(
+            trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(12)),
+                stop("s2", "CA", today.plusDays(20), today.plusDays(30))),
+        )
+        assertTrue(r.warnings.any { it.code == "trip.gap" })
+    }
+
+    @Test fun continuousStopsProduceNoGapFinding() {
+        val r = addTrip(
+            trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(12)),
+                stop("s2", "CA", today.plusDays(13), today.plusDays(30))),
+        )
+        assertFalse(r.findings.any { it.code == "trip.gap" })
+    }
+
+    @Test fun overlappingTripInSameCountryWarns() {
+        val other = trip("t0", stop("s0", "DE", today.plusDays(12), today.plusDays(20)))
+        val r = addTrip(trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(15))), trips = listOf(other))
+        assertTrue(r.warnings.any { it.code == "trip.overlap" })
+    }
+
+    @Test fun projectionDangerIsAWarningNotABlock() {
+        // FR passport holder, bare world (no rules) → DE stop gets "No valid entry grant",
+        // a DANGER before the unified guard, a savable WARN now (Q1).
+        val r = addTrip(
+            trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(20))),
+            docs = listOf(passport("p1", "FR", expiry = "2027-12-31")),
+        )
+        val f = r.findings.firstOrNull { it.code == "trip.access.none" }
+        assertNotNull(f)
+        assertEquals(GuardSeverity.WARN, f!!.severity)
+        assertTrue(r.canProceed)
+    }
+
+    @Test fun adapterParityWithLegacyWarnings() {
+        val docs = listOf(
+            passport("p1", "FR", expiry = "2027-12-31"),
+            visa("v1", setOf("DE"), expiry = "2027-12-31"),
+        )
+        val w = world()
+        val corpus = listOf(
+            trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(20))),
+            trip("t2", stop("s1", "DE", today.plusDays(10), null)),
+            trip("t3", stop("s1", "DE", today.plusDays(10), today.plusDays(12)),
+                stop("s2", "CA", today.plusDays(20), today.plusDays(30))),
+        )
+        val map = mapOf(
+            "No stops" to "trip.noStops",
+            "Unknown country" to "trip.unknownCountry",
+            "Departure before arrival" to "trip.departureBeforeArrival",
+            "Missing departure" to "trip.missingDeparture",
+            "Gap between stops" to "trip.gap",
+            "Trip overlap" to "trip.overlap",
+            "Allowance exceeded" to "trip.allowance.exceeded",
+            "Low allowance" to "trip.allowance.low",
+            "Not enough entries" to "trip.entries.over",
+            "Last entry used" to "trip.entries.last",
+            "No valid entry grant" to "trip.access.none",
+            "Entry blocked" to "trip.access.blocked",
+            "Extra step required" to "trip.access.extraStep",
+        )
+        for (t in corpus) {
+            val others = corpus.filter { it.id != t.id }
+            val legacy = TripModel.validateTrip(t, w, today) +
+                TripModel.gapWarningsFor(t, today) +
+                TripModel.overlapWarningsFor(t, others, docs, w, today) +
+                TripModel.projectionWarningsFor(t, others, docs, w, today)
+            val r = GuardEngine.evaluate(GuardAction.AddTrip(t), ctx(docs = docs, trips = corpus))
+            val engineCodes = r.findings
+                .map { it.code }
+                .filter { it in map.values }
+                .toSortedSet()
+            val legacyCodes = legacy.map { map.getValue(it.title) }.toSortedSet()
+            assertEquals("codes for ${t.id}", legacyCodes, engineCodes)
         }
+    }
+
+    @Test fun savingNewOngoingTripEmitsEndTripForOpenTrip() {
+        val open = trip("t0", stop("s0", "DE", today.minusDays(10), null))
+        val candidate = trip("t1", stop("s1", "CA", today.minusDays(5), today.plusDays(5)))
+        val r = addTrip(candidate, trips = listOf(open))
+        assertEquals(listOf(GuardMutation.EndTrip("t0", today.minusDays(5))), r.mutations)
+        assertTrue(r.findings.any { it.code == "trip.ongoing.cap" })
+        assertTrue(r.canProceed)
+    }
+
+    @Test fun upcomingCandidateDoesNotTriggerOngoingCap() {
+        val open = trip("t0", stop("s0", "DE", today.minusDays(10), null))
+        val candidate = trip("t1", stop("s1", "CA", today.plusDays(10), today.plusDays(20)))
+        val r = addTrip(candidate, trips = listOf(open))
+        assertFalse(r.mutations.any { it is GuardMutation.EndTrip })
+        assertFalse(r.findings.any { it.code == "trip.ongoing.cap" })
+    }
+
+    @Test fun closedOtherTripsDoNotTriggerOngoingCap() {
+        val closed = trip("t0", stop("s0", "DE", today.minusDays(10), today.minusDays(5)))
+        val candidate = trip("t1", stop("s1", "CA", today, today.plusDays(5)))
+        val r = addTrip(candidate, trips = listOf(closed))
+        assertFalse(r.findings.any { it.code == "trip.ongoing.cap" })
+    }
+
+    @Test fun passportExpiringWithinThreeMonthsWarnsRedTier() {
+        val p = passport("p1", "FR", expiry = today.plusDays(61).toString())
+        val r = addTrip(
+            trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(20))),
+            docs = listOf(p), primaryId = "p1",
+        )
+        assertTrue(codes(r).contains("trip.passport.expiringSoon3"))
+        assertFalse(codes(r).contains("trip.passport.expiringSoon6"))
+        assertTrue(r.canProceed)
+    }
+
+    @Test fun passportExpiringWithinSixMonthsWarnsOrangeTier() {
+        val p = passport("p1", "FR", expiry = today.plusDays(122).toString())
+        val r = addTrip(
+            trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(20))),
+            docs = listOf(p), primaryId = "p1",
+        )
+        assertTrue(codes(r).contains("trip.passport.expiringSoon6"))
+        assertFalse(codes(r).contains("trip.passport.expiringSoon3"))
+    }
+
+    @Test fun passportExpiringBeyondSixMonthsIsQuiet() {
+        val p = passport("p1", "FR", expiry = today.plusDays(200).toString())
+        val r = addTrip(
+            trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(20))),
+            docs = listOf(p), primaryId = "p1",
+        )
+        assertFalse(r.findings.any { it.code.startsWith("trip.passport.") })
+    }
+
+    @Test fun passportExpiringMidTripWarns() {
+        val p = passport("p1", "FR", expiry = today.plusDays(250).toString())
+        val r = addTrip(
+            trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(300))),
+            docs = listOf(p), primaryId = "p1",
+        )
+        assertTrue(codes(r).contains("trip.passport.expiresDuringTrip"))
+        assertTrue(r.canProceed)
+    }
+
+    @Test fun passportExpiredBeforeForeignTripIsBlocked() {
+        val p = passport("p1", "FR", expiry = today.minusDays(10).toString())
+        val r = addTrip(
+            trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(20))),
+            docs = listOf(p), primaryId = "p1",
+        )
+        assertTrue(r.blocks.any { it.code == "trip.passport.expiredBeforeTrip" })
+        assertTrue(r.warnings.any { it.code == "trip.passport.expiredBeforeTrip" })
+        assertFalse(r.canProceed)
+    }
+
+    @Test fun passportExpiredBeforeOwnCountryTripIsAllowedWithWarning() {
+        val p = passport("p1", "FR", expiry = today.minusDays(10).toString())
+        val r = addTrip(
+            trip("t1", stop("s1", "FR", today.plusDays(10), today.plusDays(20))),
+            docs = listOf(p), primaryId = "p1",
+        )
+        assertTrue(r.warnings.any { it.code == "trip.passport.expiredBeforeTrip" })
+        assertTrue(r.canProceed)
+    }
+
+    @Test fun passportExpiredBeforeFreedomBlocTripIsAllowedWithWarning() {
+        val w = WorldData(
+            mapOf("FR" to Country("FR", "France"), "DE" to Country("DE", "Germany")),
+            emptyMap(),
+            listOf(Regime("eu", "EU", "freedom-of-movement", listOf("FR", "DE"))),
+            emptyMap(),
+            emptyMap(),
+        )
+        val p = passport("p1", "FR", expiry = today.minusDays(10).toString())
+        val r = GuardEngine.evaluate(
+            GuardAction.AddTrip(trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(20)))),
+            ctx(docs = listOf(p), w = w, primaryId = "p1"),
+        )
+        assertTrue(r.warnings.any { it.code == "trip.passport.expiredBeforeTrip" })
+        assertTrue(r.canProceed)
+    }
+
+    @Test fun removeTripAndEndTripAreAlwaysAccepted() {
+        val open = trip("t0", stop("s0", "DE", today.minusDays(10), null))
+        val rm = GuardEngine.evaluate(GuardAction.RemoveTrip("t0"), ctx(trips = listOf(open)))
+        val end = GuardEngine.evaluate(GuardAction.EndTrip("t0"), ctx(trips = listOf(open)))
+        assertTrue(rm.canProceed && rm.findings.isEmpty())
+        assertTrue(end.canProceed && end.findings.isEmpty())
     }
 }
