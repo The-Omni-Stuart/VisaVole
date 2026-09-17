@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
@@ -52,7 +53,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,7 +65,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import com.cbkres.visavole.data.StayRule
 import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.domain.AccessModel
@@ -105,15 +104,11 @@ fun TripsScreen(
     vm: AccessViewModel,
     ready: AppState.Ready,
     scrollState: LazyListState,
-    expandedTrips: MutableState<Set<String>>,
+    expandedTrips: List<String>,
+    onToggleExpanded: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val today = ready.today
-    // Hoisted to the scaffold so card expansion survives a tab switch (which disposes this screen).
-    val expandedIds by expandedTrips
-    val toggleExpanded: (String) -> Unit = { id ->
-        expandedTrips.value = if (id in expandedIds) expandedIds - id else expandedIds + id
-    }
     var focusedKey by remember { mutableStateOf<String?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var editingTrip by remember { mutableStateOf<Trip?>(null) }
@@ -161,19 +156,19 @@ fun TripsScreen(
                     if (sections.upcoming.isNotEmpty()) {
                         item(key = "header-upcoming") { SectionLabel("Upcoming") }
                         items(sections.upcoming, key = { it.id }) { trip ->
-                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedIds, onExpand = { toggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip })
+                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip })
                         }
                     }
                     if (sections.current.isNotEmpty()) {
                         item(key = "header-current") { SectionLabel("Current") }
                         items(sections.current, key = { it.id }) { trip ->
-                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedIds, onExpand = { toggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = { endingTrip = trip }, onDelete = { deletingTrip = trip })
+                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = { endingTrip = trip }, onDelete = { deletingTrip = trip })
                         }
                     }
                     if (sections.previous.isNotEmpty()) {
                         item(key = "header-previous") { SectionLabel("Previous") }
                         items(sections.previous, key = { it.id }) { trip ->
-                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedIds, onExpand = { toggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip })
+                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip })
                         }
                     }
                 }
@@ -193,7 +188,10 @@ fun TripsScreen(
             title = { Text("Delete trip") },
             text = { Text("Delete this trip and its stops? Allowance usage will be recalculated.") },
             confirmButton = {
-                TextButton(onClick = { vm.removeTrip(trip.id); deletingTrip = null }) { Text("Delete") }
+                Button(
+                    onClick = { vm.removeTrip(trip.id); deletingTrip = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                ) { Text("Delete") }
             },
             dismissButton = {
                 TextButton(onClick = { deletingTrip = null }) { Text("Cancel") }
@@ -529,15 +527,9 @@ private fun TripAlertDialog(
     onDismiss: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = MaterialTheme.shapes.large,
-            tonalElevation = 0.dp,
-            modifier = Modifier.width(340.dp),
-        ) {
-            Column(Modifier.padding(20.dp)) {
-                Text(title, style = MaterialTheme.typography.titleLarge)
+    VisaDialog(onDismissRequest = onDismiss) {
+        Column(Modifier.padding(20.dp)) {
+            Text(title, style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(12.dp))
                 content()
                 Spacer(Modifier.height(20.dp))
@@ -564,7 +556,6 @@ private fun TripAlertDialog(
                 }
             }
         }
-    }
 }
 
 @Composable
@@ -577,15 +568,9 @@ private fun GapDialog(
     onSplit: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = MaterialTheme.shapes.large,
-            tonalElevation = 0.dp,
-            modifier = Modifier.width(340.dp),
-        ) {
-            Column(Modifier.padding(20.dp)) {
-                Text("Gap between stops", style = MaterialTheme.typography.titleLarge)
+    VisaDialog(onDismissRequest = onDismiss) {
+        Column(Modifier.padding(20.dp)) {
+            Text("Gap between stops", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(12.dp))
                 Text(details, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.height(8.dp))
@@ -609,7 +594,6 @@ private fun GapDialog(
                 }
             }
         }
-    }
 }
 
 @Composable
@@ -619,15 +603,9 @@ private fun OngoingConfirmDialog(
     onDone: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = MaterialTheme.shapes.large,
-            tonalElevation = 0.dp,
-            modifier = Modifier.width(340.dp),
-        ) {
-            Column(Modifier.padding(20.dp)) {
-                Text("No final departure", style = MaterialTheme.typography.titleLarge)
+    VisaDialog(onDismissRequest = onDismiss) {
+        Column(Modifier.padding(20.dp)) {
+            Text("No final departure", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(12.dp))
                 Text("This trip will be marked as ongoing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(20.dp))
@@ -645,7 +623,6 @@ private fun OngoingConfirmDialog(
                 }
             }
         }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -834,17 +811,14 @@ private fun AddTripDialog(
         gapError = null
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = MaterialTheme.shapes.large,
-            tonalElevation = 0.dp,
-            modifier = Modifier
-                .width(400.dp)
-                .heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp),
-        ) {
-            Column(Modifier.padding(20.dp)) {
-                Text(if (isEditingExisting) "Edit trip" else "Add trip", style = MaterialTheme.typography.titleLarge)
+    VisaDialog(
+        onDismissRequest = onDismiss,
+        width = 400.dp,
+        maxHeight = (LocalConfiguration.current.screenHeightDp - 96).dp,
+        dismissable = false,
+    ) {
+        Column(Modifier.padding(20.dp)) {
+            Text(if (isEditingExisting) "Edit trip" else "Add trip", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(12.dp))
                 val stopsScroll = rememberScrollState()
                 val (stopsTop, stopsEnd) = stopsScroll.hazeAlphas()
@@ -910,7 +884,6 @@ private fun AddTripDialog(
                 }
             }
         }
-    }
 
     editingStopId?.let { id ->
         val ordered = TripModel.sortedStops(stops)
@@ -1168,15 +1141,12 @@ private fun StopEditorDialog(
         }
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = MaterialTheme.shapes.large,
-            tonalElevation = 0.dp,
-            modifier = Modifier
-                .width(400.dp)
-                .heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp),
-        ) {
+    VisaDialog(
+        onDismissRequest = onDismiss,
+        width = 400.dp,
+        maxHeight = (LocalConfiguration.current.screenHeightDp - 96).dp,
+        dismissable = false,
+    ) {
             val stopDialogScroll = rememberScrollState()
             val (stopTop, stopEnd) = stopDialogScroll.hazeAlphas()
             HazeBox(stopTop, stopEnd, MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp)) {
@@ -1258,7 +1228,6 @@ private fun StopEditorDialog(
             }
             }
         }
-    }
 
     if (showArrival) {
         val state = rememberDatePickerState(initialSelectedDateMillis = stop.arrival.toUtcMillis())

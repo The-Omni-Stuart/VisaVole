@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -52,10 +53,12 @@ fun OnboardingScreen(
     onAddPassport: (String, String?) -> List<GuardFinding>,
     modifier: Modifier = Modifier,
 ) {
-    var query by remember { mutableStateOf("") }
-    var pendingIso by remember { mutableStateOf<String?>(null) }
-    var showExpiryDialog by remember { mutableStateOf(false) }
-    var showDatePicker by remember { mutableStateOf(false) }
+    // rememberSaveable so an in-progress setup (chosen country, open dialogs, query)
+    // survives process death; the transient addError is intentionally not saved.
+    var query by rememberSaveable { mutableStateOf("") }
+    var pendingIso by rememberSaveable { mutableStateOf<String?>(null) }
+    var showExpiryDialog by rememberSaveable { mutableStateOf(false) }
+    var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var addError by remember { mutableStateOf<String?>(null) }
     val q = query.trim().lowercase()
     val list = countries.entries

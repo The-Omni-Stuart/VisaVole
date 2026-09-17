@@ -3,8 +3,12 @@ package com.cbkres.visavole
 import android.app.Application
 import android.content.res.Configuration
 import android.graphics.Rect
+import android.os.Build
 import android.os.Bundle
+import android.view.View
 import android.view.ViewTreeObserver
+import android.view.WindowInsets
+import androidx.core.view.ViewCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -66,9 +70,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -160,12 +166,12 @@ private fun LoadingScreen() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
-    var tab by remember { mutableIntStateOf(0) }
-    var selected by remember { mutableStateOf<String?>(null) }
-    // Hoisted above the tab switch so the map's search query and expanded trip cards
-    // survive moving between tabs (the `when(tab)` below disposes inactive screens).
-    var mapQuery by remember { mutableStateOf("") }
-    val expandedTrips = remember { mutableStateOf<Set<String>>(emptySet()) }
+    // rememberSaveable: tab/selection/query/expansion survive process death, and (being
+    // hoisted above the tab switch) also survive moving between tabs, which disposes screens.
+    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    var mapQuery by rememberSaveable { mutableStateOf("") }
+    val expandedTrips = rememberSaveable { mutableStateListOf<String>() }
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(vm) {
         vm.snacks.collect { snackbarHostState.showSnackbar(it) }
@@ -231,6 +237,7 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
                     s,
                     scrollState = tripsScroll,
                     expandedTrips = expandedTrips,
+                    onToggleExpanded = { id -> if (id in expandedTrips) expandedTrips.remove(id) else expandedTrips.add(id) },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -388,9 +395,7 @@ private fun SearchBar(
 
     DisposableEffect(view) {
         val listener = ViewTreeObserver.OnGlobalLayoutListener {
-            val visible = Rect()
-            view.getWindowVisibleDisplayFrame(visible)
-            val imeHeight = view.height - visible.bottom
+            val imeHeight = imeHeightOf(view)
             val threshold = view.resources.displayMetrics.heightPixels / 5
             if (imeHeight <= threshold && searchFocusedNow.value) {
                 focusManager.clearFocus(false)
@@ -473,7 +478,22 @@ private fun LegendRow(counts: Map<AccessLevel, Int>, homeCount: Int = 1) {
                     )
                 }
             }
-            }
+        }
         }
     }
 }
+
+/** Bottom inset currently occupied by the IME. API 30+ reads WindowInsets.Type.ime(); on
+ *  API 28–29 it falls back to the visible-frame diff, which is accurate here because the
+ *  activity runs edge-to-edge (enableEdgeToEdge), so the frame shrinks by exactly the IME height. */
+private fun imeHeightOf(view: View): Int =
+    if (Build.VERSION.SDK_INT >= 30) {
+        ViewCompat.getRootWindowInsets(view)?.getInsets(WindowInsets.Type.ime())?.bottom ?: 0
+    } else {
+        @Suppress("DEPRECATION")
+        run {
+            val visible = Rect()
+            view.getWindowVisibleDisplayFrame(visible)
+            view.height - visible.bottom
+        }
+    }

@@ -65,7 +65,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import com.cbkres.visavole.data.Country
 import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.domain.Document
@@ -660,15 +659,12 @@ fun AddDocumentDialog(
         onDismiss()
     }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = MaterialTheme.shapes.large,
-            tonalElevation = 0.dp,
-            modifier = Modifier
-                .width(400.dp)
-                .heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp),
-        ) {
+    VisaDialog(
+        onDismissRequest = onDismiss,
+        width = 400.dp,
+        maxHeight = (LocalConfiguration.current.screenHeightDp - 96).dp,
+        dismissable = false,
+    ) {
             val docDialogScroll = rememberScrollState()
             val (docTop, docEnd) = docDialogScroll.hazeAlphas()
             HazeBox(docTop, docEnd, MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp)) {
@@ -865,7 +861,6 @@ fun AddDocumentDialog(
             }
             }
         }
-    }
 
     multiCountryDoc?.let { doc ->
         val names = (doc.kind as? DocKind.Custom)?.countries?.sortedBy { countries[it]?.name ?: it } ?: emptyList()
@@ -878,7 +873,7 @@ fun AddDocumentDialog(
                 }) { Text("Save anyway") }
             },
             dismissButton = {
-                TextButton(onClick = { multiCountryDoc = null }) { Text("Go back") }
+                TextButton(onClick = { multiCountryDoc = null }) { Text("Back") }
             },
             text = {
                 Text(
@@ -907,7 +902,7 @@ fun AddDocumentDialog(
                 }) { Text("Confirm") }
             },
             dismissButton = {
-                TextButton(onClick = { pendingMutationDoc = null }) { Text("Go back") }
+                TextButton(onClick = { pendingMutationDoc = null }) { Text("Back") }
             },
             title = { Text(pendingMutationWarn?.title ?: "Heads up") },
             text = { Text(pendingMutationWarn?.message ?: "This action will also change another of your documents.") },
@@ -931,7 +926,7 @@ fun AddDocumentDialog(
                     TextButton(onClick = {
                         blocked = null
                         onDismiss()
-                    }) { Text("Discard") }
+                    }) { Text("Cancel") }
                 }
             },
             title = { Text(finding.title) },
