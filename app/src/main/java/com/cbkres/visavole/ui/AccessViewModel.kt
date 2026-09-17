@@ -33,6 +33,9 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -78,6 +81,14 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _state = MutableStateFlow<AppState>(AppState.Loading)
     val state: StateFlow<AppState> = _state.asStateFlow()
+
+    /** Transient user feedback, shown as a snackbar by the UI. Emitted whenever a guarded
+     *  mutation is rejected by the backstop, so no blocked action is ever silent. */
+    private val _snacks = Channel<String>(Channel.BUFFERED)
+    val snacks: Flow<String> = _snacks.receiveAsFlow()
+    private fun snack(message: String) {
+        _snacks.trySend(message)
+    }
 
     private var docs: MutableList<Document> = mutableListOf()
     private var trips: MutableList<Trip> = mutableListOf()
@@ -191,11 +202,14 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     /**
      * Backstop for a guarded mutation: re-run the same [GuardEngine] rules the screens ran and
      * drop the action if they now block (e.g. state changed between the tap and the commit).
-     * Returns true when the action may proceed.
+     * Surfaces the blocking reason as a snackbar. Returns true when the action must not proceed.
      */
-    private fun guardAllows(action: GuardAction): Boolean {
-        val ctx = guardCtx() ?: return true
-        return GuardEngine.evaluate(action, ctx).canProceed
+    private fun guardBlocked(action: GuardAction): Boolean {
+        val result = guardCtx()?.let { GuardEngine.evaluate(action, it) } ?: return false
+        if (!result.canProceed) {
+            snack(result.blocks.first().message)
+        }
+        return !result.canProceed
     }
 
     /** Applies the guard's accompanying mutations (superseding a replaced document, ending a trip). */
@@ -233,7 +247,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     fun updateDocument(doc: Document) = addDocument(doc)
 
     fun removeDocument(id: String) {
-        if (!guardAllows(GuardAction.RemoveDocument(id))) return
+        if (guardBlocked(GuardAction.RemoveDocument(id))) return
         var next = docs.filterNot { it.id == id }
         // Deleting a replacement revives the documents it superseded: clear the dangling pointers.
         next = next.map { if (it.supersededBy == id) it.copy(supersededBy = null) else it }
@@ -245,7 +259,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     fun setPrimary(id: String?) {
         val target = if (id != null && id != primaryDocId) id else null
         if (target != primaryDocId) {
-            if (!guardAllows(GuardAction.SetPrimary(target))) return
+            if (guardBlocked(GuardAction.SetPrimary(target))) return
             primaryDocId = target
             persist()
             publish()
@@ -253,7 +267,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun addTrip(trip: Trip, mutations: List<GuardMutation> = emptyList()) {
-        if (!guardAllows(GuardAction.AddTrip(trip))) return
+        if (guardBlocked(GuardAction.AddTrip(trip))) return
         applyMutations(mutations)
         trips = (trips + trip).toMutableList()
         persist()
@@ -261,7 +275,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun updateTrip(trip: Trip, mutations: List<GuardMutation> = emptyList()) {
-        if (!guardAllows(GuardAction.UpdateTrip(trip))) return
+        if (guardBlocked(GuardAction.UpdateTrip(trip))) return
         applyMutations(mutations)
         trips = trips.map { if (it.id == trip.id) trip else it }.toMutableList()
         persist()

@@ -1,5 +1,11 @@
 package com.cbkres.visavole.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -46,6 +52,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -98,9 +105,15 @@ fun TripsScreen(
     vm: AccessViewModel,
     ready: AppState.Ready,
     scrollState: LazyListState,
+    expandedTrips: MutableState<Set<String>>,
     modifier: Modifier = Modifier,
 ) {
     val today = ready.today
+    // Hoisted to the scaffold so card expansion survives a tab switch (which disposes this screen).
+    val expandedIds by expandedTrips
+    val toggleExpanded: (String) -> Unit = { id ->
+        expandedTrips.value = if (id in expandedIds) expandedIds - id else expandedIds + id
+    }
     var focusedKey by remember { mutableStateOf<String?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var editingTrip by remember { mutableStateOf<Trip?>(null) }
@@ -148,19 +161,19 @@ fun TripsScreen(
                     if (sections.upcoming.isNotEmpty()) {
                         item(key = "header-upcoming") { SectionLabel("Upcoming") }
                         items(sections.upcoming, key = { it.id }) { trip ->
-                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip })
+                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedIds, onExpand = { toggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip })
                         }
                     }
                     if (sections.current.isNotEmpty()) {
                         item(key = "header-current") { SectionLabel("Current") }
                         items(sections.current, key = { it.id }) { trip ->
-                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, onEdit = { editingTrip = trip }, onEnd = { endingTrip = trip }, onDelete = { deletingTrip = trip })
+                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedIds, onExpand = { toggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = { endingTrip = trip }, onDelete = { deletingTrip = trip })
                         }
                     }
                     if (sections.previous.isNotEmpty()) {
                         item(key = "header-previous") { SectionLabel("Previous") }
                         items(sections.previous, key = { it.id }) { trip ->
-                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip })
+                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedIds, onExpand = { toggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip })
                         }
                     }
                 }
@@ -360,11 +373,12 @@ private fun TripCard(
     docs: List<Document>,
     allowances: List<AllowanceSnapshot>,
     today: LocalDate,
+    expanded: Boolean,
+    onExpand: () -> Unit,
     onEdit: () -> Unit,
     onEnd: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val sortedStops = TripModel.sortedStops(trip.stops)
     val title = tripTitle(trip, world)
     val stopCountLabel = if (sortedStops.size > 1) "${sortedStops.size} stops" else null
@@ -391,7 +405,7 @@ private fun TripCard(
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = { expanded = !expanded })
+            .clickable(onClick = onExpand)
     ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -432,34 +446,41 @@ private fun TripCard(
                         StatusPill(it, allowanceHintColor)
                     }
                 }
-                if (expanded) {
-                    Spacer(Modifier.height(12.dp))
-                    sortedStops.forEachIndexed { index, stop ->
-                        val countryName = world.countries[stop.countryIso2]?.name ?: stop.countryIso2
-                        val docLabel = stop.documentId?.let { id -> docs.firstOrNull { it.id == id }?.displayLabel(passportCounts, passportNumbers) ?: id }
-                        Column(Modifier.padding(vertical = 6.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text("${index + 1}.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                Text(countryName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                AnimatedVisibility(
+                    visible = expanded,
+                    enter = fadeIn(tween(150)) + expandVertically(tween(150)),
+                    exit = fadeOut(tween(150)) + shrinkVertically(tween(150)),
+                ) {
+                    Column {
+                        Spacer(Modifier.height(12.dp))
+                        sortedStops.forEachIndexed { index, stop ->
+                            val countryName = world.countries[stop.countryIso2]?.name ?: stop.countryIso2
+                            val docLabel = stop.documentId?.let { id -> docs.firstOrNull { it.id == id }?.displayLabel(passportCounts, passportNumbers) ?: id }
+                            Column(Modifier.padding(vertical = 6.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text("${index + 1}.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                    Text(countryName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                    Text(
+                                        zoneLabel(world.stayRuleFor(stop.countryIso2, AccessModel.homeCountries(docs), today), countryName),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                                 Text(
-                                    zoneLabel(world.stayRuleFor(stop.countryIso2, AccessModel.homeCountries(docs), today), countryName),
-                                    style = MaterialTheme.typography.labelSmall,
+                                    "${stop.arrival} → ${stop.departure ?: "open"}${docLabel?.let { " · $it" } ?: " · No document"}",
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                            Text(
-                                "${stop.arrival} → ${stop.departure ?: "open"}${docLabel?.let { " · $it" } ?: " · No document"}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                        }
+                        if (trip.note != null) {
+                            Text(trip.note!!, style = MaterialTheme.typography.bodySmall)
                         }
                     }
-                    if (trip.note != null) {
-                        Text(trip.note!!, style = MaterialTheme.typography.bodySmall)
-                    }
-                } else {
+                }
+                if (!expanded) {
                     if (trip.note != null) {
                         Text(trip.note!!, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }

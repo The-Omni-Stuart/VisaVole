@@ -8,6 +8,14 @@ import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardActions
@@ -47,11 +55,14 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -151,6 +162,14 @@ private fun LoadingScreen() {
 private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
     var tab by remember { mutableIntStateOf(0) }
     var selected by remember { mutableStateOf<String?>(null) }
+    // Hoisted above the tab switch so the map's search query and expanded trip cards
+    // survive moving between tabs (the `when(tab)` below disposes inactive screens).
+    var mapQuery by remember { mutableStateOf("") }
+    val expandedTrips = remember { mutableStateOf<Set<String>>(emptySet()) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(vm) {
+        vm.snacks.collect { snackbarHostState.showSnackbar(it) }
+    }
     val mapShapes = remember(s.geometry) { buildShapes(s.geometry) }
     val mapFocus = remember(s.geometry) { buildFocus(s.geometry) }
     val mapZoom = remember { mutableFloatStateOf(1f) }
@@ -163,6 +182,7 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
                 title = { Text("Visa Vole") },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
@@ -192,6 +212,8 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
                     s,
                     selected,
                     { selected = it },
+                    query = mapQuery,
+                    onQuery = { mapQuery = it },
                     shapes = mapShapes,
                     focus = mapFocus,
                     zoomState = mapZoom,
@@ -208,6 +230,7 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
                     vm,
                     s,
                     scrollState = tripsScroll,
+                    expandedTrips = expandedTrips,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -220,6 +243,8 @@ private fun MapTab(
     s: AppState.Ready,
     selected: String?,
     onSelect: (String?) -> Unit,
+    query: String,
+    onQuery: (String) -> Unit,
     shapes: List<IsoShape>,
     focus: Map<String, Focus>,
     zoomState: MutableFloatState,
@@ -227,7 +252,6 @@ private fun MapTab(
     modifier: Modifier = Modifier,
 ) {
     val focusManager = LocalFocusManager.current
-    var query by remember { mutableStateOf("") }
     val matches = remember(query, s.world) {
         val q = query.trim().lowercase()
         if (q.isEmpty()) emptyList()
@@ -237,7 +261,7 @@ private fun MapTab(
             .take(20)
     }
     val pick: (String?) -> Unit = { iso ->
-        query = ""
+        onQuery("")
         focusManager.clearFocus(true)
         onSelect(iso)
     }
@@ -267,36 +291,43 @@ private fun MapTab(
         )
         SearchBar(
             query = query,
-            onQuery = { query = it },
+            onQuery = onQuery,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .onSizeChanged { searchBarH = Dp(it.height / density.density) },
         )
         val selName = selected?.let { iso -> s.world.countries[iso]?.name ?: s.geometry.countries[iso]?.name ?: iso }
-        if (selected != null && selName != null) {
-            val selectedAccess = s.access[selected]
-            val stayRule = when {
-                selected in s.homeCountries -> null
-                selectedAccess?.level == AccessLevel.RESIDENCE -> null // you live here — no short-stay limit
-                else -> s.world.stayRuleFor(selected, s.homeCountries)
+        AnimatedVisibility(
+            visible = selected != null && selName != null,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+        ) {
+            if (selected != null) {
+                val selectedAccess = s.access[selected]
+                val stayRule = when {
+                    selected in s.homeCountries -> null
+                    selectedAccess?.level == AccessLevel.RESIDENCE -> null // you live here — no short-stay limit
+                    else -> s.world.stayRuleFor(selected, s.homeCountries)
+                }
+                CountryDetailCard(
+                    countryName = selName!!,
+                    access = selectedAccess,
+                    breakdown = AccessModel.breakdownFor(selected, s.docs, s.world, trips = s.trips),
+                    onDismiss = { pick(null) },
+                    isHome = selected in s.homeCountries,
+                    isOwnCovered = selected in s.ownVisaCountries,
+                    homePassport = if (selected in s.homeCountries) s.world.countries[selected]?.name else null,
+                    daysLabel = AccessModel.stayLabelFor(selectedAccess, stayRule),
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .onSizeChanged { cardH = Dp(it.height / density.density) },
+                )
             }
-            CountryDetailCard(
-                countryName = selName,
-                access = selectedAccess,
-                breakdown = AccessModel.breakdownFor(selected, s.docs, s.world, trips = s.trips),
-                onDismiss = { pick(null) },
-                isHome = selected in s.homeCountries,
-                isOwnCovered = selected in s.ownVisaCountries,
-                homePassport = if (selected in s.homeCountries) s.world.countries[selected]?.name else null,
-                daysLabel = AccessModel.stayLabelFor(selectedAccess, stayRule),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp)
-                    .onSizeChanged { cardH = Dp(it.height / density.density) },
-            )
-        } else {
+        }
+        if (selName == null) {
             Box(
                 Modifier
                     .align(Alignment.BottomCenter)
@@ -306,7 +337,11 @@ private fun MapTab(
                 LegendRow(s.access.values.groupBy { it.level }.mapValues { it.value.size }, s.homeCountries.size)
             }
         }
-        if (query.isNotBlank() && matches.isNotEmpty()) {
+        AnimatedVisibility(
+            visible = query.isNotBlank() && matches.isNotEmpty(),
+            enter = fadeIn(tween(120)) + scaleIn(tween(120), initialScale = 0.95f),
+            exit = fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 0.95f),
+        ) {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 tonalElevation = 0.dp,
