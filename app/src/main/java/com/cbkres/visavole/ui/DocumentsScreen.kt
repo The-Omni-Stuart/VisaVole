@@ -170,8 +170,8 @@ fun DocumentsScreen(
     val today = ready.today
     // One shared guard context for the whole screen; every add/remove/star decision below goes
     // through the same GuardEngine the ViewModel backstops with.
-    val guardCtx = remember(ready.docs, ready.trips, ready.world, today) {
-        GuardContext(ready.docs, ready.trips, ready.world, today)
+    val guardCtx = remember(ready.docs, ready.trips, ready.world, ready.starredDocId, today) {
+        GuardContext.of(ready.docs, ready.trips, ready.world, ready.starredDocId, today)
     }
     val removeBlockings: Map<String, GuardResult> = remember(guardCtx) {
         ready.docs.associateBy({ it.id }, { d -> GuardEngine.evaluate(GuardAction.RemoveDocument(d.id), guardCtx) })
@@ -793,7 +793,7 @@ fun AddDocumentDialog(
 
                 Spacer(Modifier.height(16.dp))
                 val todayMillis = remember {
-                    LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+                    guard.today.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
                 }
                 val validityLabel = when {
                     validFromDate != null || expiryDate != null ->

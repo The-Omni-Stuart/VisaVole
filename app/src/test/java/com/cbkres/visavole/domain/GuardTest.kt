@@ -671,20 +671,13 @@ class GuardTest {
             trip("t3", stop("s1", "DE", today.plusDays(10), today.plusDays(12)),
                 stop("s2", "CA", today.plusDays(20), today.plusDays(30))),
         )
-        val map = mapOf(
-            "No stops" to "trip.noStops",
-            "Unknown country" to "trip.unknownCountry",
-            "Departure before arrival" to "trip.departureBeforeArrival",
-            "Missing departure" to "trip.missingDeparture",
-            "Gap between stops" to "trip.gap",
-            "Trip overlap" to "trip.overlap",
-            "Allowance exceeded" to "trip.allowance.exceeded",
-            "Low allowance" to "trip.allowance.low",
-            "Not enough entries" to "trip.entries.over",
-            "Last entry used" to "trip.entries.last",
-            "No valid entry grant" to "trip.access.none",
-            "Entry blocked" to "trip.access.blocked",
-            "Extra step required" to "trip.access.extraStep",
+        // The engine also emits its own additions (`trip.passport.*`, `trip.ongoing.cap`); parity
+        // here covers exactly the codes the legacy TripModel warnings carry.
+        val adapterCodes = setOf(
+            "trip.noStops", "trip.unknownCountry", "trip.departureBeforeArrival", "trip.missingDeparture",
+            "trip.gap", "trip.overlap",
+            "trip.allowance.exceeded", "trip.allowance.low", "trip.entries.over", "trip.entries.last",
+            "trip.access.none", "trip.access.blocked", "trip.access.extraStep",
         )
         for (t in corpus) {
             val others = corpus.filter { it.id != t.id }
@@ -693,11 +686,8 @@ class GuardTest {
                 TripModel.overlapWarningsFor(t, others, docs, w, today) +
                 TripModel.projectionWarningsFor(t, others, docs, w, today)
             val r = GuardEngine.evaluate(GuardAction.AddTrip(t), ctx(docs = docs, trips = corpus))
-            val engineCodes = r.findings
-                .map { it.code }
-                .filter { it in map.values }
-                .toSortedSet()
-            val legacyCodes = legacy.map { map.getValue(it.title) }.toSortedSet()
+            val engineCodes = r.findings.map { it.code }.filter { it in adapterCodes }.toSortedSet()
+            val legacyCodes = legacy.map { it.code }.toSortedSet()
             assertEquals("codes for ${t.id}", legacyCodes, engineCodes)
         }
     }
@@ -773,7 +763,7 @@ class GuardTest {
             docs = listOf(p), primaryId = "p1",
         )
         assertTrue(r.blocks.any { it.code == "trip.passport.expiredBeforeTrip" })
-        assertTrue(r.warnings.any { it.code == "trip.passport.expiredBeforeTrip" })
+        assertFalse(r.warnings.any { it.code == "trip.passport.expiredBeforeTrip" })
         assertFalse(r.canProceed)
     }
 
@@ -800,6 +790,52 @@ class GuardTest {
             GuardAction.AddTrip(trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(20)))),
             ctx(docs = listOf(p), w = w, primaryId = "p1"),
         )
+        assertTrue(r.warnings.any { it.code == "trip.passport.expiredBeforeTrip" })
+        assertTrue(r.canProceed)
+    }
+
+    @Test fun expiredOnlyPassportStillBlocksForeignTripViaFactory() {
+        // The effective primary is null (no valid passport); the factory keeps the raw starred id
+        // so the rule still evaluates the expired passport instead of silently doing nothing.
+        val p = passport("p1", "FR", expiry = today.minusDays(10).toString())
+        val r = GuardEngine.evaluate(
+            GuardAction.AddTrip(trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(20)))),
+            GuardContext.of(listOf(p), emptyList(), world(), "p1", today),
+        )
+        assertTrue(r.blocks.any { it.code == "trip.passport.expiredBeforeTrip" })
+        assertFalse(r.canProceed)
+    }
+
+    @Test fun expiredOnlyPassportStaysSavableForOwnCountryViaFactory() {
+        val p = passport("p1", "FR", expiry = today.minusDays(10).toString())
+        val r = GuardEngine.evaluate(
+            GuardAction.AddTrip(trip("t1", stop("s1", "FR", today.plusDays(10), today.plusDays(20)))),
+            GuardContext.of(listOf(p), emptyList(), world(), "p1", today),
+        )
+        assertTrue(r.warnings.any { it.code == "trip.passport.expiredBeforeTrip" })
+        assertTrue(r.canProceed)
+    }
+
+    @Test fun factoryFallsBackToFirstPassportWhenNothingStarred() {
+        val p = passport("p1", "FR", expiry = today.minusDays(10).toString())
+        val r = GuardEngine.evaluate(
+            GuardAction.AddTrip(trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(20)))),
+            GuardContext.of(listOf(p), emptyList(), world(), null, today),
+        )
+        assertTrue(r.blocks.any { it.code == "trip.passport.expiredBeforeTrip" })
+        assertFalse(r.canProceed)
+    }
+
+    @Test fun expiredPassportOfSecondNationalityUnblocksOwnCountry() {
+        // Two expired passports: the starred (evaluated) one is French, but the traveller's
+        // German passport still covers Germany, so the trip stays savable.
+        val pDe = passport("pDe", "DE", expiry = today.minusDays(30).toString())
+        val pFr = passport("pFr", "FR", expiry = today.minusDays(10).toString())
+        val r = GuardEngine.evaluate(
+            GuardAction.AddTrip(trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(20)))),
+            GuardContext.of(listOf(pDe, pFr), emptyList(), world(), "pFr", today),
+        )
+        assertFalse(r.blocks.any { it.code == "trip.passport.expiredBeforeTrip" })
         assertTrue(r.warnings.any { it.code == "trip.passport.expiredBeforeTrip" })
         assertTrue(r.canProceed)
     }

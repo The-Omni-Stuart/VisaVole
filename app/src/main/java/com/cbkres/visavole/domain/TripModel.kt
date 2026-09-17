@@ -43,17 +43,17 @@ object TripModel {
     fun validateTrip(trip: Trip, world: WorldData, today: LocalDate = LocalDate.now(ZoneOffset.UTC)): List<TripWarning> {
         val out = mutableListOf<TripWarning>()
         if (trip.stops.isEmpty()) {
-            out.add(TripWarning(WarningSeverity.DANGER, "No stops", "A trip needs at least one country stop."))
+            out.add(TripWarning("trip.noStops", WarningSeverity.DANGER, "No stops", "A trip needs at least one country stop."))
         }
         trip.stops.forEachIndexed { index, stop ->
             if (world.countries[stop.countryIso2] == null) {
-                out.add(TripWarning(WarningSeverity.DANGER, "Unknown country", "Stop ${index + 1} has no known country."))
+                out.add(TripWarning("trip.unknownCountry", WarningSeverity.DANGER, "Unknown country", "Stop ${index + 1} has no known country."))
             }
             if (stop.departure != null && stop.departure.isBefore(stop.arrival)) {
-                out.add(TripWarning(WarningSeverity.DANGER, "Departure before arrival", "Stop ${index + 1} ends before it starts."))
+                out.add(TripWarning("trip.departureBeforeArrival", WarningSeverity.DANGER, "Departure before arrival", "Stop ${index + 1} ends before it starts."))
             }
             if (index < trip.stops.lastIndex && stop.departure == null) {
-                out.add(TripWarning(WarningSeverity.WARNING, "Missing departure", "Only the final stop can leave its departure date empty."))
+                out.add(TripWarning("trip.missingDeparture", WarningSeverity.WARNING, "Missing departure", "Only the final stop can leave its departure date empty."))
             }
         }
         return out
@@ -160,6 +160,7 @@ object TripModel {
                     if (seen.add(key)) {
                         out.add(
                             TripWarning(
+                                "trip.overlap",
                                 WarningSeverity.WARNING,
                                 "Trip overlap",
                                 "This trip overlaps $label by ${daysLabel(overlap)}.",
@@ -199,6 +200,7 @@ object TripModel {
             if (overstay > 0) {
                 out.add(
                     TripWarning(
+                        "trip.allowance.exceeded",
                         WarningSeverity.DANGER,
                         "Allowance exceeded",
                         "This trip would exceed the ${rule.displayName} allowance by ${daysLabel(overstay)}.",
@@ -209,6 +211,7 @@ object TripModel {
                 if (remaining <= WARNING_THRESHOLD_DAYS) {
                     out.add(
                         TripWarning(
+                            "trip.allowance.low",
                             WarningSeverity.WARNING,
                             "Low allowance",
                             "After this trip you will have ${if (remaining == 1) "1 ${rule.displayName} day" else "$remaining ${rule.displayName} days"} left.",
@@ -226,6 +229,7 @@ object TripModel {
             if (remaining < 0) {
                 out.add(
                     TripWarning(
+                        "trip.entries.over",
                         WarningSeverity.DANGER,
                         "Not enough entries",
                         "This trip would use more ${doc.label} entries than available.",
@@ -234,6 +238,7 @@ object TripModel {
             } else if (remaining == 0) {
                 out.add(
                     TripWarning(
+                        "trip.entries.last",
                         WarningSeverity.WARNING,
                         "Last entry used",
                         "This trip would use the last ${doc.label} entry.",
@@ -258,13 +263,14 @@ object TripModel {
                 val a = access[stop.countryIso2]
                 val country = world.countries[stop.countryIso2]?.name ?: stop.countryIso2
                 val warn: TripWarning? = when {
-                    a == null -> TripWarning(WarningSeverity.DANGER, "No valid entry grant", "No valid entry grant found for $country on $date.")
+                    a == null -> TripWarning("trip.access.none", WarningSeverity.DANGER, "No valid entry grant", "No valid entry grant found for $country on $date.")
                     a.level == VISA_REQUIRED || a.level == REFUSED -> TripWarning(
+                        "trip.access.blocked",
                         WarningSeverity.DANGER,
                         "Entry blocked",
                         "$country is ${if (a.level == REFUSED) "entry refused" else "visa required"} on $date.",
                     )
-                    a.level == ETA || a.level == E_VISA -> TripWarning(WarningSeverity.WARNING, "Extra step required", "$country needs ${a.level.label()} on $date.")
+                    a.level == ETA || a.level == E_VISA -> TripWarning("trip.access.extraStep", WarningSeverity.WARNING, "Extra step required", "$country needs ${a.level.label()} on $date.")
                     else -> null
                 }
                 warn?.let { if (accessSeen.add(it.message)) out.add(it) }
@@ -301,6 +307,7 @@ object TripModel {
                 val gapDays = ChronoUnit.DAYS.between(departure.plusDays(1), nextArrival).toInt()
                 out.add(
                     TripWarning(
+                        "trip.gap",
                         WarningSeverity.WARNING,
                         "Gap between stops",
                         "There is a $gapDays-day gap between stop ${i + 1} and stop ${i + 2}, so this trip is not continuous.",
@@ -309,6 +316,17 @@ object TripModel {
             }
         }
         return out
+    }
+
+    /**
+     * Split [stops] at the gap before sorted position [index] (see [firstGapIndex]): the left half
+     * keeps the stops before the gap, clamping a missing departure to [closeDate] so the trip stays
+     * valid on its own; the right half is the remaining stops. Both halves are sorted by arrival.
+     */
+    fun splitStops(stops: List<TripStop>, index: Int, closeDate: LocalDate): Pair<List<TripStop>, List<TripStop>> {
+        val ordered = sortedStops(stops)
+        val left = ordered.take(index).map { if (it.departure == null) it.copy(departure = closeDate) else it }
+        return left to ordered.drop(index)
     }
 
     fun isShortStaySuppressed(access: Access?): Boolean =

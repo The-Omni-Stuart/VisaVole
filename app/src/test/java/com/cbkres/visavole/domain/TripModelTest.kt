@@ -346,4 +346,32 @@ class TripModelTest {
 
         assertEquals(today.plusDays(2), closed.stops.first().departure)
     }
+
+    @Test
+    fun splitStopsKeepsLeftHalfSortedAndRightHalfRemaining() {
+        val stops = listOf(
+            stop("s1", "DE", today.plusDays(10), today.plusDays(12)),
+            stop("s2", "CA", today.plusDays(20), today.plusDays(30)),
+            stop("s3", "FR", today.plusDays(31), today.plusDays(40)),
+        )
+
+        val (left, right) = TripModel.splitStops(stops, 1, today.plusDays(12))
+
+        assertEquals(listOf("s1"), left.map { it.id })
+        assertEquals(listOf("s2", "s3"), right.map { it.id })
+        assertEquals(today.plusDays(12), left.first().departure)
+    }
+
+    @Test
+    fun splitStopsClampsMissingDepartureInLeftHalf() {
+        val stops = listOf(
+            stop("s1", "DE", today.plusDays(10), null),
+            stop("s2", "CA", today.plusDays(20), today.plusDays(30)),
+        )
+
+        val (left, right) = TripModel.splitStops(stops, 1, today.plusDays(12))
+
+        assertEquals(today.plusDays(12), left.first().departure)
+        assertEquals(listOf("s2"), right.map { it.id })
+    }
 }

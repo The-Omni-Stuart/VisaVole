@@ -70,7 +70,6 @@ import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.AllowanceStatus
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.Document
-import com.cbkres.visavole.domain.DocumentMigration
 import com.cbkres.visavole.domain.GuardAction
 import com.cbkres.visavole.domain.GuardContext
 import com.cbkres.visavole.domain.GuardEngine
@@ -82,8 +81,6 @@ import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.TripStop
 import com.cbkres.visavole.domain.TripStatus
-import com.cbkres.visavole.domain.WarningSeverity
-import com.cbkres.visavole.domain.entryType
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import java.time.Instant
@@ -499,8 +496,6 @@ private val TripStatus.label: String
         TripStatus.PREVIOUS -> "Completed"
     }
 
-private data class GapKey(val prevId: String, val nextId: String, val departure: LocalDate, val arrival: LocalDate)
-
 private data class StopSnapshot(val stops: List<TripStop>)
 
 private data class OngoingConflict(val candidate: Trip, val previous: Trip, val end: LocalDate)
@@ -554,6 +549,7 @@ private fun TripAlertDialog(
 private fun GapDialog(
     details: String,
     message: String,
+    error: String?,
     onKeepGap: () -> Unit,
     onCancel: () -> Unit,
     onSplit: () -> Unit,
@@ -572,6 +568,10 @@ private fun GapDialog(
                 Text(details, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.height(8.dp))
                 Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                error?.let { err ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(err, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
                 Spacer(Modifier.height(20.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(onClick = onKeepGap, modifier = Modifier.weight(1f)) {
@@ -645,7 +645,7 @@ private fun AddTripDialog(
     var showAddStopWarning by remember { mutableStateOf(false) }
     var showOngoingConfirm by remember { mutableStateOf(false) }
     var gapIndex by remember { mutableStateOf<Int?>(null) }
-    var acknowledgedGap by remember { mutableStateOf<GapKey?>(null) }
+    var gapError by remember { mutableStateOf<String?>(null) }
     var lastStopSnapshot by remember { mutableStateOf<StopSnapshot?>(null) }
     var saveWarnings by remember { mutableStateOf<Pair<List<GuardFinding>, Boolean>?>(null) }
     var pendingMutations by remember { mutableStateOf<List<GuardMutation>>(emptyList()) }
@@ -663,11 +663,7 @@ private fun AddTripDialog(
      *  tie-breaker document the `trip.passport.*` rules evaluate against. */
     fun evaluate(trip: Trip, tripsOverride: List<Trip> = ready.trips): GuardResult {
         val action = if (isEditingExisting) GuardAction.UpdateTrip(trip) else GuardAction.AddTrip(trip)
-        val ctx = GuardContext(
-            ready.docs, tripsOverride, ready.world, today,
-            DocumentMigration.effectivePrimaryId(ready.docs, ready.primaryDocId, today),
-        )
-        return GuardEngine.evaluate(action, ctx)
+        return GuardEngine.evaluate(action, GuardContext.of(ready.docs, tripsOverride, ready.world, ready.starredDocId, today))
     }
 
     /** The ongoing-cap finding/mutation from the engine, if any (§13.4). */
@@ -759,7 +755,7 @@ private fun AddTripDialog(
     }
 
     fun refreshGap() {
-        acknowledgedGap = null
+        gapError = null
         val idx = TripModel.firstGapIndex(stops) ?: run {
             gapIndex = null
             return
@@ -782,7 +778,6 @@ private fun AddTripDialog(
         val snapshot = lastStopSnapshot
         lastStopSnapshot = null
         gapIndex = null
-        acknowledgedGap = null
         if (snapshot != null) {
             stops = TripModel.sortedStops(snapshot.stops)
             refreshGap()
@@ -796,24 +791,25 @@ private fun AddTripDialog(
         val next = ordered.getOrNull(idx) ?: return
         val closeDate = prev.departure ?: return
         val rightNote = note.ifBlank { null }
+        val (leftStops, rightStops) = TripModel.splitStops(stops, idx, closeDate)
         val leftTrip = Trip(
             currentTripId,
-            ordered.take(idx).map { if (it.departure == null) it.copy(departure = closeDate) else it },
+            leftStops,
             if (isEditingExisting) (initial?.note ?: rightNote) else rightNote,
         )
-        if (TripModel.validateTrip(leftTrip, ready.world, today).any { it.severity == WarningSeverity.DANGER }) {
-            gapIndex = null
+        evaluate(leftTrip).blocks.firstOrNull()?.let { blockedBy ->
+            gapError = "Can't split here: ${blockedBy.message}"
             return
         }
         if (isEditingExisting) vm.updateTrip(leftTrip) else vm.addTrip(leftTrip)
-        stops = TripModel.sortedStops(ordered.drop(idx))
+        stops = rightStops
         note = rightNote ?: ""
         currentTripId = UUID.randomUUID().toString()
         isEditingExisting = false
         editingStopId = null
         lastStopSnapshot = null
         gapIndex = null
-        acknowledgedGap = null
+        gapError = null
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -993,21 +989,19 @@ private fun AddTripDialog(
         val next = ordered.getOrNull(idx)
         val departure = prev?.departure
         if (prev != null && next != null && departure != null) {
-            val key = GapKey(prev.id, next.id, departure, next.arrival)
             val prevName = ready.world.countries[prev.countryIso2]?.name ?: prev.countryIso2
             val nextName = ready.world.countries[next.countryIso2]?.name ?: next.countryIso2
             GapDialog(
                 details = "$departure → ${next.arrival}",
                 message = "There is a gap between $prevName and $nextName. You can keep both stops in this trip, cancel the last stop change, or end this trip and start a new trip after the gap.",
+                error = gapError,
                 onKeepGap = {
-                    acknowledgedGap = key
                     lastStopSnapshot = null
                     gapIndex = null
                 },
                 onCancel = { cancelLastStopChange() },
                 onSplit = { splitGap() },
                 onDismiss = {
-                    acknowledgedGap = key
                     lastStopSnapshot = null
                     gapIndex = null
                 },
@@ -1049,18 +1043,6 @@ private fun AddTripDialog(
         )
     }
 }
-
-/**
- * Finding codes that were DANGERs before the unified guard (savable, per Q1): they stay WARN in
- * the engine but are rendered in the danger colour so the visual weight is unchanged.
- */
-private val SAVABLE_DANGER_CODES = setOf(
-    "trip.allowance.exceeded",
-    "trip.entries.over",
-    "trip.access.none",
-    "trip.access.blocked",
-    "trip.passport.expiringSoon3",
-)
 
 /** Display label for [doc]; when the holder keeps several passports of one nationality, append a
  * stable "(N)" (e.g. "Passport · United Kingdom (2)") so it's clear which passport a stop refers to. */
@@ -1137,7 +1119,6 @@ private fun StopEditorDialog(
     var docTouched by remember { mutableStateOf(initial.documentId != null) }
     var showArrival by remember { mutableStateOf(false) }
     var showDeparture by remember { mutableStateOf(initiallyEditingDeparture) }
-    val todayMillis = remember { LocalDate.now(ZoneOffset.UTC).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }
     LaunchedEffect(stop, docs, carryDocumentId) {
         if (docTouched) return@LaunchedEffect
         val preferred = carryDocumentId?.takeIf { id -> docs.any { it.id == id } }

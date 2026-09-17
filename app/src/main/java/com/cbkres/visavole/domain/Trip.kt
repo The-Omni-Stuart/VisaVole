@@ -118,6 +118,8 @@ enum class WarningSeverity {
 }
 
 data class TripWarning(
+    /** Stable machine-readable id (e.g. `trip.gap`); [title] is display text only. */
+    val code: String,
     val severity: WarningSeverity,
     val title: String,
     val message: String,

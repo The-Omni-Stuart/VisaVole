@@ -54,8 +54,11 @@ sealed interface AppState {
         val tripSections: TripSections = TripSections(emptyList(), emptyList(), emptyList()),
         val allowances: List<AllowanceSnapshot> = emptyList(),
         val documentEntryStatus: Map<String, EntryStatus> = emptyMap(),
+        /** The effective primary passport id (null when no valid passport is held). */
         val primaryDocId: String? = null,
-        val today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        /** The raw starred document id (may point at an expired document). */
+        val starredDocId: String? = null,
+        val today: LocalDate,
     ) : AppState
 }
 
@@ -145,13 +148,15 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
             allowances = calc.allowances,
             documentEntryStatus = calc.entryStatus,
             primaryDocId = effectivePrimaryId(today),
+            starredDocId = primaryDocId,
             today = today,
         )
     }
 
     /**
      * The effective primary passport: the starred one if it's still a valid (non-expired) passport,
-     * otherwise the first valid passport. Used only as a tie-breaker by [AccessModel.bestDocumentId].
+     * otherwise the first valid passport. Feeds the guard context (via [GuardContext.of]) and acts
+     * as a tie-breaker for [AccessModel.bestDocumentId].
      */
     private fun effectivePrimaryId(today: LocalDate): String? =
         DocumentMigration.effectivePrimaryId(docs, primaryDocId, today)
@@ -182,7 +187,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
      *  midnight cannot disagree with what the user just saw. */
     private fun guardCtx(): GuardContext? {
         val w = world ?: return null
-        return GuardContext(docs.toList(), trips.toList(), w, today, effectivePrimaryId(today))
+        return GuardContext.of(docs.toList(), trips.toList(), w, primaryDocId, today)
     }
 
     /**

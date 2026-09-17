@@ -39,18 +39,46 @@ sealed class GuardMutation {
     data class EndTrip(val tripId: String, val onDate: LocalDate) : GuardMutation()
 }
 
-/** Everything a guard rule may need to decide. Immutable and fully injectable (testable). */
+/** Everything a guard rule may need to decide. Immutable and fully injectable (testable).
+ *
+ * Build production contexts with [of] so the passport selection is derived in exactly one place.
+ */
 data class GuardContext(
     val docs: List<Document>,
     val trips: List<Trip>,
     val world: WorldData,
     val today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+    /** The effective primary passport id (null when no valid passport is held) — the document the
+     *  `trip.passport.*` rules evaluate against. */
     val primaryId: String? = null,
+    /** The raw starred document id (may point at an expired document) — fallback for the
+     *  `trip.passport.*` rules when [primaryId] is null. */
+    val starredId: String? = null,
 ) {
     /** Document ids referenced by any trip stop — a document in this set is "in use". */
     val referencedDocIds: Set<String> = referencedDocumentIds(trips)
 
     fun countryName(iso2: String): String = world.countries[iso2]?.name ?: iso2
+
+    companion object {
+        /**
+         * Single construction point for live state: derives the effective primary passport from
+         * the raw starred id [starredDocId] (see [DocumentMigration.effectivePrimaryId]) and keeps
+         * the raw id alongside so the `trip.passport.*` rules still evaluate an expired-only
+         * passport instead of silently doing nothing.
+         */
+        fun of(
+            docs: List<Document>,
+            trips: List<Trip>,
+            world: WorldData,
+            starredDocId: String?,
+            today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        ) = GuardContext(
+            docs, trips, world, today,
+            DocumentMigration.effectivePrimaryId(docs, starredDocId, today),
+            starredDocId,
+        )
+    }
 }
 
 /** The action being attempted; the engine runs the rule set that applies to it. */
@@ -397,12 +425,7 @@ object GuardEngine {
         if (warnings.isEmpty()) return null
         return GuardResult(warnings.map { w ->
             GuardFinding(
-                code = when (w.title) {
-                    "No stops" -> "trip.noStops"
-                    "Unknown country" -> "trip.unknownCountry"
-                    "Departure before arrival" -> "trip.departureBeforeArrival"
-                    else -> "trip.missingDeparture"
-                },
+                code = w.code,
                 severity = if (w.severity == WarningSeverity.DANGER) GuardSeverity.BLOCK else GuardSeverity.WARN,
                 title = w.title,
                 message = w.message,
@@ -414,14 +437,14 @@ object GuardEngine {
     private fun gapRule(candidate: Trip, ctx: GuardContext): GuardResult? {
         val warnings = TripModel.gapWarningsFor(candidate, ctx.today)
         if (warnings.isEmpty()) return null
-        return GuardResult(warnings.map { w -> GuardFinding("trip.gap", GuardSeverity.WARN, w.title, w.message) })
+        return GuardResult(warnings.map { w -> GuardFinding(w.code, GuardSeverity.WARN, w.title, w.message) })
     }
 
     /** `trip.overlap` — adapter over [TripModel.overlapWarningsFor]. */
     private fun overlapRule(candidate: Trip, others: List<Trip>, ctx: GuardContext): GuardResult? {
         val warnings = TripModel.overlapWarningsFor(candidate, others, ctx.docs, ctx.world, ctx.today)
         if (warnings.isEmpty()) return null
-        return GuardResult(warnings.map { w -> GuardFinding("trip.overlap", GuardSeverity.WARN, w.title, w.message) })
+        return GuardResult(warnings.map { w -> GuardFinding(w.code, GuardSeverity.WARN, w.title, w.message) })
     }
 
     /**
@@ -433,15 +456,7 @@ object GuardEngine {
         if (warnings.isEmpty()) return null
         return GuardResult(warnings.map { w ->
             GuardFinding(
-                code = when (w.title) {
-                    "Allowance exceeded" -> "trip.allowance.exceeded"
-                    "Low allowance" -> "trip.allowance.low"
-                    "Not enough entries" -> "trip.entries.over"
-                    "Last entry used" -> "trip.entries.last"
-                    "No valid entry grant" -> "trip.access.none"
-                    "Entry blocked" -> "trip.access.blocked"
-                    else -> "trip.access.extraStep"
-                },
+                code = w.code,
                 severity = GuardSeverity.WARN,
                 title = w.title,
                 message = w.message,
@@ -477,18 +492,25 @@ object GuardEngine {
     }
 
     /**
-     * `trip.passport.*` (§13.5) — expiry findings for the candidate trip against the effective
-     * primary passport. The BLOCK for an expired passport is lifted when every stop stays inside
-     * the expired passport's freedom set (own country + freedom-of-movement blocs).
+     * `trip.passport.*` (§13.5) — expiry findings for the candidate trip against the selected
+     * passport: the effective primary, falling back to the starred document and then the first
+     * passport held, so an expired-only passport is still evaluated. An expired passport stays
+     * valid for its own country and freedom-of-movement blocs; the BLOCK is lifted when any held
+     * passport can support the trip (not expired at trip start, or every stop inside its
+     * home + freedom set).
      */
     private fun passportExpiryRule(candidate: Trip, ctx: GuardContext): GuardResult? {
         if (candidate.stops.isEmpty()) return null
-        val passport = ctx.docs.firstOrNull { it.id == ctx.primaryId } ?: return null
-        val kind = passport.kind
-        if (kind !is DocKind.Passport) return null
-        val expiry = DocStatus.of(passport, ctx.docs, ctx.trips, ctx.world, ctx.today).effectiveExpiry
-            ?: parseIso(passport.expiry)
-            ?: return null
+        val passports = ctx.docs.filter { it.kind is DocKind.Passport }
+        if (passports.isEmpty()) return null
+        val passport = passports.firstOrNull { it.id == ctx.primaryId }
+            ?: passports.firstOrNull { it.id == ctx.starredId }
+            ?: passports.first()
+        val kind = passport.kind as DocKind.Passport
+        val expiryOf = { d: Document ->
+            DocStatus.of(d, ctx.docs, ctx.trips, ctx.world, ctx.today).effectiveExpiry ?: parseIso(d.expiry)
+        }
+        val expiry = expiryOf(passport) ?: return null
         val start = candidate.firstArrival
         val end = candidate.finalDeparture
         val name = ctx.countryName(kind.iso2)
@@ -511,15 +533,25 @@ object GuardEngine {
             )
         }
         if (expiry.isBefore(start)) {
-            findings += GuardFinding(
-                "trip.passport.expiredBeforeTrip", GuardSeverity.WARN, "Passport expired",
-                "Your $name passport expired on $expiry.",
-            )
-            val uncovered = candidate.stops.firstOrNull { it.countryIso2 !in AccessModel.expiredPassportFreedomSet(kind.iso2, ctx.world) }
+            // A held passport supports a stop when it is not expired at trip start, or the stop
+            // stays inside its home + freedom-of-movement set. Exactly one finding is emitted:
+            // the BLOCK when some stop is uncovered, otherwise the informational WARN.
+            fun supports(p: Document, stop: TripStop): Boolean {
+                val k = p.kind
+                if (k !is DocKind.Passport) return false
+                val pe = expiryOf(p) ?: return true
+                return !pe.isBefore(start) || stop.countryIso2 in AccessModel.expiredPassportFreedomSet(k.iso2, ctx.world)
+            }
+            val uncovered = candidate.stops.firstOrNull { s -> passports.none { supports(it, s) } }
             if (uncovered != null) {
                 findings += GuardFinding(
                     "trip.passport.expiredBeforeTrip", GuardSeverity.BLOCK, "Passport expired",
-                    "Your $name passport is expired and cannot support entry to ${ctx.countryName(uncovered.countryIso2)}.",
+                    "Your passports are expired and cannot support entry to ${ctx.countryName(uncovered.countryIso2)}.",
+                )
+            } else {
+                findings += GuardFinding(
+                    "trip.passport.expiredBeforeTrip", GuardSeverity.WARN, "Passport expired",
+                    "Your $name passport expired on $expiry. It's still accepted for this trip because it covers all your destinations.",
                 )
             }
         }

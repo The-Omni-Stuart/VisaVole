@@ -47,6 +47,7 @@ private fun Long.toUtcIsoDate(): String {
 @Composable
 fun OnboardingScreen(
     countries: Map<String, Country>,
+    today: LocalDate,
     onAddPassport: (String, String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -149,7 +150,7 @@ fun OnboardingScreen(
     if (showDatePicker) {
         val iso = pendingIso
         if (iso != null) {
-            val todayMillis = LocalDate.now(ZoneOffset.UTC).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+            val todayMillis = today.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
             val datePickerState = rememberDatePickerState(initialSelectedDateMillis = todayMillis)
             DatePickerDialog(
                 onDismissRequest = {

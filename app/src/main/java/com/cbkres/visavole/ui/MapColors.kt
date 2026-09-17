@@ -43,6 +43,18 @@ val STATUS_OK = Color(0xFF15803D)
 val STATUS_WARN = Color(0xFFC2410C)
 val STATUS_BAD = Color(0xFFB91C1C)
 
+/**
+ * Finding codes that were DANGERs before the unified guard (savable, per Q1): they stay WARN in
+ * the engine but are rendered in the danger colour so the visual weight is unchanged.
+ */
+val SAVABLE_DANGER_CODES = setOf(
+    "trip.allowance.exceeded",
+    "trip.entries.over",
+    "trip.access.none",
+    "trip.access.blocked",
+    "trip.passport.expiringSoon3",
+)
+
 fun statusTone(level: AccessLevel?, isHome: Boolean = false, isOwnCovered: Boolean = false): Color = when {
     isHome -> Color(0xFF0460EE)
     level == AccessLevel.FREEDOM -> Color(0xFF00B8D4)
