@@ -3,6 +3,7 @@ package com.cbkres.visavole.domain
 import com.cbkres.visavole.data.Country
 import com.cbkres.visavole.data.Holding
 import com.cbkres.visavole.data.Regime
+import com.cbkres.visavole.data.StayRule
 import com.cbkres.visavole.data.WorldData
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -112,6 +113,20 @@ class GuardTest {
         val r = add(p2, listOf(p1))
         assertTrue(r.canProceed)
         assertFalse(codes(r).contains("doc.duplicate"))
+    }
+
+    @Test fun invertedValidityWindowIsBlocked() {
+        val v = visa("v1", setOf("CA"), "multiple", expiry = "2026-10-01", validFrom = "2026-11-01")
+        val r = add(v)
+        assertFalse(r.canProceed)
+        assertTrue(r.blocks.any { it.code == "doc.validity.inverted" })
+    }
+
+    @Test fun validFromBeforeExpiryIsAllowed() {
+        val v = visa("v1", setOf("CA"), "multiple", expiry = "2026-11-01", validFrom = "2026-10-01")
+        val r = add(v)
+        assertTrue(r.canProceed)
+        assertFalse(codes(r).contains("doc.validity.inverted"))
     }
 
     @Test fun updatingToOwnSignatureIsNotDuplicate() {
@@ -442,6 +457,17 @@ class GuardTest {
         assertTrue("msg=${f!!.message}", f.message.contains("Visa: CA"))
         assertTrue(f.message.contains("2026-10-01"))
         assertTrue(f.message.contains("one valid visa per country"))
+        assertFalse("msg=${f.message}", f.message.contains("still used by"))
+    }
+
+    @Test fun supersessionWarningMentionsInUseTrips() {
+        val v1 = visa("v1", setOf("CA"), "multiple", "2027-06-30")
+        val t = trip("t1", stop("s1", "CA", today.plusDays(20), today.plusDays(30), docId = "v1"))
+        val v2 = visa("v2", setOf("CA"), "multiple", "2028-01-01", "2026-10-01")
+        val r = add(v2, listOf(v1), trips = listOf(t))
+        val f = r.warnings.firstOrNull { it.code == "doc.single.perCountry" }
+        assertNotNull(f)
+        assertTrue("msg=${f!!.message}", f.message.contains("still used by 1 trip"))
     }
 
     @Test fun supersessionWithoutValidFromUsesToday() {
@@ -646,6 +672,41 @@ class GuardTest {
         assertTrue(r.warnings.any { it.code == "trip.overlap" })
     }
 
+    @Test fun crossCountryTimeOverlapWarns() {
+        val other = trip("t0", stop("s0", "DE", today.plusDays(12), today.plusDays(20)))
+        val r = addTrip(trip("t1", stop("s1", "CA", today.plusDays(10), today.plusDays(15))), trips = listOf(other))
+        val f = r.findings.firstOrNull { it.code == "trip.timeOverlap" }
+        assertNotNull(f)
+        assertEquals(GuardSeverity.WARN, f!!.severity)
+        assertFalse(r.findings.any { it.code == "trip.overlap" })
+        assertTrue(r.canProceed)
+    }
+
+    @Test fun nonOverlappingDifferentCountriesDoNotWarn() {
+        val other = trip("t0", stop("s0", "DE", today.plusDays(12), today.plusDays(20)))
+        val r = addTrip(trip("t1", stop("s1", "CA", today.plusDays(22), today.plusDays(27))), trips = listOf(other))
+        assertFalse(r.findings.any { it.code == "trip.timeOverlap" || it.code == "trip.overlap" })
+    }
+
+    @Test fun sameTimeOverlapAcrossZoneStillUsesZoneFinding() {
+        val rule = StayRule("Schengen", setOf("FR", "DE"), "rolling", 90, 180, true, setOf("*"), null, "schengen", "schengen")
+        val w = WorldData(
+            mapOf("FR" to Country("FR", "France"), "DE" to Country("DE", "Germany"), "CA" to Country("CA", "Canada")),
+            emptyMap(),
+            emptyList(),
+            mapOf("ca-pr" to Holding("ca-pr", "Canadian PR", "residency", "CA")),
+            emptyMap(),
+            listOf(rule),
+        )
+        val other = trip("t0", stop("s0", "FR", today.plusDays(12), today.plusDays(20)))
+        val r = GuardEngine.evaluate(
+            GuardAction.AddTrip(trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(15)))),
+            ctx(trips = listOf(other), w = w),
+        )
+        assertTrue(r.findings.any { it.code == "trip.overlap" })
+        assertFalse(r.findings.any { it.code == "trip.timeOverlap" })
+    }
+
     @Test fun projectionDangerIsAWarningNotABlock() {
         // FR passport holder, bare world (no rules) → DE stop gets "No valid entry grant",
         // a DANGER before the unified guard, a savable WARN now (Q1).
@@ -657,6 +718,36 @@ class GuardTest {
         assertNotNull(f)
         assertEquals(GuardSeverity.WARN, f!!.severity)
         assertTrue(r.canProceed)
+    }
+
+    @Test fun futureValidFromDoesNotGrantAccessBeforeItStarts() {
+        // CA visa that only becomes valid in 30 days must not cover an imminent CA stop.
+        val docs = listOf(
+            passport("p1", "FR", expiry = "2027-12-31"),
+            visa("v1", setOf("CA"), "multiple", "2027-12-31", validFrom = "2026-10-16"),
+        )
+        val r = addTrip(trip("t1", stop("s1", "CA", today.plusDays(5), today.plusDays(10))), docs = docs)
+        assertTrue("codes=${codes(r)}", r.findings.any { it.code == "trip.access.none" })
+        assertFalse(r.findings.any { it.code == "trip.access.blocked" })
+    }
+
+    @Test fun pastValidFromStillGrantsAccess() {
+        // Same setup as the future-validFrom case, but the visa is already valid → CA is covered.
+        val docs = listOf(
+            passport("p1", "FR", expiry = "2027-12-31"),
+            visa("v1", setOf("CA"), "multiple", "2027-12-31", validFrom = "2026-01-01"),
+        )
+        val r = addTrip(trip("t1", stop("s1", "CA", today.plusDays(5), today.plusDays(10))), docs = docs)
+        assertFalse("codes=${codes(r)}", r.findings.any { it.code == "trip.access.none" || it.code == "trip.access.blocked" })
+    }
+
+    @Test fun stopsBeforeValidFromDoNotConsumeEntries() {
+        val v = visa("v1", setOf("CA"), "single", "2027-12-31", validFrom = "2026-10-16")
+        val t = trip("t1", stop("s1", "CA", today.plusDays(5), today.plusDays(10), docId = "v1"))
+        val status = TripModel.entryStatusFor(v, listOf(t), world(), today)
+        assertNotNull(status)
+        assertEquals(1, status!!.total)
+        assertEquals(0, status.used)
     }
 
     @Test fun adapterParityWithLegacyWarnings() {
@@ -675,7 +766,7 @@ class GuardTest {
         // here covers exactly the codes the legacy TripModel warnings carry.
         val adapterCodes = setOf(
             "trip.noStops", "trip.unknownCountry", "trip.departureBeforeArrival", "trip.missingDeparture",
-            "trip.gap", "trip.overlap",
+            "trip.gap", "trip.overlap", "trip.timeOverlap",
             "trip.allowance.exceeded", "trip.allowance.low", "trip.entries.over", "trip.entries.last",
             "trip.access.none", "trip.access.blocked", "trip.access.extraStep",
         )

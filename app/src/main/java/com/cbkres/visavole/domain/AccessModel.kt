@@ -78,6 +78,12 @@ object AccessModel {
         trips: List<Trip> = emptyList(),
     ): Boolean = DocStatus.of(doc, docs, trips, world, today).expired
 
+    /** A document whose `validFrom` lies after [today] is not usable at [today] yet. */
+    internal fun notYetValid(doc: Document, today: LocalDate): Boolean {
+        val from = doc.validFrom?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return false
+        return from.isAfter(today)
+    }
+
     /**
      * Candidates from a passport: baseline corridors + bloc freedom/visa-free + own country.
      * An [expired] passport keeps its home country and freedom-of-movement bloc(s) but drops its
@@ -348,6 +354,8 @@ object AccessModel {
     ): Map<String, Access> {
         val result = LinkedHashMap<String, Access>()
         for (doc in docs) {
+            // A document that is not valid yet unlocks nothing at [today].
+            if (notYetValid(doc, today)) continue
             when (val k = doc.kind) {
                 is Passport -> {
                     // Pure best-of across passports; an expired one still grants home + freedom blocs.

@@ -151,19 +151,30 @@ object TripModel {
                     val csRule = world.stayRuleFor(cs.countryIso2, passports, today)
                     val osRule = world.stayRuleFor(os.countryIso2, passports, today)
                     val sameZone = !sameCountry && csRule != null && osRule != null && world.zoneKeyFor(csRule) == world.zoneKeyFor(osRule)
-                    if (!sameCountry && !sameZone) continue
-                    val label = when {
-                        sameCountry -> world.countries[cs.countryIso2]?.name ?: cs.countryIso2
-                        else -> csRule?.displayName ?: "the same zone"
-                    }
-                    val key = (if (sameCountry) "c:${cs.countryIso2}" else "z:${csRule?.let { world.zoneKeyFor(it) }}") + other.id
-                    if (seen.add(key)) {
+                    if (sameCountry || sameZone) {
+                        val label = when {
+                            sameCountry -> world.countries[cs.countryIso2]?.name ?: cs.countryIso2
+                            else -> csRule?.displayName ?: "the same zone"
+                        }
+                        val key = (if (sameCountry) "c:${cs.countryIso2}" else "z:${csRule?.let { world.zoneKeyFor(it) }}") + other.id
+                        if (seen.add(key)) {
+                            out.add(
+                                TripWarning(
+                                    "trip.overlap",
+                                    WarningSeverity.WARNING,
+                                    "Trip overlap",
+                                    "This trip overlaps $label by ${daysLabel(overlap)}.",
+                                ),
+                            )
+                        }
+                    } else if (seen.add("t:" + other.id)) {
                         out.add(
                             TripWarning(
-                                "trip.overlap",
+                                "trip.timeOverlap",
                                 WarningSeverity.WARNING,
-                                "Trip overlap",
-                                "This trip overlaps $label by ${daysLabel(overlap)}.",
+                                "Overlapping trips",
+                                "This trip overlaps another trip by ${daysLabel(overlap)}, but the stays are in " +
+                                    "different places — you can only be in one place at a time.",
                             ),
                         )
                     }
@@ -508,8 +519,13 @@ object TripModel {
 
     private fun computeEntryStatus(doc: Document, trips: List<Trip>, asOf: LocalDate): EntryStatus {
         val total = entryTotalFor(doc.entryType())
+        val from = iso(doc.validFrom)
         val stops = trips
-            .flatMap { trip -> trip.stops.filter { it.documentId == doc.id }.map { TrippedStop(trip.id, it) } }
+            .flatMap { trip ->
+                trip.stops
+                    .filter { it.documentId == doc.id && (from == null || !it.arrival.isBefore(from)) }
+                    .map { TrippedStop(trip.id, it) }
+            }
             .sortedBy { it.stop.arrival }
         val entries = mutableListOf<DocEntry>()
         for (ts in stops) {

@@ -134,6 +134,7 @@ object GuardEngine {
         return listOfNotNull(
             passportUnknownCountryRule(candidate, ctx),
             duplicateRule(candidate, ctx),
+            validityInvertedRule(candidate, ctx),
             inUseIdentityRule(action, candidate, ctx),
             visaMultiCountryRule(candidate, ctx),
             inUseValidityRule(action, candidate, ctx),
@@ -164,6 +165,19 @@ object GuardEngine {
             GuardFinding(
                 "doc.duplicate", GuardSeverity.BLOCK, "Document already exists",
                 "You already have this document. Edit the existing one to change its details, or discard this entry.",
+            ),
+        ))
+    }
+
+    /** `doc.validity.inverted` — a valid-from date after the expiry date is not a usable window. */
+    private fun validityInvertedRule(candidate: Document, ctx: GuardContext): GuardResult? {
+        val from = parseIso(candidate.validFrom) ?: return null
+        val to = parseIso(candidate.expiry) ?: return null
+        if (!from.isAfter(to)) return null
+        return GuardResult(listOf(
+            GuardFinding(
+                "doc.validity.inverted", GuardSeverity.BLOCK, "Invalid validity window",
+                "The valid-from date ($from) is after the expiry date ($to). Check the dates.",
             ),
         ))
     }
@@ -356,10 +370,15 @@ object GuardEngine {
         if (oldOnes.isEmpty()) return null
         return GuardResult(
             findings = oldOnes.map { old ->
+                val usedTrips = ctx.trips.count { t -> t.stops.any { it.documentId == old.id } }
+                val tripNote = if (usedTrips > 0) {
+                    " It is still used by ${if (usedTrips == 1) "1 trip" else "$usedTrips trips"} — " +
+                        "review those stops after saving, since they will lose access from $start."
+                } else ""
                 GuardFinding(
                     "doc.single.perCountry", GuardSeverity.WARN, "Replaces your existing document",
                     "This will supersede your ${old.label} from $start, since you can only hold one valid " +
-                        "$category per country. It stays in your archive, marked as replaced.",
+                        "$category per country. It stays in your archive, marked as replaced.$tripNote"
                 )
             },
             mutations = oldOnes.map { GuardMutation.SupersedeDocument(it.id, candidate.id) },
@@ -440,7 +459,7 @@ object GuardEngine {
         return GuardResult(warnings.map { w -> GuardFinding(w.code, GuardSeverity.WARN, w.title, w.message) })
     }
 
-    /** `trip.overlap` — adapter over [TripModel.overlapWarningsFor]. */
+    /** `trip.overlap` / `trip.timeOverlap` — adapter over [TripModel.overlapWarningsFor]. */
     private fun overlapRule(candidate: Trip, others: List<Trip>, ctx: GuardContext): GuardResult? {
         val warnings = TripModel.overlapWarningsFor(candidate, others, ctx.docs, ctx.world, ctx.today)
         if (warnings.isEmpty()) return null
