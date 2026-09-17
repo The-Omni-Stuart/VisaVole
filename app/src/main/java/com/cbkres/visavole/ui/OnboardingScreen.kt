@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.data.Country
+import com.cbkres.visavole.domain.GuardFinding
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -48,13 +49,14 @@ private fun Long.toUtcIsoDate(): String {
 fun OnboardingScreen(
     countries: Map<String, Country>,
     today: LocalDate,
-    onAddPassport: (String, String?) -> Unit,
+    onAddPassport: (String, String?) -> List<GuardFinding>,
     modifier: Modifier = Modifier,
 ) {
     var query by remember { mutableStateOf("") }
     var pendingIso by remember { mutableStateOf<String?>(null) }
     var showExpiryDialog by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var addError by remember { mutableStateOf<String?>(null) }
     val q = query.trim().lowercase()
     val list = countries.entries
         .filter { q.isEmpty() || it.value.name.lowercase().contains(q) || it.key.lowercase() == q }
@@ -78,6 +80,11 @@ fun OnboardingScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            addError?.let { err ->
+                Spacer(Modifier.height(16.dp))
+                Text(err, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Spacer(Modifier.height(8.dp))
+            }
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(
                 value = query,
@@ -112,6 +119,7 @@ fun OnboardingScreen(
                                     .fillMaxWidth()
                                     .clickable {
                                         pendingIso = entry.key
+                                        addError = null
                                         showExpiryDialog = true
                                     }
                                     .padding(vertical = 12.dp, horizontal = 10.dp),
@@ -130,6 +138,10 @@ fun OnboardingScreen(
         val iso = pendingIso
         if (iso != null) {
             val countryName = countries[iso]?.name ?: iso
+            val tryAdd = { expiry: String? ->
+                addError = onAddPassport(iso, expiry).firstOrNull()?.message
+                showExpiryDialog = false
+            }
             AlertDialog(
                 onDismissRequest = { showExpiryDialog = false },
                 title = { Text("$countryName passport") },
@@ -141,7 +153,7 @@ fun OnboardingScreen(
                     }) { Text("Choose date") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { onAddPassport(iso, null) }) { Text("Skip") }
+                    TextButton(onClick = { tryAdd(null) }) { Text("Skip") }
                 },
             )
         }
@@ -159,7 +171,7 @@ fun OnboardingScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        onAddPassport(iso, datePickerState.selectedDateMillis?.toUtcIsoDate())
+                        addError = onAddPassport(iso, datePickerState.selectedDateMillis?.toUtcIsoDate()).firstOrNull()?.message
                         showDatePicker = false
                         showExpiryDialog = false
                     }) { Text("Save") }

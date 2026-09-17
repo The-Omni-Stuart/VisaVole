@@ -30,8 +30,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
@@ -63,7 +61,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.cbkres.visavole.data.StayRule
 import com.cbkres.visavole.data.WorldData
-import com.cbkres.visavole.domain.AccessLevel
 import com.cbkres.visavole.domain.AccessModel
 import com.cbkres.visavole.domain.AllowanceKind
 import com.cbkres.visavole.domain.AllowanceSnapshot
@@ -192,7 +189,6 @@ fun TripsScreen(
     }
     endingTrip?.let { trip ->
         EndTripDialog(
-            trip = trip,
             today = today,
             onConfirm = { departure ->
                 vm.endTrip(trip.id, departure)
@@ -371,7 +367,7 @@ private fun TripCard(
     var expanded by remember { mutableStateOf(false) }
     val sortedStops = TripModel.sortedStops(trip.stops)
     val title = tripTitle(trip, world)
-    val stopCountLabel = if (sortedStops.size > 1) "${sortedStops.size} ${if (sortedStops.size == 1) "stop" else "stops"}" else null
+    val stopCountLabel = if (sortedStops.size > 1) "${sortedStops.size} stops" else null
     val passportCounts = remember(docs) { passportCountsByIso(docs) }
     val passportNumbers = remember(docs) { passportNumbers(docs) }
     val docLabels = sortedStops.mapNotNull { it.documentId }.distinct().joinToString(", ") { id ->
@@ -527,6 +523,11 @@ private fun TripAlertDialog(
                 if (neutralLabel != null && confirmLabel != null) {
                     Button(onClick = onConfirm, enabled = confirmEnabled, modifier = Modifier.fillMaxWidth()) { Text(confirmLabel) }
                     Spacer(Modifier.height(12.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { onNeutral?.invoke() ?: onDismiss() }, modifier = Modifier.weight(1f)) { Text(neutralLabel) }
+                        OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text(dismissLabel) }
+                    }
+                } else if (neutralLabel != null) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = { onNeutral?.invoke() ?: onDismiss() }, modifier = Modifier.weight(1f)) { Text(neutralLabel) }
                         OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text(dismissLabel) }
@@ -1279,7 +1280,7 @@ private fun StopEditorDialog(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EndTripDialog(trip: Trip, today: LocalDate, onConfirm: (LocalDate) -> Unit, onDismiss: () -> Unit) {
+private fun EndTripDialog(today: LocalDate, onConfirm: (LocalDate) -> Unit, onDismiss: () -> Unit) {
     val todayMillis = remember { today.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }
     val state = rememberDatePickerState(initialSelectedDateMillis = todayMillis)
     DatePickerDialog(

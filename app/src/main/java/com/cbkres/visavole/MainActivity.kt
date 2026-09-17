@@ -192,7 +192,6 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
                     s,
                     selected,
                     { selected = it },
-                    active = true,
                     shapes = mapShapes,
                     focus = mapFocus,
                     zoomState = mapZoom,
@@ -221,7 +220,6 @@ private fun MapTab(
     s: AppState.Ready,
     selected: String?,
     onSelect: (String?) -> Unit,
-    active: Boolean = true,
     shapes: List<IsoShape>,
     focus: Map<String, Focus>,
     zoomState: MutableFloatState,
@@ -240,7 +238,7 @@ private fun MapTab(
     }
     val pick: (String?) -> Unit = { iso ->
         query = ""
-        if (active) focusManager.clearFocus(true)
+        focusManager.clearFocus(true)
         onSelect(iso)
     }
     val density = LocalDensity.current
@@ -270,7 +268,6 @@ private fun MapTab(
         SearchBar(
             query = query,
             onQuery = { query = it },
-            active = active,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
@@ -347,7 +344,6 @@ private fun MapTab(
 private fun SearchBar(
     query: String,
     onQuery: (String) -> Unit,
-    active: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val focusManager = LocalFocusManager.current
@@ -355,13 +351,13 @@ private fun SearchBar(
     var searchFocused by remember { mutableStateOf(false) }
     val searchFocusedNow = rememberUpdatedState(searchFocused)
 
-    DisposableEffect(view, active) {
+    DisposableEffect(view) {
         val listener = ViewTreeObserver.OnGlobalLayoutListener {
             val visible = Rect()
             view.getWindowVisibleDisplayFrame(visible)
             val imeHeight = view.height - visible.bottom
             val threshold = view.resources.displayMetrics.heightPixels / 5
-            if (active && imeHeight <= threshold && searchFocusedNow.value) {
+            if (imeHeight <= threshold && searchFocusedNow.value) {
                 focusManager.clearFocus(false)
             }
         }

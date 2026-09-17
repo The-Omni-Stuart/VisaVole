@@ -15,10 +15,10 @@ import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.DocumentMigration
 import com.cbkres.visavole.domain.DocKind
-import com.cbkres.visavole.domain.EntryStatus
 import com.cbkres.visavole.domain.GuardAction
 import com.cbkres.visavole.domain.GuardContext
 import com.cbkres.visavole.domain.GuardEngine
+import com.cbkres.visavole.domain.GuardFinding
 import com.cbkres.visavole.domain.GuardMutation
 import com.cbkres.visavole.domain.ResidenceClass
 import com.cbkres.visavole.domain.Trip
@@ -53,7 +53,6 @@ sealed interface AppState {
         val trips: List<Trip> = emptyList(),
         val tripSections: TripSections = TripSections(emptyList(), emptyList(), emptyList()),
         val allowances: List<AllowanceSnapshot> = emptyList(),
-        val documentEntryStatus: Map<String, EntryStatus> = emptyMap(),
         /** The effective primary passport id (null when no valid passport is held). */
         val primaryDocId: String? = null,
         /** The raw starred document id (may point at an expired document). */
@@ -146,7 +145,6 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
             trips = trips.toList(),
             tripSections = calc.sections,
             allowances = calc.allowances,
-            documentEntryStatus = calc.entryStatus,
             primaryDocId = effectivePrimaryId(today),
             starredDocId = primaryDocId,
             today = today,
@@ -214,19 +212,22 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         persist()
     }
 
-    /** Onboarding's "add your first passport": the same guarded add path as the documents tab. */
-    fun addOnboardingPassport(iso2: String, expiry: String? = null) {
+    /** Onboarding's "add your first passport": the same guarded add path as the documents tab.
+     *  Returns the blocking findings when the guard rejects the add (empty on success). */
+    fun addOnboardingPassport(iso2: String, expiry: String? = null): List<GuardFinding> =
         addDocument(passportDocument(iso2, world?.countries?.get(iso2)?.name, expiry))
-    }
 
-    fun addDocument(doc: Document) {
+    /** Adds or updates [doc] through the guard backstop. Returns the blocking findings when the
+     *  guard rejects the mutation (empty on success), so callers can surface why nothing happened. */
+    fun addDocument(doc: Document): List<GuardFinding> {
         val original = docs.firstOrNull { it.id == doc.id }
         val action = if (original != null) GuardAction.UpdateDocument(doc, original) else GuardAction.AddDocument(doc)
         val result = guardCtx()?.let { GuardEngine.evaluate(action, it) }
-        if (result != null && !result.canProceed) return
+        if (result != null && !result.canProceed) return result.blocks
         if (result != null) applyMutations(result.mutations)
         if (primaryDocId == null && doc.kind is DocKind.Passport) primaryDocId = doc.id
         updateDocs(docs.filterNot { it.id == doc.id } + doc)
+        return emptyList()
     }
 
     fun updateDocument(doc: Document) = addDocument(doc)

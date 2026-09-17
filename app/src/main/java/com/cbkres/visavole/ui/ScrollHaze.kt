@@ -27,7 +27,7 @@ private const val HAZE_RAMP = 80f
  * both are 0..1 where 1 is fully opaque.
  */
 @Composable
-fun HazeEdges(
+private fun HazeEdges(
     startAlpha: Float,
     endAlpha: Float,
     color: Color,
