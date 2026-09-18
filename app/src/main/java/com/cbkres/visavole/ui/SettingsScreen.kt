@@ -22,21 +22,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,12 +56,13 @@ private const val LICENSE_URL = "https://github.com/The-Omni-Stuart/VisaVole/blo
  * All backup logic lives in [BackupManager] behind the ViewModel; this screen only triggers the
  * pickers and confirms the restore.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+// No inner Scaffold/TopAppBar: this screen is a destination under the app's persistent top bar
+// (which shows the back arrow), so there are no doubled status-bar insets and the content starts
+// exactly where the other tabs' content starts.
 @Composable
 fun SettingsScreen(
     vm: AccessViewModel,
     ready: AppState.Ready,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -82,28 +76,15 @@ fun SettingsScreen(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> if (uri != null) vm.prepareRestore(uri) { pendingRestore = it } }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {},
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp)
-                .padding(top = 24.dp, bottom = 48.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp)
+            .padding(top = 8.dp, bottom = 48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
             AppIcon()
             Spacer(Modifier.height(20.dp))
             Text("Visa Vole", style = MaterialTheme.typography.titleLarge)
@@ -163,7 +144,6 @@ fun SettingsScreen(
                     modifier = Modifier.clickable { openUrl(context, LICENSE_URL) },
                 )
             }
-        }
     }
 
     val pending = pendingRestore

@@ -38,6 +38,7 @@ import androidx.compose.foundation.verticalScroll
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.hazeAlphas
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Face
@@ -187,42 +188,49 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
     val tripsScroll = rememberLazyListState()
     Scaffold(
         topBar = {
-            // The Settings overlay draws its own bar with a back arrow.
-            if (!showSettings) {
-                TopAppBar(
-                    title = { Text("Visa Vole") },
-                    actions = {
+            // The bar is persistent: Settings swaps its contents (back arrow + title) instead of
+            // removing it, so the content area never moves — the map's search bar and legend stay
+            // put while Settings is open and nothing pops back on the way out.
+            TopAppBar(
+                title = { Text(if (showSettings) "Settings" else "Visa Vole") },
+                navigationIcon = {
+                    if (showSettings) {
+                        IconButton(onClick = { showSettings = false }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    }
+                },
+                actions = {
+                    if (!showSettings) {
                         IconButton(onClick = { showSettings = true }) {
                             Icon(Icons.Filled.Settings, contentDescription = "Settings")
                         }
-                    },
-                )
-            }
+                    }
+                },
+            )
         },
         snackbarHost = { VisaSnackbarHost(snackbarHostState) },
         bottomBar = {
-            // The Settings overlay replaces the tab bar while it's open.
-            if (!showSettings) {
-                NavigationBar {
-                    NavigationBarItem(
-                        selected = tab == 0,
-                        onClick = { tab = 0 },
-                        icon = { Icon(Icons.Filled.Place, contentDescription = null) },
-                        label = { Text("Map") },
-                    )
-                    NavigationBarItem(
-                        selected = tab == 1,
-                        onClick = { tab = 1 },
-                        icon = { Icon(Icons.Filled.Face, contentDescription = null) },
-                        label = { Text("Documents") },
-                    )
-                    NavigationBarItem(
-                        selected = tab == 2,
-                        onClick = { tab = 2 },
-                        icon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
-                        label = { Text("Trips") },
-                    )
-                }
+            // Persistent too — switching tabs while Settings is open just closes it.
+            NavigationBar {
+                NavigationBarItem(
+                    selected = tab == 0,
+                    onClick = { showSettings = false; tab = 0 },
+                    icon = { Icon(Icons.Filled.Place, contentDescription = null) },
+                    label = { Text("Map") },
+                )
+                NavigationBarItem(
+                    selected = tab == 1,
+                    onClick = { showSettings = false; tab = 1 },
+                    icon = { Icon(Icons.Filled.Face, contentDescription = null) },
+                    label = { Text("Documents") },
+                )
+                NavigationBarItem(
+                    selected = tab == 2,
+                    onClick = { showSettings = false; tab = 2 },
+                    icon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
+                    label = { Text("Trips") },
+                )
             }
         },
     ) { pad ->
@@ -259,7 +267,6 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
                 SettingsScreen(
                     vm,
                     s,
-                    onBack = { showSettings = false },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
