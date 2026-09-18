@@ -100,11 +100,12 @@ fun SettingsScreen(
                 .background(MaterialTheme.colorScheme.background)
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 8.dp),
+                .padding(horizontal = 24.dp)
+                .padding(top = 24.dp, bottom = 48.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             AppIcon()
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
             Text("Visa Vole", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(4.dp))
             Text(
@@ -112,38 +113,38 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(48.dp))
 
             OutlinedButton(onClick = { openUrl(context, SOURCE_URL) }, modifier = Modifier.fillMaxWidth()) {
                 Text("Source Code")
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
             OutlinedButton(onClick = { openUrl(context, ISSUES_URL) }, modifier = Modifier.fillMaxWidth()) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Found a bug?", style = MaterialTheme.typography.titleSmall)
                     Text("Report it here!", style = MaterialTheme.typography.bodySmall)
                 }
             }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(40.dp))
             HorizontalDivider()
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(40.dp))
             OutlinedButton(
                 onClick = { exportLauncher.launch(BackupManager.BACKUP_FILE_NAME) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Export Data Backup")
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(12.dp))
             OutlinedButton(
                 onClick = { restoreLauncher.launch(arrayOf("*/*")) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Restore from Backup")
             }
-            Spacer(Modifier.height(40.dp))
+            Spacer(Modifier.height(64.dp))
 
             Text(
-                "Thank you for using Visa Vole!\nMade with love in 🏴󠁧󠁢󠁳󠁣󠁿 and 🇨🇿.",
+                "Thank you for using Visa Vole!\nMade with love in 🏴󠁧󠁢󠁳󠁣󠁴󠁿 and 🇨🇿.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
