@@ -2,8 +2,12 @@ package com.cbkres.visavole.ui
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.cbkres.visavole.data.BackupManager
+import com.cbkres.visavole.data.PersistedState
+import com.cbkres.visavole.data.StateCodec
 import com.cbkres.visavole.data.VisaDb
 import com.cbkres.visavole.data.VisaRepository
 import com.cbkres.visavole.data.WorldGeometry
@@ -20,18 +24,15 @@ import com.cbkres.visavole.domain.GuardContext
 import com.cbkres.visavole.domain.GuardEngine
 import com.cbkres.visavole.domain.GuardFinding
 import com.cbkres.visavole.domain.GuardMutation
-import com.cbkres.visavole.domain.ResidenceClass
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripCalculation
 import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.TripSections
-import com.cbkres.visavole.domain.TripStop
 import com.cbkres.visavole.domain.passportDocument
 import com.cbkres.visavole.domain.residenceClassFor
 import java.io.File
 import java.time.LocalDate
 import java.time.ZoneOffset
-import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -41,8 +42,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
-import org.json.JSONObject
 
 sealed interface AppState {
     data object Loading : AppState
@@ -76,6 +75,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     private val context: Context = app
     private val repository = VisaRepository(VisaDb(context))
+    private val backup = BackupManager(context)
     @Volatile private var world: WorldData? = null
     private val geometry: WorldMapData by lazy { WorldGeometry.load(context) }
 
@@ -296,21 +296,47 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         publish()
     }
 
-    // ---- persistence (JSON in the app's files dir) ----
-    private val file get() = File(context.filesDir, "visavole_state.json")
+    // ---- backup (triggered from the Settings screen) ----
+
+    /** Export the current data to a user-chosen location ([uri] from the SAF create-document picker). */
+    fun exportBackup(uri: Uri) {
+        viewModelScope.launch {
+            when (val outcome = withContext(Dispatchers.IO) { backup.exportTo(uri) }) {
+                is BackupManager.Outcome.Exported -> snack("Backup saved.")
+                is BackupManager.Outcome.Imported -> snack("Backup ready to restore.")
+                is BackupManager.Outcome.Failed -> snack(outcome.message)
+            }
+        }
+    }
+
+    /** Read and validate the backup at [uri]; [onReady] receives the state to confirm restoring. */
+    fun prepareRestore(uri: Uri, onReady: (PersistedState) -> Unit) {
+        viewModelScope.launch {
+            when (val outcome = withContext(Dispatchers.IO) { backup.importFrom(uri) }) {
+                is BackupManager.Outcome.Imported -> onReady(outcome.state)
+                is BackupManager.Outcome.Exported -> {}
+                is BackupManager.Outcome.Failed -> snack(outcome.message)
+            }
+        }
+    }
+
+    /** Replace the live state with [state] (after the user confirms), then re-persist and republish. */
+    fun applyRestore(state: PersistedState) {
+        docs = state.docs.toMutableList()
+        trips = state.trips.toMutableList()
+        primaryDocId = state.primaryDocId
+        ensurePrimaryPassport()
+        persist()
+        reloadWorldAndPublish()
+        snack("Backup restored.")
+    }
+
+    // ---- persistence (JSON in the app's files dir, formatted by StateCodec) ----
+    private val file get() = backup.stateFile
 
     private fun persist() {
         try {
-            val root = JSONObject()
-            root.put("schemaVersion", 3)
-            root.put("primaryDocId", primaryDocId ?: JSONObject.NULL)
-            val arr = JSONArray()
-            docs.forEach { arr.put(docToJson(it)) }
-            root.put("docs", arr)
-            val tripArr = JSONArray()
-            trips.forEach { tripArr.put(tripToJson(it)) }
-            root.put("trips", tripArr)
-            file.writeText(root.toString())
+            file.writeText(StateCodec.encode(PersistedState(primaryDocId, docs.toList(), trips.toList())))
         } catch (_: Exception) {
         }
     }
@@ -318,108 +344,11 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     private fun readPersisted() {
         try {
             if (!file.exists()) return
-            val root = JSONObject(file.readText())
-            primaryDocId = root.strOrNull("primaryDocId")
-            val arr = root.optJSONArray("docs") ?: JSONArray()
-            val list = mutableListOf<Document>()
-            for (i in 0 until arr.length()) list.add(jsonToDoc(arr.getJSONObject(i)))
-            docs = list
-            val tripArr = root.optJSONArray("trips") ?: JSONArray()
-            val tripList = mutableListOf<Trip>()
-            for (i in 0 until tripArr.length()) {
-                runCatching { tripArr.getJSONObject(i) }.getOrNull()?.let { o ->
-                    val stops = mutableListOf<TripStop>()
-                    val stopArr = o.optJSONArray("stops") ?: JSONArray()
-                    for (j in 0 until stopArr.length()) {
-                        runCatching {
-                            val so = stopArr.getJSONObject(j)
-                            TripStop(
-                                so.optString("id").ifBlank { UUID.randomUUID().toString() },
-                                so.getString("country"),
-                                LocalDate.parse(so.getString("arrival")),
-                                so.strOrNull("departure")?.let { LocalDate.parse(it) },
-                                so.strOrNull("documentId"),
-                            )
-                        }.getOrNull()?.let { stops.add(it) }
-                    }
-                    if (stops.isNotEmpty()) {
-                        tripList.add(Trip(o.optString("id").ifBlank { UUID.randomUUID().toString() }, stops, o.strOrNull("note")))
-                    }
-                }
-            }
-            trips = tripList
+            val state = StateCodec.decode(file.readText())
+            primaryDocId = state.primaryDocId
+            docs = state.docs.toMutableList()
+            trips = state.trips.toMutableList()
         } catch (_: Exception) {
         }
-    }
-
-    private fun docToJson(d: Document): JSONObject = JSONObject().apply {
-        put("id", d.id)
-        put("label", d.label)
-        put("expiry", d.expiry ?: JSONObject.NULL)
-        put("validFrom", d.validFrom ?: JSONObject.NULL)
-        put("residenceClass", d.residenceClass?.id ?: JSONObject.NULL)
-        put("supersededBy", d.supersededBy ?: JSONObject.NULL)
-        when (val k = d.kind) {
-            is DocKind.Passport -> {
-                put("kind", "passport"); put("iso2", k.iso2)
-            }
-            is DocKind.Holding -> {
-                put("kind", "holding"); put("holdingId", k.holdingId)
-                put("entryType", k.entryType ?: JSONObject.NULL)
-            }
-            is DocKind.Custom -> {
-                put("kind", "custom"); put("ckind", k.kind)
-                put("bloc", k.blocId ?: JSONObject.NULL)
-                put("holding", k.holdingId ?: JSONObject.NULL)
-                put("entryType", k.entryType ?: JSONObject.NULL)
-                put("countries", JSONArray(k.countries.toList()))
-            }
-        }
-    }
-
-    /** Read a nullable string field: missing, JSON null, empty, or the literal "null" → null. */
-    private fun JSONObject.strOrNull(key: String): String? {
-        if (!has(key) || isNull(key)) return null
-        return optString(key).takeIf { it.isNotEmpty() && it != "null" }
-    }
-
-    private fun tripToJson(t: Trip): JSONObject = JSONObject().apply {
-        put("id", t.id)
-        put("note", t.note ?: JSONObject.NULL)
-        val stops = JSONArray()
-        t.stops.forEach { s ->
-            stops.put(JSONObject().apply {
-                put("id", s.id)
-                put("country", s.countryIso2)
-                put("arrival", s.arrival.toString())
-                put("departure", s.departure?.toString() ?: JSONObject.NULL)
-                put("documentId", s.documentId ?: JSONObject.NULL)
-            })
-        }
-        put("stops", stops)
-    }
-
-    private fun jsonToDoc(o: JSONObject): Document {
-        val kind = when (o.optString("kind")) {
-            "passport" -> DocKind.Passport(o.getString("iso2"))
-            "holding" -> DocKind.Holding(o.getString("holdingId"), o.strOrNull("entryType"))
-            else -> {
-                val arr = o.getJSONArray("countries")
-                val set = LinkedHashSet<String>()
-                for (i in 0 until arr.length()) set.add(arr.getString(i))
-                DocKind.Custom(
-                    set,
-                    o.strOrNull("bloc"),
-                    o.strOrNull("ckind") ?: "visa",
-                    o.strOrNull("holding"),
-                    o.strOrNull("entryType"),
-                )
-            }
-        }
-        val expiry = o.strOrNull("expiry")
-        val validFrom = o.strOrNull("validFrom")
-        val residenceClass = ResidenceClass.fromId(o.strOrNull("residenceClass"))
-        val supersededBy = o.strOrNull("supersededBy")
-        return Document(o.getString("id"), o.getString("label"), kind, null, expiry, validFrom, residenceClass, supersededBy)
     }
 }
