@@ -85,8 +85,10 @@ object TripModel {
         val zoneAllowances = zoneUsages(trips, docs, world, today).mapNotNull { (key, usage) ->
             zoneSnapshot(key, usage, world, today, docs, trips, docStatuses)
         }
+        // Every document gets a snapshot, passports included: the Documents tab's top display
+        // surfaces the ones with an expiry (all visas, passports/residences nearing theirs); the
+        // Trips tab keeps filtering the "doc:" snapshots out by key.
         val docAllowances = docs
-            .filter { it.kind !is Passport }
             .mapNotNull { documentSnapshot(it, entryStatus[it.id], docStatuses[it.id], today, docs) }
         val allowances = (zoneAllowances + docAllowances)
             .distinctBy { it.key }

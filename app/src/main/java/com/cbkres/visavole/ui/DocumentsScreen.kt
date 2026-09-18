@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -63,7 +64,6 @@ import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.data.Country
 import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.domain.AccessLevel
-import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.DocStatus
@@ -75,6 +75,7 @@ import com.cbkres.visavole.domain.GuardEngine
 import com.cbkres.visavole.domain.GuardFinding
 import com.cbkres.visavole.domain.GuardResult
 import com.cbkres.visavole.domain.ResidenceClass
+import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.defaultResidenceClassFor
 import com.cbkres.visavole.domain.docCategory
 import com.cbkres.visavole.domain.duplicateSignature
@@ -91,6 +92,9 @@ import java.util.UUID
 /** Days from [today] until [date]; null when unset. */
 private fun daysUntil(date: LocalDate?, today: LocalDate): Long? =
     date?.let { ChronoUnit.DAYS.between(today, it) }
+
+/** 24 months in days — a passport / residence enters the top display this close to its expiry. */
+private const val EXPIRY_WATCH_DAYS = 730
 
 /**
  * The card's first-row type badge: the base type (Passport / Visa / Residence) in the tone the map
@@ -185,6 +189,8 @@ fun DocumentsScreen(
     var editing by remember { mutableStateOf<Document?>(null) }
     var blockedRemove by remember { mutableStateOf<GuardFinding?>(null) }
     var removingDoc by remember { mutableStateOf<Document?>(null) }
+    // Which document's allowance the top display is focused on (null = the primary one).
+    var focusedAllowance by remember { mutableStateOf<String?>(null) }
     val today = ready.today
     // One shared guard context for the whole screen; every add/remove/star decision below goes
     // through the same GuardEngine the ViewModel backstops with.
@@ -207,6 +213,18 @@ fun DocumentsScreen(
             }
             val active = ready.docs.filter { !statuses.getValue(it.id).expired }
             val archived = ready.docs.filter { statuses.getValue(it.id).expired }
+            // The tab-top allowance display (the same one the Trips tab uses), fed from the
+            // documents that actually have an expiry to watch: every visa, plus passports /
+            // residence permits with under 24 months left.
+            val docAllowances = ready.allowances.filter { a ->
+                val doc = ready.docs.firstOrNull { it.id == a.key.removePrefix("doc:") } ?: return@filter false
+                when {
+                    doc.kind is DocKind.Passport -> (a.remainingDays ?: Int.MAX_VALUE) < EXPIRY_WATCH_DAYS
+                    doc.docCategory(ready.world) == "visa" -> a.remainingDays != null
+                    else -> (a.remainingDays ?: Int.MAX_VALUE) < EXPIRY_WATCH_DAYS
+                }
+            }
+            val docPrimary = TripModel.primaryAllowance(docAllowances, focusedAllowance)
             // How many VALID (non-expired) passports the user holds of each nationality. The primary
             // star only makes sense when two or more valid passports of the same country compete.
             val validPassportIsoCounts = active
@@ -222,7 +240,20 @@ fun DocumentsScreen(
             val docsListState = scrollState
             val (docsTop, docsEnd) = docsListState.hazeAlphas()
             HazeBox(docsTop, docsEnd, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
-                LazyColumn(state = docsListState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(
+                    state = docsListState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    item(key = "allowances") {
+                        AllowanceSection(
+                            allowances = docAllowances,
+                            primary = docPrimary,
+                            focusedKey = focusedAllowance,
+                            onFocus = { focusedAllowance = it },
+                        )
+                    }
                     if (active.isNotEmpty()) {
                         item(key = "header-active") { SectionLabel("Active") }
                         items(active, key = { it.id }) { doc ->
@@ -240,7 +271,6 @@ fun DocumentsScreen(
                                 canRemove = removeBlockings[doc.id]?.canProceed == true,
                                 passportNumber = number,
                                 isPrimary = doc.id == ready.primaryDocId,
-                                ring = ready.allowances.firstOrNull { it.key == "doc:${doc.id}" },
                                 onRemove = { removingDoc = doc },
                                 onRemoveBlocked = { blockedRemove = removeBlockings[doc.id]?.findings?.firstOrNull() },
                                 onEdit = { editing = doc },
@@ -264,7 +294,6 @@ fun DocumentsScreen(
                                 canRemove = removeBlockings[doc.id]?.canProceed == true,
                                 passportNumber = number,
                                 isPrimary = false,
-                                ring = ready.allowances.firstOrNull { it.key == "doc:${doc.id}" },
                                 onRemove = { removingDoc = doc },
                                 onRemoveBlocked = { blockedRemove = removeBlockings[doc.id]?.findings?.firstOrNull() },
                                 onEdit = { editing = doc },
@@ -366,7 +395,6 @@ private fun DocCard(
     canRemove: Boolean = true,
     passportNumber: Int? = null,
     isPrimary: Boolean = false,
-    ring: AllowanceSnapshot? = null,
     onRemove: () -> Unit,
     onRemoveBlocked: () -> Unit = {},
     onEdit: () -> Unit,
@@ -375,10 +403,7 @@ private fun DocCard(
     val isPassport = doc.kind is DocKind.Passport
     val surface = MaterialTheme.colorScheme.onSurface
     val (typeLabel, typeTone) = docTypeBadge(doc, world)
-    // The shared allowance donut, scaled down for the card; passports have no snapshot.
-    val ringToShow = ring?.takeIf { it.entryRemaining != null || it.remainingDays != null }
     VisaListCard(
-        trailing = ringToShow?.let { r -> { AllowanceRing(r, size = 72.dp) } },
         actions = {
             if (onStar != null) {
                 IconButton(onClick = onStar) {
