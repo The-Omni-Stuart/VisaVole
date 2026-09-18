@@ -62,6 +62,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.data.Country
 import com.cbkres.visavole.data.WorldData
+import com.cbkres.visavole.domain.AccessLevel
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.DocStatus
@@ -74,7 +75,9 @@ import com.cbkres.visavole.domain.GuardFinding
 import com.cbkres.visavole.domain.GuardResult
 import com.cbkres.visavole.domain.ResidenceClass
 import com.cbkres.visavole.domain.defaultResidenceClassFor
+import com.cbkres.visavole.domain.docCategory
 import com.cbkres.visavole.domain.duplicateSignature
+import com.cbkres.visavole.domain.entryType
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportDocument
 import com.cbkres.visavole.domain.passportNumbers
@@ -89,50 +92,85 @@ private fun daysUntil(date: LocalDate?, today: LocalDate): Long? =
     date?.let { ChronoUnit.DAYS.between(today, it) }
 
 /**
- * The document subtitle: kind/summary and the valid-from / valid-to dates in the neutral base
- * colour; only the entry type is tinted (orange for single, green for multiple). The expiry
- * status itself is carried by a separate pill in the row.
+ * The card's first-row type badge: the base type (Passport / Visa / Residence) in the tone the map
+ * uses for what that document unlocks — the home-country blue, the covered-visa magenta, or the
+ * residence teal.
  */
-private fun docSubtitle(
-    doc: Document,
-    world: WorldData,
-    base: Color,
-    effectiveExpiry: LocalDate? = null,
-): AnnotatedString {
+private fun docTypeBadge(doc: Document, world: WorldData): Pair<String, Color> =
+    when (doc.kind) {
+        is DocKind.Passport -> "Passport" to HOME
+        else -> if (doc.docCategory(world) == "residence") {
+            "Residence" to statusTone(AccessLevel.RESIDENCE)
+        } else {
+            "Visa" to statusTone(AccessLevel.COVERED)
+        }
+    }
+
+/**
+ * The card's title: the country(ies) the document applies to — a single name, "A, B" for two, or
+ * "A, B +N more" beyond. A bloc-scoped holding (e.g. Schengen/EU) has no single country, so it
+ * carries its holding name instead.
+ */
+private fun docTitle(doc: Document, world: WorldData): String {
+    val names = when (val k = doc.kind) {
+        is DocKind.Passport -> listOf(world.countries[k.iso2]?.name ?: k.iso2)
+        is DocKind.Holding -> {
+            val isos = world.holdingCountries(k.holdingId).sortedBy { world.countries[it]?.name ?: it }
+            when {
+                isos.isEmpty() -> listOf(k.holdingId)
+                isos.size == 1 -> listOf(world.countries[isos.first()]?.name ?: isos.first())
+                else -> listOf(world.holdings[k.holdingId]?.name ?: k.holdingId)
+            }
+        }
+        is DocKind.Custom ->
+            k.countries.sortedBy { world.countries[it]?.name ?: it }.map { world.countries[it]?.name ?: it }
+    }
+    return if (names.size <= 2) names.joinToString(", ")
+    else "${names.take(2).joinToString(", ")} +${names.size - 2} more"
+}
+
+/** The card's validity-period line; null (line dropped) when the document carries no dates. */
+private fun docValidityText(doc: Document): String? = when {
+    doc.validFrom != null && doc.expiry != null -> "${doc.validFrom} → ${doc.expiry}"
+    doc.validFrom != null -> "from ${doc.validFrom}"
+    doc.expiry != null -> "to ${doc.expiry}"
+    else -> null
+}
+
+/**
+ * The card's details line, left of the status pill: a known holding's name (when it is not already
+ * the title), then the mobility bloc, then the entry type (tinted) or the residence class. Null
+ * when the document carries no structural detail (a plain passport).
+ */
+private fun docDetailsAnnotated(doc: Document, world: WorldData, base: Color): AnnotatedString? {
     val k = doc.kind
     val regime = (k as? DocKind.Custom)?.blocId?.let { id -> world.regimes.firstOrNull { r -> r.id == id }?.name }
-    val entryType = (k as? DocKind.Custom)?.entryType
-    val classSuffix = doc.residenceClassFor(world)?.let { " · ${it.label}" } ?: ""
-    val displayExpiry = effectiveExpiry?.toString() ?: doc.expiry
-
+    val holdingName = when (k) {
+        is DocKind.Holding -> world.holdings[k.holdingId]?.name
+        is DocKind.Custom -> k.holdingId?.let { world.holdings[it]?.name }
+        is DocKind.Passport -> null
+    }
     val b = AnnotatedString.Builder()
-    fun styled(text: String, color: Color) {
+    fun part(text: String?, color: Color = base) {
+        if (text.isNullOrEmpty()) return
         val s = b.length
+        b.append(if (b.length > 0) " · " else "")
         b.append(text)
         b.addStyle(SpanStyle(color = color), s, b.length)
     }
-    styled(
-        when (k) {
-            is DocKind.Passport -> "Passport"
-            is DocKind.Holding -> k.holdingId + classSuffix
-            is DocKind.Custom -> {
-                val bloc = regime?.let { " · bloc $it" } ?: ""
-                "${k.kind} · ${k.countries.size} countries$bloc$classSuffix"
-            }
-        },
-        base,
-    )
-    entryType?.let { type ->
+    part(holdingName?.takeIf { it != docTitle(doc, world) })
+    part(regime?.let { "bloc $it" })
+    doc.entryType()?.let { type ->
         val (label, severity) = when (type) {
             "single" -> "single" to Severity.BAD
             "double" -> "double" to Severity.WARN
             else -> "multiple" to Severity.OK
         }
-        styled(" · $label entry", severityColor(severity))
+        part("${label} entry", severityColor(severity))
+    } ?: run {
+        part(doc.residenceClassFor(world)?.label)
     }
-    doc.validFrom?.let { from -> styled(" · from $from", base) }
-    displayExpiry?.let { exp -> styled(" · to $exp", base) }
-    return b.toAnnotatedString()
+    return if (b.length == 0) null else b.toAnnotatedString()
 }
 
 @Composable
@@ -197,7 +235,7 @@ fun DocumentsScreen(
                                 ready.world,
                                 today,
                                 statuses[doc.id],
-                                supersededByLabel = doc.supersededBy?.let { id -> ready.docs.firstOrNull { d -> d.id == id }?.label },
+                                supersededByLabel = doc.supersededBy?.let { id -> ready.docs.firstOrNull { d -> d.id == id }?.let { docTitle(it, ready.world) } },
                                 canRemove = removeBlockings[doc.id]?.canProceed == true,
                                 passportNumber = number,
                                 isPrimary = doc.id == ready.primaryDocId,
@@ -220,7 +258,7 @@ fun DocumentsScreen(
                                 ready.world,
                                 today,
                                 statuses[doc.id],
-                                supersededByLabel = doc.supersededBy?.let { id -> ready.docs.firstOrNull { d -> d.id == id }?.label },
+                                supersededByLabel = doc.supersededBy?.let { id -> ready.docs.firstOrNull { d -> d.id == id }?.let { docTitle(it, ready.world) } },
                                 canRemove = removeBlockings[doc.id]?.canProceed == true,
                                 passportNumber = number,
                                 isPrimary = false,
@@ -330,9 +368,9 @@ private fun DocCard(
     onEdit: () -> Unit,
     onStar: (() -> Unit)? = null,
 ) {
-    val effectiveExpiry = status?.effectiveExpiry
     val isPassport = doc.kind is DocKind.Passport
     val surface = MaterialTheme.colorScheme.onSurface
+    val (typeLabel, typeTone) = docTypeBadge(doc, world)
     VisaListCard(
         actions = {
             if (onStar != null) {
@@ -361,15 +399,13 @@ private fun DocCard(
             }
         },
     ) {
+        // Row 1: the type badge (in the tone the map uses for what the doc unlocks) + the
+        // country(ies) it applies to; a passport's stable "(N)" number trails the name.
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (status != null &&
-                (effectiveExpiry != null || status.entries?.total != null || doc.supersededBy != null)
-            ) {
-                ExpiryStatusPill(today, status, supersededByLabel)
-            }
+            StatusPill(typeLabel, typeTone)
             Text(
                 buildAnnotatedString {
-                    append(doc.label)
+                    append(docTitle(doc, world))
                     if (isPassport && passportNumber != null) {
                         withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
                             append("  ($passportNumber)")
@@ -382,10 +418,28 @@ private fun DocCard(
                 modifier = Modifier.weight(1f),
             )
         }
-        Text(
-            docSubtitle(doc, world, MaterialTheme.colorScheme.onSurfaceVariant, effectiveExpiry),
-            style = MaterialTheme.typography.bodySmall,
-        )
+        // Row 2: the validity period, trips-card style; dropped when the document has no dates.
+        docValidityText(doc)?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        // Row 3: the structural details left, the status pill right — a consistent badge column.
+        if (status != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                val details = docDetailsAnnotated(doc, world, MaterialTheme.colorScheme.onSurfaceVariant)
+                if (details != null) {
+                    Text(
+                        details,
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                ExpiryStatusPill(today, status, supersededByLabel)
+            }
+        }
     }
 }
 
