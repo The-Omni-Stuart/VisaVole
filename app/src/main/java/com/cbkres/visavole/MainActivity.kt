@@ -2,13 +2,7 @@ package com.cbkres.visavole
 
 import android.app.Application
 import android.content.res.Configuration
-import android.graphics.Rect
-import android.os.Build
 import android.os.Bundle
-import android.view.View
-import android.view.ViewTreeObserver
-import android.view.WindowInsets
-import androidx.core.view.ViewCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -65,7 +59,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -73,18 +66,15 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
@@ -266,7 +256,7 @@ private fun MapTab(
     centerState: MutableState<Offset>,
     modifier: Modifier = Modifier,
 ) {
-    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     // The dropdown fades out over 120ms after the query is cleared; matches must keep the last
     // non-blank query during that exit, otherwise the content flips to "No matching countries"
     // mid-fade right after the user picks a country.
@@ -281,8 +271,8 @@ private fun MapTab(
             .take(20)
     }
     val pick: (String?) -> Unit = { iso ->
+        keyboardController?.hide()
         onQuery("")
-        focusManager.clearFocus(true)
         onSelect(iso)
     }
     val density = LocalDensity.current
@@ -418,22 +408,7 @@ private fun SearchBar(
     onQuery: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val focusManager = LocalFocusManager.current
-    val view = LocalView.current
-    var searchFocused by remember { mutableStateOf(false) }
-    val searchFocusedNow = rememberUpdatedState(searchFocused)
-
-    DisposableEffect(view) {
-        val listener = ViewTreeObserver.OnGlobalLayoutListener {
-            val imeHeight = imeHeightOf(view)
-            val threshold = view.resources.displayMetrics.heightPixels / 5
-            if (imeHeight <= threshold && searchFocusedNow.value) {
-                focusManager.clearFocus(false)
-            }
-        }
-        view.viewTreeObserver.addOnGlobalLayoutListener(listener)
-        onDispose { view.viewTreeObserver.removeOnGlobalLayoutListener(listener) }
-    }
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     OutlinedTextField(
         value = query,
@@ -447,7 +422,7 @@ private fun SearchBar(
         },
         singleLine = true,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus(true) }),
+        keyboardActions = KeyboardActions(onSearch = { keyboardController?.hide() }),
         shape = MaterialTheme.shapes.large,
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -456,8 +431,7 @@ private fun SearchBar(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
-            .padding(top = 8.dp, bottom = 4.dp)
-            .onFocusChanged { searchFocused = it.isFocused },
+            .padding(top = 8.dp, bottom = 4.dp),
     )
 }
 
@@ -513,17 +487,3 @@ private fun LegendRow(counts: Map<AccessLevel, Int>, homeCount: Int = 1) {
     }
 }
 
-/** Bottom inset currently occupied by the IME. API 30+ reads WindowInsets.Type.ime(); on
- *  API 28–29 it falls back to the visible-frame diff, which is accurate here because the
- *  activity runs edge-to-edge (enableEdgeToEdge), so the frame shrinks by exactly the IME height. */
-private fun imeHeightOf(view: View): Int =
-    if (Build.VERSION.SDK_INT >= 30) {
-        ViewCompat.getRootWindowInsets(view)?.getInsets(WindowInsets.Type.ime())?.bottom ?: 0
-    } else {
-        @Suppress("DEPRECATION")
-        run {
-            val visible = Rect()
-            view.getWindowVisibleDisplayFrame(visible)
-            view.height - visible.bottom
-        }
-    }
