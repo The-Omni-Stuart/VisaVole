@@ -323,7 +323,7 @@ private fun MapTab(
         // instead of scrolling the list.
         val cardDrop by animateDpAsState(
             targetValue = if (cardVisible) 0.dp else 420.dp,
-            animationSpec = spring<Dp>(Spring.DampingRatioNoBouncy, Spring.StiffnessMedium),
+            animationSpec = cardAnimSpec,
             label = "cardDrop",
         )
         // align must be on the AnimatedVisibility node itself (the direct Box child) — on the
