@@ -1,6 +1,5 @@
 package com.cbkres.visavole.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,7 +19,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -31,8 +29,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -46,7 +42,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -84,19 +79,10 @@ import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportDocument
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.domain.residenceClassFor
-import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.util.UUID
-
-private fun Long.toUtcIsoDate(): String {
-    val d = Instant.ofEpochMilli(this).atOffset(ZoneOffset.UTC).toLocalDate()
-    return "%04d-%02d-%02d".format(d.year, d.monthValue, d.dayOfMonth)
-}
-
-private fun String.toUtcMillis(): Long? =
-    runCatching { LocalDate.parse(this).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
 
 private val STATUS_ORANGE = STATUS_WARN
 private val STATUS_GREEN = STATUS_OK
@@ -176,29 +162,11 @@ fun DocumentsScreen(
         ready.docs.associateBy({ it.id }, { d -> GuardEngine.evaluate(GuardAction.RemoveDocument(d.id), guardCtx) })
     }
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
-        Text("Documents", style = MaterialTheme.typography.headlineSmall)
-        Text(
-            "Add the passport and papers you hold — the map updates to match.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth()) {
-            Spacer(Modifier.weight(1f))
-            Button(onClick = { showAdd = true }) {
-                Icon(Icons.Filled.Add, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Add document")
-            }
-        }
+        ScreenHeader("Documents", "Add the passport and papers you hold — the map updates to match.")
+        AddButtonRow("Add document") { showAdd = true }
         Spacer(Modifier.height(8.dp))
         if (ready.docs.isEmpty()) {
-            Text(
-                "No documents yet. Start with a passport or a residence permit.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 16.dp),
-            )
+            EmptyState("No documents yet. Start with a passport or a residence permit.")
         } else {
             // Unified validity for every document (date expiry, entry exhaustion, supersession).
             val statuses = remember(ready.docs, ready.trips, ready.world, today) {
@@ -302,16 +270,6 @@ fun DocumentsScreen(
     }
 }
 
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
-    )
-}
-
 /**
  * The per-document status pill, driven by the unified [DocStatus]: the reason (date, entries, or
  * supersession) attached to the effective expiry decides the text — "Expired on …" / "Entries used
@@ -342,22 +300,9 @@ private fun ExpiryStatusPill(
         days <= 7 -> Triple("Expiring soon ($days days)", STATUS_ORANGE, false)
         else -> Triple("Valid for $days days", STATUS_GREEN, false)
     }
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = color.copy(alpha = STATUS_CHIP_ALPHA),
-        // Long pills (e.g. "Replaced by <label>") must wrap instead of
-        // squeezing the card's weighted text column; the cap keeps the title
-        // column wide enough to stay readable for the longest labels.
-        modifier = Modifier.widthIn(max = 120.dp),
-    ) {
-        Text(
-            text,
-            color = color,
-            fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-        )
-    }
+    // Long pills (e.g. "Replaced by <label>") must wrap instead of squeezing the card's weighted
+    // text column; the cap keeps the title column readable for the longest labels.
+    StatusPill(text, color, bold = bold, maxWidth = 120.dp)
 }
 
 @Composable
@@ -808,47 +753,39 @@ fun AddDocumentDialog(
                     Text(validityLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (showValidFromPicker) {
-                    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = validFromDate ?: todayMillis)
-                    DatePickerDialog(
-                        onDismissRequest = { showValidFromPicker = false; showValidToPicker = false },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                validFromDate = datePickerState.selectedDateMillis
-                                showValidFromPicker = false
-                                showValidToPicker = true
-                            }) { Text("Next") }
+                    VisaDatePickerDialog(
+                        initialMillis = validFromDate ?: todayMillis,
+                        confirmLabel = "Next",
+                        onConfirm = { date ->
+                            validFromDate = date?.toUtcMillis()
+                            showValidFromPicker = false
+                            showValidToPicker = true
                         },
-                        dismissButton = {
-                            TextButton(onClick = {
-                                validFromDate = null
-                                showValidFromPicker = false
-                                showValidToPicker = true
-                            }) { Text("Clear") }
+                        onDismiss = { showValidFromPicker = false; showValidToPicker = false },
+                        secondaryLabel = "Clear",
+                        onSecondary = {
+                            validFromDate = null
+                            showValidFromPicker = false
+                            showValidToPicker = true
                         },
-                    ) {
-                        DatePicker(state = datePickerState)
-                    }
+                    )
                 }
                 if (showValidToPicker) {
                     val fallbackTo = maxOf(validFromDate ?: todayMillis, todayMillis)
-                    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = expiryDate ?: fallbackTo)
-                    DatePickerDialog(
-                        onDismissRequest = { showValidToPicker = false },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                expiryDate = datePickerState.selectedDateMillis
-                                showValidToPicker = false
-                            }) { Text("Done") }
+                    VisaDatePickerDialog(
+                        initialMillis = expiryDate ?: fallbackTo,
+                        confirmLabel = "Done",
+                        onConfirm = { date ->
+                            expiryDate = date?.toUtcMillis()
+                            showValidToPicker = false
                         },
-                        dismissButton = {
-                            TextButton(onClick = {
-                                expiryDate = null
-                                showValidToPicker = false
-                            }) { Text("Clear") }
+                        onDismiss = { showValidToPicker = false },
+                        secondaryLabel = "Clear",
+                        onSecondary = {
+                            expiryDate = null
+                            showValidToPicker = false
                         },
-                    ) {
-                        DatePicker(state = datePickerState)
-                    }
+                    )
                 }
                 Spacer(Modifier.height(20.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -976,21 +913,12 @@ internal fun CountryPicker(
             HazeBox(pickerTop, pickerEnd, MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxSize()) {
                 LazyColumn(state = listState, modifier = Modifier.padding(4.dp)) {
                     items(list, key = { it.key }) { entry ->
-                    val isSel = selected.contains(entry.key)
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { onToggle(entry.key) }
-                            .padding(vertical = 8.dp, horizontal = 10.dp),
-                    ) {
-                        Text(
-                            if (isSel) "✓ " else "",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Text(entry.value.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        Text(entry.key, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    CountryRow(
+                        name = entry.value.name,
+                        onClick = { onToggle(entry.key) },
+                        iso = entry.key,
+                        selected = selected.contains(entry.key),
+                    )
                 }
                 }
             }

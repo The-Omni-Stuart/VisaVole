@@ -1,9 +1,7 @@
 package com.cbkres.visavole.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,15 +14,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,17 +29,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.data.Country
 import com.cbkres.visavole.domain.GuardFinding
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneOffset
-
-private fun Long.toUtcIsoDate(): String {
-    val d = Instant.ofEpochMilli(this).atOffset(ZoneOffset.UTC).toLocalDate()
-    return "%04d-%02d-%02d".format(d.year, d.monthValue, d.dayOfMonth)
-}
 
 /** First-run setup: add the traveller's first passport (required to compute the map). */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OnboardingScreen(
     countries: Map<String, Country>,
@@ -116,20 +102,15 @@ fun OnboardingScreen(
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
                         items(list, key = { it.key }) { entry ->
-                            val name = entry.value.name
-                            Row(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        pendingIso = entry.key
-                                        addError = null
-                                        showExpiryDialog = true
-                                    }
-                                    .padding(vertical = 12.dp, horizontal = 10.dp),
-                            ) {
-                                Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                                Text(entry.key, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                            CountryRow(
+                                name = entry.value.name,
+                                onClick = {
+                                    pendingIso = entry.key
+                                    addError = null
+                                    showExpiryDialog = true
+                                },
+                                iso = entry.key,
+                            )
                         }
                     }
                 }
@@ -165,29 +146,18 @@ fun OnboardingScreen(
     if (showDatePicker) {
         val iso = pendingIso
         if (iso != null) {
-            val todayMillis = today.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-            val datePickerState = rememberDatePickerState(initialSelectedDateMillis = todayMillis)
-            DatePickerDialog(
-                onDismissRequest = {
+            VisaDatePickerDialog(
+                initialMillis = today.toUtcMillis(),
+                confirmLabel = "Save",
+                onConfirm = { date ->
+                    addError = onAddPassport(iso, date?.toUtcIsoDate()).firstOrNull()?.message
                     showDatePicker = false
-                    showExpiryDialog = true
+                    showExpiryDialog = false
                 },
-                confirmButton = {
-                    TextButton(onClick = {
-                        addError = onAddPassport(iso, datePickerState.selectedDateMillis?.toUtcIsoDate()).firstOrNull()?.message
-                        showDatePicker = false
-                        showExpiryDialog = false
-                    }) { Text("Save") }
-                },
-                dismissButton = {
-                    TextButton(onClick = {
-                        showDatePicker = false
-                        showExpiryDialog = true
-                    }) { Text("Cancel") }
-                },
-            ) {
-                DatePicker(state = datePickerState)
-            }
+                onDismiss = { showDatePicker = false; showExpiryDialog = true },
+                secondaryLabel = "Cancel",
+                onSecondary = { showDatePicker = false; showExpiryDialog = true },
+            )
         }
     }
 }

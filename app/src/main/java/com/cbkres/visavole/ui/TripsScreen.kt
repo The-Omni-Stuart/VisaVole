@@ -37,8 +37,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
+
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -50,7 +49,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -86,18 +84,8 @@ import com.cbkres.visavole.domain.TripStop
 import com.cbkres.visavole.domain.TripStatus
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneOffset
 import java.util.UUID
-
-private fun Long.toUtcIsoDate(): String {
-    val d = Instant.ofEpochMilli(this).atOffset(ZoneOffset.UTC).toLocalDate()
-    return "%04d-%02d-%02d".format(d.year, d.monthValue, d.dayOfMonth)
-}
-
-private fun LocalDate.toUtcMillis(): Long =
-    atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
 
 @Composable
 fun TripsScreen(
@@ -117,21 +105,8 @@ fun TripsScreen(
     val primary = TripModel.primaryAllowance(ready.allowances, focusedKey)
 
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
-        Text("Trips", style = MaterialTheme.typography.headlineSmall)
-        Text(
-            "Record your trips and track visa allowance balances.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth()) {
-            Spacer(Modifier.weight(1f))
-            Button(onClick = { showAdd = true }) {
-                Icon(Icons.Filled.Add, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Add trip")
-            }
-        }
+        ScreenHeader("Trips", "Record your trips and track visa allowance balances.")
+        AddButtonRow("Add trip") { showAdd = true }
         Spacer(Modifier.height(12.dp))
         AllowanceSection(
             allowances = ready.allowances,
@@ -142,12 +117,7 @@ fun TripsScreen(
         Spacer(Modifier.height(12.dp))
         val sections = ready.tripSections
         if (sections.upcoming.isEmpty() && sections.current.isEmpty() && sections.previous.isEmpty()) {
-            Text(
-                "No trips yet. Add your first trip to start tracking allowances.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 16.dp),
-            )
+            EmptyState("No trips yet. Add your first trip to start tracking allowances.")
         } else {
             val tripsListState = scrollState
             val (tripsTop, tripsEnd) = tripsListState.hazeAlphas()
@@ -208,16 +178,6 @@ fun TripsScreen(
             onDismiss = { endingTrip = null },
         )
     }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp),
-    )
 }
 
 @Composable
@@ -339,19 +299,6 @@ private fun AllowanceCard(a: AllowanceSnapshot, focused: Boolean, onClick: () ->
             Text(a.title, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(allowanceSummary(a), style = MaterialTheme.typography.labelSmall, color = ringColor(a))
         }
-    }
-}
-
-@Composable
-private fun StatusPill(text: String, color: Color) {
-    Surface(shape = RoundedCornerShape(50), color = color.copy(alpha = STATUS_CHIP_ALPHA)) {
-        Text(
-            text,
-            color = color,
-            fontWeight = FontWeight.SemiBold,
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-        )
     }
 }
 
@@ -1230,60 +1177,37 @@ private fun StopEditorDialog(
         }
 
     if (showArrival) {
-        val state = rememberDatePickerState(initialSelectedDateMillis = stop.arrival.toUtcMillis())
-        DatePickerDialog(
-            onDismissRequest = { showArrival = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    state.selectedDateMillis?.let { stop = stop.copy(arrival = it.toUtcIsoDate().let(LocalDate::parse)) }
-                    showArrival = false
-                }) { Text("Done") }
+        VisaDatePickerDialog(
+            initialMillis = stop.arrival.toUtcMillis(),
+            confirmLabel = "Done",
+            onConfirm = { date ->
+                date?.let { stop = stop.copy(arrival = it) }
+                showArrival = false
             },
-            dismissButton = { TextButton(onClick = { showArrival = false }) { Text("Cancel") } },
-        ) {
-            DatePicker(state = state)
-        }
+            onDismiss = { showArrival = false },
+        )
     }
     if (showDeparture) {
-        val state = rememberDatePickerState(initialSelectedDateMillis = stop.departure?.toUtcMillis() ?: stop.arrival.toUtcMillis())
-        DatePickerDialog(
-            onDismissRequest = { showDeparture = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    state.selectedDateMillis?.let { stop = stop.copy(departure = it.toUtcIsoDate().let(LocalDate::parse)) }
-                    showDeparture = false
-                }) { Text("Done") }
+        VisaDatePickerDialog(
+            initialMillis = stop.departure?.toUtcMillis() ?: stop.arrival.toUtcMillis(),
+            confirmLabel = "Done",
+            onConfirm = { date ->
+                date?.let { stop = stop.copy(departure = it) }
+                showDeparture = false
             },
-            dismissButton = {
-                if (isFinal) {
-                    TextButton(onClick = {
-                        stop = stop.copy(departure = null)
-                        showDeparture = false
-                    }) { Text("Clear") }
-                }
-            },
-        ) {
-            DatePicker(state = state)
-        }
+            onDismiss = { showDeparture = false },
+            secondaryLabel = if (isFinal) "Clear" else null,
+            onSecondary = if (isFinal) ({ stop = stop.copy(departure = null); showDeparture = false }) else null,
+        )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EndTripDialog(today: LocalDate, onConfirm: (LocalDate) -> Unit, onDismiss: () -> Unit) {
-    val todayMillis = remember { today.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() }
-    val state = rememberDatePickerState(initialSelectedDateMillis = todayMillis)
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = {
-                state.selectedDateMillis?.let { onConfirm(it.toUtcIsoDate().let(LocalDate::parse)) }
-            }) { Text("End") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
-        },
-    ) {
-        DatePicker(state = state)
-    }
+    VisaDatePickerDialog(
+        initialMillis = today.toUtcMillis(),
+        confirmLabel = "End",
+        onConfirm = { date -> date?.let(onConfirm) },
+        onDismiss = onDismiss,
+    )
 }

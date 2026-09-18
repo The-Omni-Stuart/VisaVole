@@ -21,7 +21,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.core.view.WindowInsetsControllerCompat
@@ -95,6 +94,7 @@ import com.cbkres.visavole.domain.AccessModel
 import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.AppState
 import com.cbkres.visavole.ui.CountryDetailCard
+import com.cbkres.visavole.ui.CountryRow
 import com.cbkres.visavole.ui.DocumentsScreen
 import com.cbkres.visavole.ui.OnboardingScreen
 import com.cbkres.visavole.ui.TripsScreen
@@ -365,15 +365,7 @@ private fun MapTab(
                 HazeBox(searchTop, searchEnd, MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
                     Column(Modifier.verticalScroll(searchScroll)) {
                         matches.forEach { c ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { pick(c.iso2) }
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(c.name, style = MaterialTheme.typography.bodyMedium)
-                            }
+                            CountryRow(name = c.name, onClick = { pick(c.iso2) })
                         }
                     }
                 }
