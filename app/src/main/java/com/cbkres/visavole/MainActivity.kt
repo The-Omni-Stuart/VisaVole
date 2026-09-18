@@ -173,6 +173,11 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
     // hoisted above the tab switch) also survive moving between tabs, which disposes screens.
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    // MapTab is disposed when another tab is selected, so a surviving selection would replay
+    // the card's enter animation on return — close it on the way out instead.
+    LaunchedEffect(tab) {
+        if (tab != 0) selected = null
+    }
     var mapQuery by rememberSaveable { mutableStateOf("") }
     val expandedTrips = rememberSaveable { mutableStateListOf<String>() }
     val snackbarHostState = remember { SnackbarHostState() }
