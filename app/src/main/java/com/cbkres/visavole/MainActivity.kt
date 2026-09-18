@@ -389,7 +389,8 @@ private fun MapTab(
                 HazeBox(searchTop, searchEnd, MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
                     Column(Modifier.verticalScroll(searchScroll)) {
                         if (matches.isEmpty()) {
-                            EmptyState("No matching countries")
+                            // match CountryRow's inner horizontal padding so the text aligns with rows
+                            EmptyState("No matching countries", modifier = Modifier.padding(horizontal = 10.dp))
                         } else {
                             matches.forEach { c ->
                                 CountryRow(name = c.name, onClick = { pick(c.iso2) })
