@@ -7,6 +7,7 @@ import com.cbkres.visavole.data.Regime
 import com.cbkres.visavole.data.StayRule
 import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.data.Holding as DataHolding
+import com.cbkres.visavole.domain.DocKind.Custom
 import com.cbkres.visavole.domain.DocKind.Holding
 import com.cbkres.visavole.domain.DocKind.Passport
 import org.junit.Assert.assertEquals
@@ -141,6 +142,78 @@ class TripModelTest {
         assertEquals(91, a.usedDays)
         assertEquals(1, a.overstayDays)
         assertEquals(AllowanceStatus.DANGER, a.status)
+    }
+
+    private fun gateVisa(expiry: String) =
+        Document("v", "Visa", Custom(setOf("DE", "FR"), kind = "visa"), expiry = expiry)
+
+    @Test
+    fun zoneRemainingIsCappedByGateDocumentExpiry() {
+        val visa = gateVisa("2026-09-20") // 7 days out
+        val trips = listOf(trip("t1", stop("s1", "DE", today.minusDays(12), today.minusDays(3)))) // 10 days used
+        val calc = TripModel.calculate(trips, listOf(passport("GB"), visa), world(stayRules = listOf(schengen)), today)
+        val a = allowance(calc, "stay:schengen")
+        assertEquals(90, a.totalDays)
+        assertEquals(7, a.remainingDays)
+        assertEquals(83, a.usedDays)
+        assertEquals(AllowanceStatus.WARNING, a.status)
+    }
+
+    @Test
+    fun inUseSingleEntryCapsZoneAtDocumentDateExpiry() {
+        val visa = Document("v", "Visa", Custom(setOf("DE", "FR"), kind = "visa", entryType = "single"), expiry = "2026-09-30")
+        val trips = listOf(trip("t1", stop("s1", "DE", today.minusDays(2), null, "v"))) // in use: 3 days
+        val calc = TripModel.calculate(trips, listOf(passport("GB"), visa), world(stayRules = listOf(schengen)), today)
+        val a = allowance(calc, "stay:schengen")
+        assertEquals(17, a.remainingDays)
+        assertEquals(73, a.usedDays)
+        assertEquals(AllowanceStatus.OK, a.status)
+    }
+
+    @Test
+    fun inUseSingleEntryDocumentShowsPrintedExpiry() {
+        val visa = Document("v", "Visa", Custom(setOf("DE", "FR"), kind = "visa", entryType = "single"), expiry = "2026-09-30")
+        val trips = listOf(trip("t1", stop("s1", "DE", today.minusDays(2), null, "v")))
+        val calc = TripModel.calculate(trips, listOf(passport("GB"), visa), world(stayRules = listOf(schengen)), today)
+        val a = calc.allowances.first { it.key == "doc:v" }
+        assertEquals(LocalDate.of(2026, 9, 30), a.effectiveExpiry)
+        assertEquals(17, a.remainingDays)
+        assertEquals(AllowanceStatus.WARNING, a.status)
+    }
+
+    @Test
+    fun zoneNotCappedWhenGateDocumentExpiryIsFar() {
+        val visa = gateVisa("2030-01-01")
+        val trips = listOf(
+            trip("t1", stop("s1", "DE", today.minusDays(12), today.minusDays(3))), // 10 days
+            trip("t2", stop("s2", "FR", today.minusDays(2), null)), // 3 days
+        )
+        val calc = TripModel.calculate(trips, listOf(passport("GB"), visa), world(stayRules = listOf(schengen)), today)
+        val a = allowance(calc, "stay:schengen")
+        assertEquals(77, a.remainingDays)
+        assertEquals(13, a.usedDays)
+    }
+
+    @Test
+    fun lapsedGateDocumentCapsZoneIntoDanger() {
+        val visa = gateVisa("2026-09-10") // 3 days past
+        val trips = listOf(trip("t1", stop("s1", "DE", today.minusDays(12), today.minusDays(3)))) // 10 days used
+        val calc = TripModel.calculate(trips, listOf(passport("GB"), visa), world(stayRules = listOf(schengen)), today)
+        val a = allowance(calc, "stay:schengen")
+        assertEquals(AllowanceStatus.DANGER, a.status)
+        assertEquals(0, a.remainingDays)
+        assertEquals(90, a.usedDays)
+    }
+
+    @Test
+    fun residenceDocumentGetsItsOwnAllowanceSnapshot() {
+        val residence = Document("r", "Residence", Custom(setOf("FR"), kind = "residence"), expiry = "2026-12-31")
+        val calc = TripModel.calculate(emptyList(), listOf(passport("GB"), residence), world(stayRules = listOf(schengen)), today)
+        val a = calc.allowances.first { it.key == "doc:r" }
+        assertEquals(AllowanceKind.DOCUMENT_VALIDITY, a.kind)
+        assertEquals(LocalDate.of(2026, 12, 31), a.effectiveExpiry)
+        assertEquals(109, a.remainingDays)
+        assertEquals(AllowanceStatus.OK, a.status)
     }
 
     @Test

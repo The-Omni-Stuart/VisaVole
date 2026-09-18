@@ -340,7 +340,9 @@ private fun TripCard(
             zoneLabel(world.stayRuleFor(stop.countryIso2, AccessModel.homeCountries(docs), today), countryName)
         }
         .distinct()
-    val relatedAllowance = allowances.firstOrNull { it.currentTripId == trip.id }
+    val relatedAllowance = allowances.firstOrNull { it.currentTripId == trip.id && !it.key.startsWith("doc:") }
+        ?: allowances.firstOrNull { it.currentTripId == trip.id }
+        ?: allowances.firstOrNull { it.relevantTripIds.contains(trip.id) && !it.key.startsWith("doc:") }
         ?: allowances.firstOrNull { it.relevantTripIds.contains(trip.id) }
     val allowanceHint = when {
         relatedAllowance?.overstayDays != null && relatedAllowance.overstayDays > 0 -> if (relatedAllowance.overstayDays == 1) "1 day over" else "${relatedAllowance.overstayDays} days over"

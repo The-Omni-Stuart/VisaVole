@@ -284,12 +284,37 @@ object AccessModel {
         today: LocalDate = LocalDate.now(ZoneOffset.UTC),
         primaryId: String? = null,
         trips: List<Trip> = emptyList(),
+    ): String? = bestDocumentIdCore(dest, docs, world, today, primaryId, trips, ignoreExpiry = false)
+
+    /**
+     * The strongest held document with a documented rule for [dest], regardless of validity — the
+     * entry gate even after it has lapsed. Paired with [DocStatus.effectiveExpiry] this caps a stay
+     * window by the gate's remaining validity, and an already-lapsed gate caps it into the past.
+     * Passports always participate. Returns null when nothing held documents [dest] at all.
+     */
+    fun gateDocumentId(
+        dest: String,
+        docs: List<Document>,
+        world: WorldData,
+        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        trips: List<Trip> = emptyList(),
+    ): String? = bestDocumentIdCore(dest, docs, world, today, primaryId = null, trips = trips, ignoreExpiry = true)
+
+    private fun bestDocumentIdCore(
+        dest: String,
+        docs: List<Document>,
+        world: WorldData,
+        today: LocalDate,
+        primaryId: String?,
+        trips: List<Trip>,
+        ignoreExpiry: Boolean,
     ): String? {
         val evaluated = docs
             .mapNotNull { doc ->
-                if (doc.kind !is Passport && isExpired(doc, docs, world, today, trips)) return@mapNotNull null
+                val expired = isExpired(doc, docs, world, today, trips)
+                if (doc.kind !is Passport && !ignoreExpiry && expired) return@mapNotNull null
                 val candidates = when (val k = doc.kind) {
-                    is Passport -> passportCandidates(k.iso2, world, isExpired(doc, docs, world, today, trips))
+                    is Passport -> passportCandidates(k.iso2, world, expired)
                     else -> documentCandidates(doc, world)
                 }
                 candidates[dest]?.takeIf { it.level != UNKNOWN }?.let { doc to it }

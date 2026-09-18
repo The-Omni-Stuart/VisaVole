@@ -81,12 +81,13 @@ object TripModel {
     ): TripCalculation {
         val tripSections = sections(trips, today)
         val entryStatus = entryStatusFor(docs, trips, world, today)
+        val docStatuses = DocStatus.all(docs, trips, world, today)
         val zoneAllowances = zoneUsages(trips, docs, world, today).mapNotNull { (key, usage) ->
-            zoneSnapshot(key, usage, world, today)
+            zoneSnapshot(key, usage, world, today, docs, trips, docStatuses)
         }
         val docAllowances = docs
-            .filter { isVisaLike(it, world) }
-            .mapNotNull { documentSnapshot(it, entryStatus[it.id], today) }
+            .filter { it.kind !is Passport }
+            .mapNotNull { documentSnapshot(it, entryStatus[it.id], docStatuses[it.id], today, docs) }
         val allowances = (zoneAllowances + docAllowances)
             .distinctBy { it.key }
             .sortedByDescending { primaryScore(it) }
@@ -408,14 +409,25 @@ object TripModel {
         usage: ZoneUsage,
         world: WorldData,
         asOf: LocalDate,
+        docs: List<Document>,
+        trips: List<Trip>,
+        statuses: Map<String, DocStatus>,
     ): AllowanceSnapshot? {
         val rule = usage.rule ?: ruleForZoneKey(world, key) ?: return null
         val kind = if (rule.windowType == "rolling") AllowanceKind.ROLLING else AllowanceKind.PER_ENTRY
         val (used, overstay) = if (kind == AllowanceKind.ROLLING) rollingUsage(rule, usage.days, asOf)
         else perEntryUsage(rule, usage.days, asOf)
-        val remaining = rule.windowDays?.let { it - used }
+        val windowDays = rule.windowDays
+        val rawRemaining = windowDays?.let { it - used }
+        val cap = expiryCapFor(rule, docs, world, asOf, trips, statuses)
+        val capped = when {
+            rawRemaining == null || cap == null -> rawRemaining
+            else -> minOf(rawRemaining, ChronoUnit.DAYS.between(asOf, cap).toInt())
+        }
+        val remaining = capped?.coerceAtLeast(0)
         val status = when {
             overstay > 0 -> AllowanceStatus.DANGER
+            capped != null && capped < 0 -> AllowanceStatus.DANGER
             remaining != null && remaining <= WARNING_THRESHOLD_DAYS -> AllowanceStatus.WARNING
             rule.windowDays == null -> AllowanceStatus.UNKNOWN
             else -> AllowanceStatus.OK
@@ -425,20 +437,68 @@ object TripModel {
             rule.countries.size == 1 -> world.countries[rule.countries.first()]?.name ?: rule.displayName
             else -> rule.displayName
         }
+        val usedDays = if (capped != null && rawRemaining != null && capped < rawRemaining)
+            windowDays?.let { it - capped.coerceAtLeast(0) } ?: used
+        else used
         return AllowanceSnapshot(
             key = key,
             title = title,
             subtitle = rule.windowSummary(),
             kind = kind,
             status = status,
-            usedDays = used,
+            usedDays = usedDays,
             remainingDays = remaining,
-            totalDays = rule.windowDays,
+            totalDays = windowDays,
             windowPeriodDays = rule.windowPeriodDays,
             overstayDays = overstay,
             currentTripId = usage.activeTripIds.firstOrNull(),
             relevantTripIds = usage.tripIds.toList(),
         )
+    }
+
+    /**
+     * The earliest date on which the document gating entry to any country of [rule] stops
+     * authorising a stay — the day a stay in this zone stops being legal, regardless of the
+     * window. An in-use entry caps at the document's own expiry; a lapsed gate caps the window
+     * into the past (DANGER). Null when no held document documents the zone.
+     */
+    private fun expiryCapFor(
+        rule: StayRule,
+        docs: List<Document>,
+        world: WorldData,
+        asOf: LocalDate,
+        trips: List<Trip>,
+        statuses: Map<String, DocStatus>,
+    ): LocalDate? =
+        rule.countries
+            .mapNotNull { country ->
+                val gate = AccessModel.bestDocumentId(country, docs, world, asOf, trips = trips)
+                    ?: AccessModel.gateDocumentId(country, docs, world, asOf, trips = trips)
+                gate?.let { id ->
+                    val status = statuses[id] ?: return@let null
+                    val doc = docs.firstOrNull { it.id == id } ?: return@let null
+                    gateCapDate(doc, status, docs)
+                }
+            }
+            .minOrNull()
+
+    /**
+     * The day [doc] stops authorising a stay. A document whose entry is in progress
+     * ([EntryState.IN_USE]) keeps the current stay alive until its own date expiry — an entry
+     * count limits re-entries, not the stay you are already in; every other state falls back to
+     * the unified [DocStatus.effectiveExpiry] (entry exhaustion, supersession, lapsed date).
+     */
+    private fun gateCapDate(
+        doc: Document,
+        status: DocStatus,
+        docs: List<Document>,
+    ): LocalDate? {
+        if (status.entries?.state != EntryState.IN_USE) return status.effectiveExpiry
+        val own = doc.expiry?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        val superseded = doc.supersededBy
+            ?.let { sid -> docs.firstOrNull { it.id == sid }?.validFrom }
+            ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        return listOfNotNull(own, superseded).minOrNull() ?: status.effectiveExpiry
     }
 
     private fun rollingUsage(rule: StayRule, days: Set<LocalDate>, asOf: LocalDate): Pair<Int, Int> {
@@ -473,11 +533,17 @@ object TripModel {
         return out
     }
 
-    private fun documentSnapshot(doc: Document, entry: EntryStatus?, asOf: LocalDate): AllowanceSnapshot? {
+    private fun documentSnapshot(
+        doc: Document,
+        entry: EntryStatus?,
+        status: DocStatus?,
+        asOf: LocalDate,
+        docs: List<Document>,
+    ): AllowanceSnapshot? {
         val total = entry?.total ?: entryTotalFor(doc.entryType())
         val used = entry?.used ?: 0
         val remaining = entry?.remaining
-        val expiry = entry?.effectiveExpiry ?: iso(doc.expiry)
+        val expiry = status?.let { gateCapDate(doc, it, docs) } ?: entry?.effectiveExpiry ?: iso(doc.expiry)
         val subtitle = buildString {
             entryTotalFor(doc.entryType())?.let {
                 append(when (it) {
