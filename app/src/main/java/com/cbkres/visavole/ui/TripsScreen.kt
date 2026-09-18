@@ -107,21 +107,25 @@ fun TripsScreen(
         ScreenHeader("Trips", "Record your trips and track visa allowance balances.")
         AddButtonRow("Add trip") { showAdd = true }
         Spacer(Modifier.height(12.dp))
-        AllowanceSection(
-            allowances = ready.allowances,
-            primary = primary,
-            focusedKey = focusedKey,
-            onFocus = { focusedKey = if (focusedKey == it) null else it },
-        )
-        Spacer(Modifier.height(12.dp))
         val sections = ready.tripSections
-        if (sections.upcoming.isEmpty() && sections.current.isEmpty() && sections.previous.isEmpty()) {
-            EmptyState("No trips yet. Add your first trip to start tracking allowances.")
-        } else {
-            val tripsListState = scrollState
-            val (tripsTop, tripsEnd) = tripsListState.hazeAlphas()
-            HazeBox(tripsTop, tripsEnd, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
-                LazyColumn(state = tripsListState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // One scroll plane under the add button: the allowance section is the first item of the
+        // same list as the trip sections (its horizontal card switcher keeps its own scroll + haze).
+        val tripsListState = scrollState
+        val (tripsTop, tripsEnd) = tripsListState.hazeAlphas()
+        HazeBox(tripsTop, tripsEnd, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
+            LazyColumn(state = tripsListState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                item(key = "allowances") {
+                    AllowanceSection(
+                        allowances = ready.allowances,
+                        primary = primary,
+                        focusedKey = focusedKey,
+                        onFocus = { focusedKey = if (focusedKey == it) null else it },
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
+                if (sections.upcoming.isEmpty() && sections.current.isEmpty() && sections.previous.isEmpty()) {
+                    item(key = "empty") { EmptyState("No trips yet. Add your first trip to start tracking allowances.") }
+                } else {
                     if (sections.upcoming.isNotEmpty()) {
                         item(key = "header-upcoming") { SectionLabel("Upcoming") }
                         items(sections.upcoming, key = { it.id }) { trip ->
