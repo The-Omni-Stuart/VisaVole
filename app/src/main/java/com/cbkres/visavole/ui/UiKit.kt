@@ -160,10 +160,10 @@ fun CountryRow(
  */
 @Composable
 fun VisaListCard(
-    content: @Composable ColumnScope.() -> Unit,
-    actions: @Composable () -> Unit = {},
     onClick: (() -> Unit)? = null,
+    actions: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
     val cardModifier = Modifier
         .fillMaxWidth()

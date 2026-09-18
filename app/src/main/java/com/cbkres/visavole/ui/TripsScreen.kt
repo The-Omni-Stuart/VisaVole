@@ -34,12 +34,10 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -347,105 +345,99 @@ private fun TripCard(
         else -> null
     }
     val allowanceHintColor = relatedAllowance?.let { ringColor(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant
-    ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onExpand)
-    ) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    AssistChip(onClick = {}, label = { Text(trip.statusAt(today).label) }, modifier = Modifier.height(24.dp))
-                    Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Text(
-                        text = if (expanded) "−" else "+",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    buildString {
-                        append(trip.firstArrival)
-                        append(" → ")
-                        append(trip.finalDeparture ?: "ongoing")
-                        stopCountLabel?.let {
-                            append(" · ")
-                            append(it)
-                        }
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (zones.isNotEmpty()) {
-                        Text(
-                            zones.joinToString(", "),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = if (expanded) Int.MAX_VALUE else 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                    allowanceHint?.let {
-                        StatusPill(it, allowanceHintColor)
-                    }
-                }
-                AnimatedVisibility(
-                    visible = expanded,
-                    enter = fadeIn(tween(150)) + expandVertically(tween(150)),
-                    exit = fadeOut(tween(150)) + shrinkVertically(tween(150)),
-                ) {
-                    Column {
-                        Spacer(Modifier.height(12.dp))
-                        sortedStops.forEachIndexed { index, stop ->
-                            val countryName = world.countries[stop.countryIso2]?.name ?: stop.countryIso2
-                            val docLabel = stop.documentId?.let { id -> docs.firstOrNull { it.id == id }?.displayLabel(passportCounts, passportNumbers) ?: id }
-                            Column(Modifier.padding(vertical = 6.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Text("${index + 1}.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                                    Text(countryName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                                    Text(
-                                        zoneLabel(world.stayRuleFor(stop.countryIso2, AccessModel.homeCountries(docs), today), countryName),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                                Text(
-                                    "${stop.arrival} → ${stop.departure ?: "open"}${docLabel?.let { " · $it" } ?: " · No document"}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                        if (trip.note != null) {
-                            Text(trip.note!!, style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                }
-                if (!expanded) {
-                    if (trip.note != null) {
-                        Text(trip.note!!, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    if (docLabels.isNotEmpty()) {
-                        Text(docLabels, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
+    VisaListCard(
+        onClick = onExpand,
+        actions = {
+            IconButton(onClick = onEdit) {
+                Icon(Icons.Filled.Edit, contentDescription = "Edit")
+            }
+            if (trip.statusAt(today) == TripStatus.ONGOING) {
+                IconButton(onClick = onEnd) {
+                    Icon(Icons.Filled.DateRange, contentDescription = "End trip")
                 }
             }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(start = 8.dp)) {
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Filled.Edit, contentDescription = "Edit")
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Filled.Close, contentDescription = "Delete")
+            }
+        },
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatusPill(trip.statusAt(today).label, MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text(
+                text = if (expanded) "−" else "+",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            buildString {
+                append(trip.firstArrival)
+                append(" → ")
+                append(trip.finalDeparture ?: "ongoing")
+                stopCountLabel?.let {
+                    append(" · ")
+                    append(it)
                 }
-                if (trip.statusAt(today) == TripStatus.ONGOING) {
-                    IconButton(onClick = onEnd) {
-                        Icon(Icons.Filled.DateRange, contentDescription = "End trip")
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (zones.isNotEmpty()) {
+                Text(
+                    zones.joinToString(", "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = if (expanded) Int.MAX_VALUE else 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            allowanceHint?.let {
+                StatusPill(it, allowanceHintColor)
+            }
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn(tween(150)) + expandVertically(tween(150)),
+            exit = fadeOut(tween(150)) + shrinkVertically(tween(150)),
+        ) {
+            Column {
+                Spacer(Modifier.height(12.dp))
+                sortedStops.forEachIndexed { index, stop ->
+                    val countryName = world.countries[stop.countryIso2]?.name ?: stop.countryIso2
+                    val docLabel = stop.documentId?.let { id -> docs.firstOrNull { it.id == id }?.displayLabel(passportCounts, passportNumbers) ?: id }
+                    Column(Modifier.padding(vertical = 6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("${index + 1}.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            Text(countryName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            Text(
+                                zoneLabel(world.stayRuleFor(stop.countryIso2, AccessModel.homeCountries(docs), today), countryName),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        Text(
+                            "${stop.arrival} → ${stop.departure ?: "open"}${docLabel?.let { " · $it" } ?: " · No document"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Filled.Close, contentDescription = "Delete")
+                if (trip.note != null) {
+                    Text(trip.note!!, style = MaterialTheme.typography.bodySmall)
                 }
+            }
+        }
+        if (!expanded) {
+            if (trip.note != null) {
+                Text(trip.note!!, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (docLabels.isNotEmpty()) {
+                Text(docLabels, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }

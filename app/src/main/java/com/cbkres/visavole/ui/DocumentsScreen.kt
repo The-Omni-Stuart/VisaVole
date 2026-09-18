@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -323,38 +322,8 @@ private fun DocCard(
     val effectiveExpiry = status?.effectiveExpiry
     val isPassport = doc.kind is DocKind.Passport
     val surface = MaterialTheme.colorScheme.onSurface
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    buildAnnotatedString {
-                        append(doc.label)
-                        if (isPassport && passportNumber != null) {
-                            withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
-                                append("  ($passportNumber)")
-                            }
-                        }
-                    },
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                Text(
-                    docSubtitle(
-                        doc,
-                        world,
-                        MaterialTheme.colorScheme.onSurfaceVariant,
-                        STATUS_ORANGE,
-                        STATUS_GREEN,
-                        STATUS_RED,
-                        effectiveExpiry,
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            if (status != null &&
-                (effectiveExpiry != null || status.entries?.total != null || doc.supersededBy != null)
-            ) {
-                ExpiryStatusPill(today, status, supersededByLabel)
-            }
+    VisaListCard(
+        actions = {
             if (onStar != null) {
                 IconButton(onClick = onStar) {
                     Icon(
@@ -379,7 +348,41 @@ private fun DocCard(
                     tint = if (canRemove) surface else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        },
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (status != null &&
+                (effectiveExpiry != null || status.entries?.total != null || doc.supersededBy != null)
+            ) {
+                ExpiryStatusPill(today, status, supersededByLabel)
+            }
+            Text(
+                buildAnnotatedString {
+                    append(doc.label)
+                    if (isPassport && passportNumber != null) {
+                        withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
+                            append("  ($passportNumber)")
+                        }
+                    }
+                },
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
         }
+        Text(
+            docSubtitle(
+                doc,
+                world,
+                MaterialTheme.colorScheme.onSurfaceVariant,
+                STATUS_ORANGE,
+                STATUS_GREEN,
+                STATUS_RED,
+                effectiveExpiry,
+            ),
+            style = MaterialTheme.typography.bodySmall,
+        )
     }
 }
 
