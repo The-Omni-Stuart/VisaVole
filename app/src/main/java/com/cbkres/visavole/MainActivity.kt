@@ -267,8 +267,13 @@ private fun MapTab(
     modifier: Modifier = Modifier,
 ) {
     val focusManager = LocalFocusManager.current
-    val matches = remember(query, s.world) {
-        val q = query.trim().lowercase()
+    // The dropdown fades out over 120ms after the query is cleared; matches must keep the last
+    // non-blank query during that exit, otherwise the content flips to "No matching countries"
+    // mid-fade right after the user picks a country.
+    var shownQuery by remember { mutableStateOf(query) }
+    if (query.isNotBlank() && query != shownQuery) shownQuery = query
+    val matches = remember(shownQuery, s.world) {
+        val q = shownQuery.trim().lowercase()
         if (q.isEmpty()) emptyList()
         else s.world.countries.values
             .filter { it.name.lowercase().contains(q) || it.iso2.lowercase() == q }
