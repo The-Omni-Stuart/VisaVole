@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.data.Country
 import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.domain.AccessLevel
+import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.DocStatus
@@ -239,6 +240,7 @@ fun DocumentsScreen(
                                 canRemove = removeBlockings[doc.id]?.canProceed == true,
                                 passportNumber = number,
                                 isPrimary = doc.id == ready.primaryDocId,
+                                ring = ready.allowances.firstOrNull { it.key == "doc:${doc.id}" },
                                 onRemove = { removingDoc = doc },
                                 onRemoveBlocked = { blockedRemove = removeBlockings[doc.id]?.findings?.firstOrNull() },
                                 onEdit = { editing = doc },
@@ -262,6 +264,7 @@ fun DocumentsScreen(
                                 canRemove = removeBlockings[doc.id]?.canProceed == true,
                                 passportNumber = number,
                                 isPrimary = false,
+                                ring = ready.allowances.firstOrNull { it.key == "doc:${doc.id}" },
                                 onRemove = { removingDoc = doc },
                                 onRemoveBlocked = { blockedRemove = removeBlockings[doc.id]?.findings?.firstOrNull() },
                                 onEdit = { editing = doc },
@@ -363,6 +366,7 @@ private fun DocCard(
     canRemove: Boolean = true,
     passportNumber: Int? = null,
     isPrimary: Boolean = false,
+    ring: AllowanceSnapshot? = null,
     onRemove: () -> Unit,
     onRemoveBlocked: () -> Unit = {},
     onEdit: () -> Unit,
@@ -371,7 +375,10 @@ private fun DocCard(
     val isPassport = doc.kind is DocKind.Passport
     val surface = MaterialTheme.colorScheme.onSurface
     val (typeLabel, typeTone) = docTypeBadge(doc, world)
+    // The shared allowance donut, scaled down for the card; passports have no snapshot.
+    val ringToShow = ring?.takeIf { it.entryRemaining != null || it.remainingDays != null }
     VisaListCard(
+        trailing = ringToShow?.let { r -> { AllowanceRing(r, size = 72.dp) } },
         actions = {
             if (onStar != null) {
                 IconButton(onClick = onStar) {

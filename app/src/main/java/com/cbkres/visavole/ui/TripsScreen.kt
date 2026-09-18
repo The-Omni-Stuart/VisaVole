@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -55,6 +56,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalConfiguration
@@ -101,7 +103,10 @@ fun TripsScreen(
     var editingTrip by remember { mutableStateOf<Trip?>(null) }
     var deletingTrip by remember { mutableStateOf<Trip?>(null) }
     var endingTrip by remember { mutableStateOf<Trip?>(null) }
-    val primary = TripModel.primaryAllowance(ready.allowances, focusedKey)
+    // The Trips tab only surfaces zone (stay-window) allowances; per-document entry rings
+    // live on the Documents tab, next to the document itself.
+    val zoneAllowances = ready.allowances.filter { !it.key.startsWith("doc:") }
+    val primary = TripModel.primaryAllowance(zoneAllowances, focusedKey)
 
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         ScreenHeader("Trips", "Record your trips and track visa allowance balances.")
@@ -113,10 +118,15 @@ fun TripsScreen(
         val tripsListState = scrollState
         val (tripsTop, tripsEnd) = tripsListState.hazeAlphas()
         HazeBox(tripsTop, tripsEnd, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
-            LazyColumn(state = tripsListState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(
+                state = tripsListState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 item(key = "allowances") {
                     AllowanceSection(
-                        allowances = ready.allowances,
+                        allowances = zoneAllowances,
                         primary = primary,
                         focusedKey = focusedKey,
                         onFocus = { focusedKey = if (focusedKey == it) null else it },
@@ -224,77 +234,17 @@ private fun zoneLabel(rule: StayRule?, fallback: String): String = when {
     else -> rule.displayName
 }
 
-private fun allowanceFraction(a: AllowanceSnapshot): Float = when {
-    a.totalDays != null && a.usedDays != null -> ((a.totalDays - a.usedDays).coerceAtLeast(0) / a.totalDays.toFloat()).coerceIn(0f, 1f)
-    a.entryTotal != null && a.entryRemaining != null -> (a.entryRemaining.toFloat() / a.entryTotal).coerceIn(0f, 1f)
-    a.remainingDays != null -> (a.remainingDays.coerceAtLeast(0) / 90f).coerceIn(0f, 1f)
-    else -> 1f
-}
-
-private fun ringColor(a: AllowanceSnapshot): Color {
-    if (a.status == AllowanceStatus.UNKNOWN) return Color(0xFF64748B) // neutral slate — allowance unknown
-    val fraction = allowanceFraction(a)
-    val severity = when {
-        a.overstayDays > 0 || a.status == AllowanceStatus.DANGER || a.status == AllowanceStatus.EXHAUSTED -> Severity.BAD
-        fraction < 0.10f -> Severity.BAD
-        fraction < 0.25f -> Severity.WARN
-        fraction < 0.50f -> Severity.CAUTION
-        else -> Severity.OK
-    }
-    return severityColor(severity)
-}
-
-private fun allowanceSummary(a: AllowanceSnapshot): String = when {
-    a.overstayDays > 0 -> if (a.overstayDays == 1) "1 day over" else "${a.overstayDays} days over"
-    a.kind == AllowanceKind.ENTRY_COUNT -> if (a.entryRemaining == 0 && a.currentTripId != null) "In use"
-    else "${a.entryRemaining ?: 0} of ${a.entryTotal ?: 0} entries left"
-    a.kind == AllowanceKind.DOCUMENT_VALIDITY -> "Expires ${a.effectiveExpiry ?: "unknown"}"
-    a.totalDays != null && a.remainingDays != null -> "${a.remainingDays} of ${a.totalDays} ${if (a.totalDays == 1) "day" else "days"} left"
-    else -> a.subtitle ?: "No limit"
-}
-
-@Composable
-private fun AllowanceRing(a: AllowanceSnapshot) {
-    val color = ringColor(a)
-    val fraction = allowanceFraction(a)
-    val center = when {
-        a.overstayDays > 0 -> a.overstayDays.toString()
-        a.kind == AllowanceKind.ENTRY_COUNT -> if (a.entryRemaining == 0 && a.currentTripId != null) "In use" else (a.entryRemaining ?: 0).toString()
-        a.kind == AllowanceKind.DOCUMENT_VALIDITY -> (a.remainingDays ?: 0).toString()
-        else -> (a.remainingDays ?: 0).toString()
-    }
-    val centerLabel = when {
-        a.overstayDays > 0 -> "days over"
-        a.kind == AllowanceKind.ENTRY_COUNT -> "entries left"
-        a.kind == AllowanceKind.DOCUMENT_VALIDITY -> "days to expiry"
-        else -> "days left"
-    }
-    Box(Modifier.size(112.dp), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) {
-            val stroke = 10.dp.toPx()
-            drawCircle(color = color.copy(alpha = 0.15f), style = Stroke(stroke))
-            drawArc(
-                color = color,
-                startAngle = -90f,
-                sweepAngle = 360f * fraction,
-                useCenter = false,
-                style = Stroke(stroke),
-            )
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(center, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = color)
-            Text(centerLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
+// The allowance ring kit (fraction, colour, summary, donut) lives in UiKit — shared with the Documents tab.
 
 @Composable
 private fun AllowanceCard(a: AllowanceSnapshot, focused: Boolean, onClick: () -> Unit) {
     Surface(
         color = if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = RoundedCornerShape(16.dp),
+        // Clip the ripple to the card shape — a bare clickable on the Surface flashes a square.
         modifier = Modifier
             .width(168.dp)
+            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -966,6 +916,7 @@ private fun StopRow(
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick),
     ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
