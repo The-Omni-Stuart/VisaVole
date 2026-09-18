@@ -50,7 +50,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.data.WorldMapData
 import com.cbkres.visavole.domain.Access
-import com.cbkres.visavole.domain.AccessLevel
 
 private const val MIN_ZOOM = 1f
 // High enough for tiny island states (MT, CY, LU, MC…) to become genuinely inspectable without
@@ -223,12 +222,7 @@ internal fun WorldMapCanvas(
                 s.iso,
                 s.path,
                 s.bbox,
-                when {
-                    s.iso in homeCountries -> HOME
-                    lvl == AccessLevel.COVERED && s.iso in ownVisaCountries -> COVERED_OWN
-                    lvl == AccessLevel.RESIDENCE -> RESIDENCE_FILL
-                    else -> colorFor(lvl)
-                },
+                mapFill(lvl, s.iso in homeCountries, s.iso in ownVisaCountries),
             )
         }
     }

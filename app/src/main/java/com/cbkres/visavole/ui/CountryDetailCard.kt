@@ -58,7 +58,7 @@ fun CountryDetailCard(
             }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val chipTone = statusTone(level, isHome, isOwnCovered && level == AccessLevel.COVERED)
+                val chipTone = statusTone(level, isHome, isOwnCovered)
                 StatusPill(
                     text = if (isHome) "Your country" else level.label(),
                     color = chipTone,

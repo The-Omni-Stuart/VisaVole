@@ -19,17 +19,49 @@ val COVERED_OWN = Color(0xFFA12AFA)
 // A uniform residence shade.
 val RESIDENCE_FILL = Color(0xFF14DC9D)
 
-// Choropleth palette, best (blue / teal / green) -> worst (red). Home is drawn separately.
-fun colorFor(level: AccessLevel?): Color = when (level) {
-    AccessLevel.FREEDOM -> Color(0xFF5BDCEC)       // cyan — bloc citizenship
-    AccessLevel.RESIDENCE -> RESIDENCE_FILL         // teal — residence permit
-    AccessLevel.VISA_FREE -> Color(0xFF44F17A)     // green — visa-free / on arrival, no step needed
-    AccessLevel.COVERED -> Color(0xFFBD6AFC)       // magenta — covered via a visa's travel bloc
-    AccessLevel.ETA -> Color(0xFFB9F04A)           // lime — quick pre-authorisation (eTA/ESTA/ETIAS)
-    AccessLevel.E_VISA -> Color(0xFFFFD84A)        // yellow — e-visa, apply online
-    AccessLevel.VISA_REQUIRED -> Color(0xFF94A3B8) // grey — embassy visit
-    AccessLevel.REFUSED -> Color(0xFFFB1604)       // red — no entry
-    AccessLevel.UNKNOWN, null -> Color(0xFF334155) // slate — no data
+/**
+ * The single severity → colour table: one entry per access level with two renderings. [fill] is
+ * the bright canvas choropleth; [tone] is the darker shade for labels and tonal chips on
+ * theme-driven surfaces. Every level colour in the app (map fills, status pills, detail-card
+ * text) derives from this table — best (blue / teal / green) -> worst (red), worst-first.
+ */
+private data class LevelPalette(val fill: Color, val tone: Color)
+
+private val LEVEL_PALETTES: Map<AccessLevel, LevelPalette> = mapOf(
+    AccessLevel.FREEDOM to LevelPalette(Color(0xFF5BDCEC), Color(0xFF00B8D4)),       // cyan — bloc citizenship
+    AccessLevel.RESIDENCE to LevelPalette(RESIDENCE_FILL, Color(0xFF00C48C)),        // teal — residence permit
+    AccessLevel.VISA_FREE to LevelPalette(Color(0xFF44F17A), Color(0xFF00D26A)),     // green — visa-free / on arrival, no step needed
+    AccessLevel.COVERED to LevelPalette(Color(0xFFBD6AFC), Color(0xFFBD6AFC)),       // magenta — covered via a visa's travel bloc
+    AccessLevel.ETA to LevelPalette(Color(0xFFB9F04A), Color(0xFF7CB342)),           // lime — quick pre-authorisation (eTA/ESTA/ETIAS)
+    AccessLevel.E_VISA to LevelPalette(Color(0xFFFFD84A), Color(0xFFCA8A04)),        // yellow — e-visa, apply online
+    AccessLevel.VISA_REQUIRED to LevelPalette(Color(0xFF94A3B8), Color(0xFF475569)), // grey — embassy visit
+    AccessLevel.REFUSED to LevelPalette(Color(0xFFFB1604), Color(0xFFFB1604)),       // red — no entry
+)
+
+private val NO_DATA_PALETTE = LevelPalette(Color(0xFF334155), Color(0xFF334155))    // slate — no data
+
+private fun paletteFor(level: AccessLevel?): LevelPalette =
+    level?.let { LEVEL_PALETTES[it] } ?: NO_DATA_PALETTE
+
+/** The bright canvas choropleth for a level; home / own-visa overrides go through [mapFill]. */
+fun colorFor(level: AccessLevel?): Color = paletteFor(level).fill
+
+/**
+ * The one place the map's special cases are decided: the traveller's home country and a
+ * short-term visa's own country override the level palette; everything else is the level's
+ * fill. [isOwn] means the country is one of the traveller's own-visa countries.
+ */
+fun mapFill(level: AccessLevel?, isHome: Boolean = false, isOwn: Boolean = false): Color = when {
+    isHome -> HOME
+    level == AccessLevel.COVERED && isOwn -> COVERED_OWN
+    else -> colorFor(level)
+}
+
+/** Label/pill tone for a level on theme-driven surfaces — same special cases as [mapFill]. */
+fun statusTone(level: AccessLevel?, isHome: Boolean = false, isOwn: Boolean = false): Color = when {
+    isHome -> HOME
+    level == AccessLevel.COVERED && isOwn -> COVERED_OWN
+    else -> paletteFor(level).tone
 }
 
 // Accessible text/pill tones derived from the map palette. The bright map fills are for the
@@ -39,9 +71,20 @@ const val STATUS_CHIP_ALPHA = 0.16f
 // is in use, or a non-primary passport star. One shared value so every "greyed out" element
 // reads with the same tone.
 const val DIM_ALPHA = 0.35f
-val STATUS_OK = Color(0xFF15803D)
-val STATUS_WARN = Color(0xFFC2410C)
-val STATUS_BAD = Color(0xFFB91C1C)
+
+/**
+ * The severity levels every status colour in the app collapses to: allowance rings, guard
+ * findings, document expiry pills and entry types all decide a [Severity], and [severityColor]
+ * is the only place a severity becomes a concrete shade.
+ */
+enum class Severity { OK, CAUTION, WARN, BAD }
+
+fun severityColor(severity: Severity): Color = when (severity) {
+    Severity.OK -> Color(0xFF15803D)
+    Severity.CAUTION -> Color(0xFFCA8A04)
+    Severity.WARN -> Color(0xFFC2410C)
+    Severity.BAD -> Color(0xFFB91C1C)
+}
 
 /**
  * Finding codes that were DANGERs before the unified guard (savable, per Q1): they stay WARN in
@@ -54,17 +97,3 @@ val SAVABLE_DANGER_CODES = setOf(
     "trip.access.blocked",
     "trip.passport.expiringSoon3",
 )
-
-fun statusTone(level: AccessLevel?, isHome: Boolean = false, isOwnCovered: Boolean = false): Color = when {
-    isHome -> Color(0xFF0460EE)
-    level == AccessLevel.FREEDOM -> Color(0xFF00B8D4)
-    level == AccessLevel.RESIDENCE -> Color(0xFF00C48C)
-    level == AccessLevel.VISA_FREE -> Color(0xFF00D26A)
-    level == AccessLevel.COVERED && isOwnCovered -> Color(0xFFA12AFA)
-    level == AccessLevel.COVERED -> Color(0xFFBD6AFC)
-    level == AccessLevel.ETA -> Color(0xFF7CB342)
-    level == AccessLevel.E_VISA -> Color(0xFFCA8A04)
-    level == AccessLevel.VISA_REQUIRED -> Color(0xFF475569)
-    level == AccessLevel.REFUSED -> Color(0xFFFB1604)
-    else -> Color(0xFF334155)
-}

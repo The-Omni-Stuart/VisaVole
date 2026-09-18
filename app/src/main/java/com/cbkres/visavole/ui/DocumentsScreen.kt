@@ -83,10 +83,6 @@ import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
-private val STATUS_ORANGE = STATUS_WARN
-private val STATUS_GREEN = STATUS_OK
-private val STATUS_RED = STATUS_BAD
-
 /** Days from [today] until [date]; null when unset. */
 private fun daysUntil(date: LocalDate?, today: LocalDate): Long? =
     date?.let { ChronoUnit.DAYS.between(today, it) }
@@ -100,9 +96,6 @@ private fun docSubtitle(
     doc: Document,
     world: WorldData,
     base: Color,
-    orange: Color,
-    green: Color,
-    red: Color,
     effectiveExpiry: LocalDate? = null,
 ): AnnotatedString {
     val k = doc.kind
@@ -129,12 +122,12 @@ private fun docSubtitle(
         base,
     )
     entryType?.let { type ->
-        val (label, color) = when (type) {
-            "single" -> "single" to red
-            "double" -> "double" to orange
-            else -> "multiple" to green
+        val (label, severity) = when (type) {
+            "single" -> "single" to Severity.BAD
+            "double" -> "double" to Severity.WARN
+            else -> "multiple" to Severity.OK
         }
-        styled(" · $label entry", color)
+        styled(" · $label entry", severityColor(severity))
     }
     doc.validFrom?.let { from -> styled(" · from $from", base) }
     displayExpiry?.let { exp -> styled(" · to $exp", base) }
@@ -284,24 +277,24 @@ private fun ExpiryStatusPill(
     val entry = status?.entries
     val days = daysUntil(effective, today)
     val replacedBy = supersededByLabel ?: "a newer document"
-    val (text, color, bold) = when {
-        entry?.total != null && entry.state == EntryState.IN_USE -> Triple("In use", STATUS_GREEN, false)
+    val (text, severity, bold) = when {
+        entry?.total != null && entry.state == EntryState.IN_USE -> Triple("In use", Severity.OK, false)
         status?.reason == ExpiryReason.SUPERSEDED && status.expired ->
-            Triple("Replaced by $replacedBy", STATUS_BAD, true)
+            Triple("Replaced by $replacedBy", Severity.BAD, true)
         status?.expired == true && status.reason == ExpiryReason.ENTRIES ->
-            Triple("Entries used up", STATUS_BAD, true)
-        status?.expired == true -> Triple("Expired on $effective", STATUS_BAD, true)
+            Triple("Entries used up", Severity.BAD, true)
+        status?.expired == true -> Triple("Expired on $effective", Severity.BAD, true)
         status?.reason == ExpiryReason.SUPERSEDED ->
-            Triple("Replaced by $replacedBy from $effective", STATUS_ORANGE, false)
+            Triple("Replaced by $replacedBy from $effective", Severity.WARN, false)
         entry?.total != null && entry.remaining != null && entry.remaining > 0 ->
-            Triple("${entry.remaining} ${if (entry.remaining == 1) "entry" else "entries"} left", STATUS_GREEN, false)
-        days == null -> Triple("No expiry", STATUS_GREEN, false)
-        days <= 7 -> Triple("Expiring soon ($days days)", STATUS_ORANGE, false)
-        else -> Triple("Valid for $days days", STATUS_GREEN, false)
+            Triple("${entry.remaining} ${if (entry.remaining == 1) "entry" else "entries"} left", Severity.OK, false)
+        days == null -> Triple("No expiry", Severity.OK, false)
+        days <= 7 -> Triple("Expiring soon ($days days)", Severity.WARN, false)
+        else -> Triple("Valid for $days days", Severity.OK, false)
     }
     // Long pills (e.g. "Replaced by <label>") must wrap instead of squeezing the card's weighted
     // text column; the cap keeps the title column readable for the longest labels.
-    StatusPill(text, color, bold = bold, maxWidth = 120.dp)
+    StatusPill(text, severityColor(severity), bold = bold, maxWidth = 120.dp)
 }
 
 @Composable
@@ -372,15 +365,7 @@ private fun DocCard(
             )
         }
         Text(
-            docSubtitle(
-                doc,
-                world,
-                MaterialTheme.colorScheme.onSurfaceVariant,
-                STATUS_ORANGE,
-                STATUS_GREEN,
-                STATUS_RED,
-                effectiveExpiry,
-            ),
+            docSubtitle(doc, world, MaterialTheme.colorScheme.onSurfaceVariant, effectiveExpiry),
             style = MaterialTheme.typography.bodySmall,
         )
     }
@@ -820,7 +805,7 @@ fun AddDocumentDialog(
                     buildAnnotatedString {
                         append("You have multiple countries selected for this visa: ")
                         names.forEachIndexed { index, iso ->
-                            withStyle(SpanStyle(color = STATUS_WARN, fontWeight = FontWeight.SemiBold)) {
+                            withStyle(SpanStyle(color = severityColor(Severity.WARN), fontWeight = FontWeight.SemiBold)) {
                                 append(countries[iso]?.name ?: iso)
                             }
                             if (index != names.lastIndex) append(", ")

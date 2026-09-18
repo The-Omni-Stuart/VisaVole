@@ -212,8 +212,6 @@ private fun AllowanceSection(
     }
 }
 
-private val STATUS_YELLOW = Color(0xFFCA8A04)
-
 private fun zoneLabel(rule: StayRule?, fallback: String): String = when {
     rule == null -> fallback
     rule.zoneName.isNotBlank() -> rule.zoneName
@@ -229,15 +227,16 @@ private fun allowanceFraction(a: AllowanceSnapshot): Float = when {
 }
 
 private fun ringColor(a: AllowanceSnapshot): Color {
-    if (a.status == AllowanceStatus.UNKNOWN) return Color(0xFF64748B)
-    if (a.overstayDays > 0 || a.status == AllowanceStatus.DANGER || a.status == AllowanceStatus.EXHAUSTED) return STATUS_BAD
+    if (a.status == AllowanceStatus.UNKNOWN) return Color(0xFF64748B) // neutral slate — allowance unknown
     val fraction = allowanceFraction(a)
-    return when {
-        fraction < 0.10f -> STATUS_BAD
-        fraction < 0.25f -> STATUS_WARN
-        fraction < 0.50f -> STATUS_YELLOW
-        else -> STATUS_OK
+    val severity = when {
+        a.overstayDays > 0 || a.status == AllowanceStatus.DANGER || a.status == AllowanceStatus.EXHAUSTED -> Severity.BAD
+        fraction < 0.10f -> Severity.BAD
+        fraction < 0.25f -> Severity.WARN
+        fraction < 0.50f -> Severity.CAUTION
+        else -> Severity.OK
     }
+    return severityColor(severity)
 }
 
 private fun allowanceSummary(a: AllowanceSnapshot): String = when {
@@ -964,11 +963,9 @@ private fun AddTripDialog(
                         Text(
                             "${f.title}: ${f.message}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (f.severity == GuardSeverity.BLOCK || f.code in SAVABLE_DANGER_CODES) {
-                                STATUS_BAD
-                            } else {
-                                STATUS_WARN
-                            },
+                            color = severityColor(
+                                if (f.severity == GuardSeverity.BLOCK || f.code in SAVABLE_DANGER_CODES) Severity.BAD else Severity.WARN,
+                            ),
                             modifier = Modifier.padding(vertical = 3.dp),
                         )
                     }
