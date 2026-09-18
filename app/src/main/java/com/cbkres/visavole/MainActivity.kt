@@ -13,13 +13,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -77,6 +78,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -277,8 +279,20 @@ private fun MapTab(
     var searchBarH by remember { mutableStateOf(0.dp) }
     var cardH by remember { mutableStateOf(0.dp) }
     var legendH by remember { mutableStateOf(0.dp) }
-    val mapBottomPadding = if (selected != null) (cardH - 16.dp).coerceAtLeast(0.dp) else 0.dp
-    val controlsBottomPadding = if (selected != null) 24.dp else legendH + 8.dp
+    val selName = selected?.let { iso -> s.world.countries[iso]?.name ?: s.geometry.countries[iso]?.name ?: iso }
+    val cardVisible = selected != null && selName != null
+    // Animated (same spring as the card slide). The map canvas is never shrunk for the card —
+    // the card slides over the full-bleed map — so no dark band can appear between the map
+    // edge and the card while the fixed 420dp drop exceeds the card's actual height. The
+    // floating zoom controls instead ride cardH above the bottom, keeping them 24dp above the
+    // card's top edge; the map's focus-fit reads the same padding, so the selected country is
+    // centred above the card, not underneath it.
+    val cardAnimSpec = spring<Dp>(Spring.DampingRatioNoBouncy, Spring.StiffnessMedium)
+    val controlsBottomPadding by animateDpAsState(
+        targetValue = if (cardVisible) cardH + 24.dp else legendH + 8.dp,
+        animationSpec = cardAnimSpec,
+        label = "controlsBottomPadding",
+    )
     Box(modifier.fillMaxSize()) {
         WorldMapCanvas(
             geometry = s.geometry,
@@ -293,9 +307,7 @@ private fun MapTab(
             ownVisaCountries = s.ownVisaCountries,
             controlsBottomPadding = controlsBottomPadding,
             topInset = searchBarH,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = mapBottomPadding),
+            modifier = Modifier.fillMaxSize(),
         )
         SearchBar(
             query = query,
@@ -305,11 +317,26 @@ private fun MapTab(
                 .fillMaxWidth()
                 .onSizeChanged { searchBarH = Dp(it.height / density.density) },
         )
-        val selName = selected?.let { iso -> s.world.countries[iso]?.name ?: s.geometry.countries[iso]?.name ?: iso }
+        // The slide is a graphicsLayer offset, not a layout slide (slideInVertically): while the
+        // enter animation runs the card must stay hit-testable at its final position, otherwise
+        // an early swipe on the breakdown falls through to the map canvas and pans the map
+        // instead of scrolling the list.
+        val cardDrop by animateDpAsState(
+            targetValue = if (cardVisible) 0.dp else 420.dp,
+            animationSpec = spring<Dp>(Spring.DampingRatioNoBouncy, Spring.StiffnessMedium),
+            label = "cardDrop",
+        )
+        // align must be on the AnimatedVisibility node itself (the direct Box child) — on the
+        // inner card it is ignored by the AnimatedVisibility layout and the card lands at TopStart.
         AnimatedVisibility(
-            visible = selected != null && selName != null,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            visible = cardVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .heightIn(max = 420.dp)
+                .onSizeChanged { cardH = Dp(it.height / density.density) },
         ) {
             if (selected != null) {
                 val selectedAccess = s.access[selected]
@@ -323,15 +350,11 @@ private fun MapTab(
                     access = selectedAccess,
                     breakdown = AccessModel.breakdownFor(selected, s.docs, s.world, trips = s.trips),
                     onDismiss = { pick(null) },
+                    modifier = Modifier.graphicsLayer { translationY = cardDrop.toPx() },
                     isHome = selected in s.homeCountries,
                     isOwnCovered = selected in s.ownVisaCountries,
                     homePassport = if (selected in s.homeCountries) s.world.countries[selected]?.name else null,
                     daysLabel = AccessModel.stayLabelFor(selectedAccess, stayRule),
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .heightIn(max = 420.dp)
-                        .onSizeChanged { cardH = Dp(it.height / density.density) },
                 )
             }
         }
