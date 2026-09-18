@@ -546,6 +546,9 @@ object TripModel {
         val used = entry?.used ?: 0
         val remaining = entry?.remaining
         val expiry = status?.let { gateCapDate(doc, it, docs) } ?: entry?.effectiveExpiry ?: iso(doc.expiry)
+        val daysToExpiry = expiry?.let { ChronoUnit.DAYS.between(asOf, it) }
+        // Only the entry type and the expiry date here — the "N days left" / "N entries
+        // remaining" halves live on the coloured summary line of the tab-top display.
         val subtitle = buildString {
             entryTotalFor(doc.entryType())?.let {
                 append(when (it) {
@@ -559,7 +562,6 @@ object TripModel {
                 append("Expires $it")
             }
         }
-        val daysToExpiry = expiry?.let { ChronoUnit.DAYS.between(asOf, it) }
         val status = when {
             expiry != null && expiry.isBefore(asOf) -> AllowanceStatus.DANGER
             total != null && remaining == 0 && entry?.state != EntryState.IN_USE -> AllowanceStatus.EXHAUSTED

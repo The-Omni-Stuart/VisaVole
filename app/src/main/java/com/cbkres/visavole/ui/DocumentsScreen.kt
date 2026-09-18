@@ -48,10 +48,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -88,6 +90,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import kotlinx.coroutines.launch
 
 /** Days from [today] until [date]; null when unset. */
 private fun daysUntil(date: LocalDate?, today: LocalDate): Long? =
@@ -95,44 +98,6 @@ private fun daysUntil(date: LocalDate?, today: LocalDate): Long? =
 
 /** 24 months in days — a passport / residence enters the top display this close to its expiry. */
 private const val EXPIRY_WATCH_DAYS = 730
-
-/**
- * The card's first-row type badge: the base type (Passport / Visa / Residence) in the tone the map
- * uses for what that document unlocks — the home-country blue, the covered-visa magenta, or the
- * residence teal.
- */
-private fun docTypeBadge(doc: Document, world: WorldData): Pair<String, Color> =
-    when (doc.kind) {
-        is DocKind.Passport -> "Passport" to HOME
-        else -> if (doc.docCategory(world) == "residence") {
-            "Residence" to statusTone(AccessLevel.RESIDENCE)
-        } else {
-            "Visa" to statusTone(AccessLevel.COVERED)
-        }
-    }
-
-/**
- * The card's title: the country(ies) the document applies to — a single name, "A, B" for two, or
- * "A, B +N more" beyond. A bloc-scoped holding (e.g. Schengen/EU) has no single country, so it
- * carries its holding name instead.
- */
-private fun docTitle(doc: Document, world: WorldData): String {
-    val names = when (val k = doc.kind) {
-        is DocKind.Passport -> listOf(world.countries[k.iso2]?.name ?: k.iso2)
-        is DocKind.Holding -> {
-            val isos = world.holdingCountries(k.holdingId).sortedBy { world.countries[it]?.name ?: it }
-            when {
-                isos.isEmpty() -> listOf(k.holdingId)
-                isos.size == 1 -> listOf(world.countries[isos.first()]?.name ?: isos.first())
-                else -> listOf(world.holdings[k.holdingId]?.name ?: k.holdingId)
-            }
-        }
-        is DocKind.Custom ->
-            k.countries.sortedBy { world.countries[it]?.name ?: it }.map { world.countries[it]?.name ?: it }
-    }
-    return if (names.size <= 2) names.joinToString(", ")
-    else "${names.take(2).joinToString(", ")} +${names.size - 2} more"
-}
 
 /** The card's validity-period line; null (line dropped) when the document carries no dates. */
 private fun docValidityText(doc: Document): String? = when {
@@ -185,12 +150,18 @@ fun DocumentsScreen(
     scrollState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
+    val scope = rememberCoroutineScope()
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Document?>(null) }
     var blockedRemove by remember { mutableStateOf<GuardFinding?>(null) }
     var removingDoc by remember { mutableStateOf<Document?>(null) }
     // Which document's allowance the top display is focused on (null = the primary one).
     var focusedAllowance by remember { mutableStateOf<String?>(null) }
+    // The document list's viewport height, in px — lets a tapped ring centre its card on screen.
+    var listViewportPx by remember { mutableStateOf(0) }
+    // The document card a ring tap just centred, with a per-document counter: each tap bumps the
+    // second half, which makes that card's VisaListCard play its one-shot "look here" ripple.
+    var flashDoc by remember { mutableStateOf<Pair<String, Int>?>(null) }
     val today = ready.today
     // One shared guard context for the whole screen; every add/remove/star decision below goes
     // through the same GuardEngine the ViewModel backstops with.
@@ -242,7 +213,9 @@ fun DocumentsScreen(
             HazeBox(docsTop, docsEnd, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
                 LazyColumn(
                     state = docsListState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .onSizeChanged { listViewportPx = it.height },
                     contentPadding = PaddingValues(top = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -252,6 +225,43 @@ fun DocumentsScreen(
                             primary = docPrimary,
                             focusedKey = focusedAllowance,
                             onFocus = { focusedAllowance = it },
+                            titleRow = { a ->
+                                val doc = ready.docs.firstOrNull { d -> d.id == a.key.removePrefix("doc:") }
+                                if (doc != null) {
+                                    // The same badge the card wears: type pill + country name.
+                                    val (label, tone) = docTypeBadge(doc, ready.world)
+                                    StatusPill(label, tone)
+                                    Text(
+                                        docTitle(doc, ready.world),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                } else {
+                                    Text(a.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            },
+                            onRingClick = { snap ->
+                                // Jump the list to the tapped document, centre it, and flash the
+                                // card so the landing is obvious.
+                                val doc = ready.docs.firstOrNull { d -> d.id == snap.key.removePrefix("doc:") }
+                                if (doc != null) {
+                                    val index = when {
+                                        active.contains(doc) -> 2 + active.indexOf(doc)
+                                        archived.contains(doc) -> 2 + (if (active.isNotEmpty()) active.size + 1 else 0) + archived.indexOf(doc)
+                                        else -> -1
+                                    }
+                                    if (index >= 0) {
+                                        // Fire the flash only once the centring scroll has settled, so it
+                                        // lands on the card wherever it sits in the list — not while the
+                                        // card is still off-screen mid-scroll.
+                                        scope.launch {
+                                            docsListState.animateItemToCenter(index, listViewportPx)
+                                            flashDoc = doc.id to ((flashDoc?.takeIf { it.first == doc.id }?.second ?: 0) + 1)
+                                        }
+                                    }
+                                }
+                            },
                         )
                     }
                     if (active.isNotEmpty()) {
@@ -275,6 +285,7 @@ fun DocumentsScreen(
                                 onRemoveBlocked = { blockedRemove = removeBlockings[doc.id]?.findings?.firstOrNull() },
                                 onEdit = { editing = doc },
                                 onStar = star,
+                                flashTrigger = flashDoc?.takeIf { it.first == doc.id }?.second ?: 0,
                             )
                         }
                     }
@@ -298,6 +309,7 @@ fun DocumentsScreen(
                                 onRemoveBlocked = { blockedRemove = removeBlockings[doc.id]?.findings?.firstOrNull() },
                                 onEdit = { editing = doc },
                                 onStar = null,
+                                flashTrigger = flashDoc?.takeIf { it.first == doc.id }?.second ?: 0,
                             )
                         }
                     }
@@ -366,7 +378,10 @@ private fun ExpiryStatusPill(
     val days = daysUntil(effective, today)
     val replacedBy = supersededByLabel ?: "a newer document"
     val (text, severity, bold) = when {
-        entry?.total != null && entry.state == EntryState.IN_USE -> Triple("In use", Severity.OK, false)
+        // Same state-to-colour map as the ring and the tab-top summary line: in use with nothing
+        // left is terminal (red), in use or down to the last entry is a watch-it state (amber).
+        entry?.total != null && entry.state == EntryState.IN_USE ->
+            Triple("In use", if (entry.remaining == 0) Severity.BAD else Severity.WARN, false)
         status?.reason == ExpiryReason.SUPERSEDED && status.expired ->
             Triple("Replaced by $replacedBy", Severity.BAD, true)
         status?.expired == true && status.reason == ExpiryReason.ENTRIES ->
@@ -375,7 +390,7 @@ private fun ExpiryStatusPill(
         status?.reason == ExpiryReason.SUPERSEDED ->
             Triple("Replaced by $replacedBy from $effective", Severity.WARN, false)
         entry?.total != null && entry.remaining != null && entry.remaining > 0 ->
-            Triple("${entry.remaining} ${if (entry.remaining == 1) "entry" else "entries"} left", Severity.OK, false)
+            Triple("${entry.remaining} ${if (entry.remaining == 1) "entry" else "entries"} left", if (entry.remaining == 1) Severity.WARN else Severity.OK, false)
         days == null -> Triple("No expiry", Severity.OK, false)
         days <= 7 -> Triple("Expiring soon ($days days)", Severity.WARN, false)
         else -> Triple("Valid for $days days", Severity.OK, false)
@@ -399,11 +414,13 @@ private fun DocCard(
     onRemoveBlocked: () -> Unit = {},
     onEdit: () -> Unit,
     onStar: (() -> Unit)? = null,
+    flashTrigger: Int = 0,
 ) {
     val isPassport = doc.kind is DocKind.Passport
     val surface = MaterialTheme.colorScheme.onSurface
     val (typeLabel, typeTone) = docTypeBadge(doc, world)
     VisaListCard(
+        flashTrigger = flashTrigger,
         actions = {
             if (onStar != null) {
                 IconButton(onClick = onStar) {
@@ -455,8 +472,9 @@ private fun DocCard(
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         // Row 3: the structural details left, the status pill right — a consistent badge column.
+        // Top-aligned so the pill sits on the first line when the details text wraps.
         if (status != null) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 val details = docDetailsAnnotated(doc, world, MaterialTheme.colorScheme.onSurfaceVariant)
                 if (details != null) {
                     Text(

@@ -52,12 +52,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,6 +87,7 @@ import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import java.time.LocalDate
 import java.util.UUID
+import kotlinx.coroutines.launch
 
 @Composable
 fun TripsScreen(
@@ -95,8 +98,14 @@ fun TripsScreen(
     onToggleExpanded: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val scope = rememberCoroutineScope()
     val today = ready.today
     var focusedKey by remember { mutableStateOf<String?>(null) }
+    // The trips list's viewport height, in px — lets a tapped ring centre its trip on screen.
+    var listViewportPx by remember { mutableStateOf(0) }
+    // The trip card a ring tap just centred, with a per-trip counter: each tap bumps the second
+    // half, which makes that card's VisaListCard play its one-shot "look here" ripple.
+    var flashTrip by remember { mutableStateOf<Pair<String, Int>?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var editingTrip by remember { mutableStateOf<Trip?>(null) }
     var deletingTrip by remember { mutableStateOf<Trip?>(null) }
@@ -118,7 +127,9 @@ fun TripsScreen(
         HazeBox(tripsTop, tripsEnd, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
             LazyColumn(
                 state = tripsListState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onSizeChanged { listViewportPx = it.height },
                 contentPadding = PaddingValues(top = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -128,6 +139,33 @@ fun TripsScreen(
                         primary = primary,
                         focusedKey = focusedKey,
                         onFocus = { focusedKey = if (focusedKey == it) null else it },
+                        onRingClick = { snap ->
+                            // Jump the list to the zone's trip (the in-trip one first) and centre it.
+                            val trip = (snap.currentTripId ?: snap.relevantTripIds.firstOrNull())
+                                ?.let { id -> ready.trips.firstOrNull { t -> t.id == id } }
+                            if (trip != null) {
+                                if (trip.id !in expandedTrips) onToggleExpanded(trip.id)
+                                var cursor = 1
+                                var target = -1
+                                for (section in listOf(sections.upcoming, sections.current, sections.previous)) {
+                                    val i = section.indexOfFirst { it.id == trip.id }
+                                    if (i >= 0) {
+                                        target = cursor + 1 + i
+                                        break
+                                    }
+                                    if (section.isNotEmpty()) cursor += 1 + section.size
+                                }
+                                if (target >= 0) {
+                                    // Fire the flash only once the centring scroll has settled, so it
+                                    // lands on the trip wherever it sits in the list — not while the
+                                    // card is still off-screen mid-scroll.
+                                    scope.launch {
+                                        tripsListState.animateItemToCenter(target, listViewportPx)
+                                        flashTrip = trip.id to ((flashTrip?.takeIf { it.first == trip.id }?.second ?: 0) + 1)
+                                    }
+                                }
+                            }
+                        },
                     )
                     Spacer(Modifier.height(4.dp))
                 }
@@ -137,19 +175,19 @@ fun TripsScreen(
                     if (sections.upcoming.isNotEmpty()) {
                         item(key = "header-upcoming") { SectionLabel("Upcoming") }
                         items(sections.upcoming, key = { it.id }) { trip ->
-                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip })
+                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip }, flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second ?: 0)
                         }
                     }
                     if (sections.current.isNotEmpty()) {
                         item(key = "header-current") { SectionLabel("Current") }
                         items(sections.current, key = { it.id }) { trip ->
-                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = { endingTrip = trip }, onDelete = { deletingTrip = trip })
+                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = { endingTrip = trip }, onDelete = { deletingTrip = trip }, flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second ?: 0)
                         }
                     }
                     if (sections.previous.isNotEmpty()) {
                         item(key = "header-previous") { SectionLabel("Previous") }
                         items(sections.previous, key = { it.id }) { trip ->
-                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip })
+                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip }, flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second ?: 0)
                         }
                     }
                 }
@@ -222,6 +260,7 @@ private fun TripCard(
     onEdit: () -> Unit,
     onEnd: () -> Unit,
     onDelete: () -> Unit,
+    flashTrigger: Int = 0,
 ) {
     val sortedStops = TripModel.sortedStops(trip.stops)
     val title = tripTitle(trip, world)
@@ -250,6 +289,7 @@ private fun TripCard(
     val allowanceHintColor = relatedAllowance?.let { ringColor(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant
     VisaListCard(
         onClick = onExpand,
+        flashTrigger = flashTrigger,
         actions = {
             IconButton(onClick = onEdit) {
                 Icon(Icons.Filled.Edit, contentDescription = "Edit")
@@ -286,7 +326,9 @@ private fun TripCard(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Top-aligned: expanded zone lists can wrap to several lines, and the hint pill should
+        // stay on the first line instead of floating at the middle of the block.
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (zones.isNotEmpty()) {
                 Text(
                     zones.joinToString(", "),
