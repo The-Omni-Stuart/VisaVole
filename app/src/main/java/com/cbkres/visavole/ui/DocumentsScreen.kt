@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -144,6 +145,7 @@ fun DocumentsScreen(
     var showAdd by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Document?>(null) }
     var blockedRemove by remember { mutableStateOf<GuardFinding?>(null) }
+    var removingDoc by remember { mutableStateOf<Document?>(null) }
     val today = ready.today
     // One shared guard context for the whole screen; every add/remove/star decision below goes
     // through the same GuardEngine the ViewModel backstops with.
@@ -199,7 +201,7 @@ fun DocumentsScreen(
                                 canRemove = removeBlockings[doc.id]?.canProceed == true,
                                 passportNumber = number,
                                 isPrimary = doc.id == ready.primaryDocId,
-                                onRemove = { vm.removeDocument(doc.id) },
+                                onRemove = { removingDoc = doc },
                                 onRemoveBlocked = { blockedRemove = removeBlockings[doc.id]?.findings?.firstOrNull() },
                                 onEdit = { editing = doc },
                                 onStar = star,
@@ -222,7 +224,7 @@ fun DocumentsScreen(
                                 canRemove = removeBlockings[doc.id]?.canProceed == true,
                                 passportNumber = number,
                                 isPrimary = false,
-                                onRemove = { vm.removeDocument(doc.id) },
+                                onRemove = { removingDoc = doc },
                                 onRemoveBlocked = { blockedRemove = removeBlockings[doc.id]?.findings?.firstOrNull() },
                                 onEdit = { editing = doc },
                                 onStar = null,
@@ -239,6 +241,22 @@ fun DocumentsScreen(
             title = { Text(finding.title) },
             text = { Text(finding.message) },
             confirmButton = { TextButton(onClick = { blockedRemove = null }) { Text("OK") } },
+        )
+    }
+    removingDoc?.let { doc ->
+        AlertDialog(
+            onDismissRequest = { removingDoc = null },
+            title = { Text("Delete document") },
+            text = { Text("Delete this document? The map's access will be recalculated.") },
+            confirmButton = {
+                Button(
+                    onClick = { vm.removeDocument(doc.id); removingDoc = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                ) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { removingDoc = null }) { Text("Cancel") }
+            },
         )
     }
     if (showAdd) {
