@@ -17,8 +17,8 @@ android {
         applicationId = "com.cbkres.visavole"
         minSdk = 28
         targetSdk = 37
-        versionCode = 2
-        versionName = "1.0.0-alpha02"
+        versionCode = 3
+        versionName = "1.0.0-alpha03"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
