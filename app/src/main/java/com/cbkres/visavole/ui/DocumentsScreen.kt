@@ -724,57 +724,13 @@ fun AddDocumentDialog(
                 val todayMillis = remember {
                     guard.today.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
                 }
-                val validityLabel = when {
-                    validFromDate != null || expiryDate != null ->
-                        "Validity: ${validFromDate?.let { it.toUtcIsoDate() } ?: "…"} → ${expiryDate?.let { it.toUtcIsoDate() } ?: "…"}"
-                    else -> "Validity period (optional)"
-                }
-                var showValidFromPicker by remember { mutableStateOf(false) }
-                var showValidToPicker by remember { mutableStateOf(false) }
-                OutlinedButton(
-                    onClick = { showValidFromPicker = true },
-                    shape = MaterialTheme.shapes.large,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Filled.DateRange, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(validityLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                if (showValidFromPicker) {
-                    VisaDatePickerDialog(
-                        initialMillis = validFromDate ?: todayMillis,
-                        confirmLabel = "Next",
-                        onConfirm = { date ->
-                            validFromDate = date?.toUtcMillis()
-                            showValidFromPicker = false
-                            showValidToPicker = true
-                        },
-                        onDismiss = { showValidFromPicker = false; showValidToPicker = false },
-                        secondaryLabel = "Clear",
-                        onSecondary = {
-                            validFromDate = null
-                            showValidFromPicker = false
-                            showValidToPicker = true
-                        },
-                    )
-                }
-                if (showValidToPicker) {
-                    val fallbackTo = maxOf(validFromDate ?: todayMillis, todayMillis)
-                    VisaDatePickerDialog(
-                        initialMillis = expiryDate ?: fallbackTo,
-                        confirmLabel = "Done",
-                        onConfirm = { date ->
-                            expiryDate = date?.toUtcMillis()
-                            showValidToPicker = false
-                        },
-                        onDismiss = { showValidToPicker = false },
-                        secondaryLabel = "Clear",
-                        onSecondary = {
-                            expiryDate = null
-                            showValidToPicker = false
-                        },
-                    )
-                }
+                ValidityPeriodField(
+                    validFromDate = validFromDate,
+                    expiryDate = expiryDate,
+                    todayMillis = todayMillis,
+                    onValidFrom = { validFromDate = it },
+                    onExpiry = { expiryDate = it },
+                )
                 Spacer(Modifier.height(20.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     OutlinedButton(onClick = onDismiss) { Text("Cancel") }
@@ -788,76 +744,186 @@ fun AddDocumentDialog(
         }
 
     multiCountryDoc?.let { doc ->
-        val names = (doc.kind as? DocKind.Custom)?.countries?.sortedBy { countries[it]?.name ?: it } ?: emptyList()
-        AlertDialog(
-            onDismissRequest = { multiCountryDoc = null },
-            confirmButton = {
-                TextButton(onClick = {
-                    multiCountryDoc = null
-                    saveDoc(doc, true)
-                }) { Text("Save anyway") }
+        MultiCountryConfirmDialog(
+            doc = doc,
+            countries = countries,
+            onConfirm = {
+                multiCountryDoc = null
+                saveDoc(doc, true)
             },
-            dismissButton = {
-                TextButton(onClick = { multiCountryDoc = null }) { Text("Back") }
-            },
-            text = {
-                Text(
-                    buildAnnotatedString {
-                        append("You have multiple countries selected for this visa: ")
-                        names.forEachIndexed { index, iso ->
-                            withStyle(SpanStyle(color = severityColor(Severity.WARN), fontWeight = FontWeight.SemiBold)) {
-                                append(countries[iso]?.name ?: iso)
-                            }
-                            if (index != names.lastIndex) append(", ")
-                        }
-                        append(". Are you sure you want to save?")
-                    },
-                )
-            },
+            onDismiss = { multiCountryDoc = null },
         )
     }
     pendingMutationDoc?.let { doc ->
-        AlertDialog(
-            onDismissRequest = { pendingMutationDoc = null },
-            confirmButton = {
-                TextButton(onClick = {
-                    pendingMutationDoc = null
-                    onAdd(doc)
-                    onDismiss()
-                }) { Text("Confirm") }
+        PendingMutationDialog(
+            warn = pendingMutationWarn,
+            onConfirm = {
+                pendingMutationDoc = null
+                onAdd(doc)
+                onDismiss()
             },
-            dismissButton = {
-                TextButton(onClick = { pendingMutationDoc = null }) { Text("Back") }
-            },
-            title = { Text(pendingMutationWarn?.title ?: "Heads up") },
-            text = { Text(pendingMutationWarn?.message ?: "This action will also change another of your documents.") },
+            onDismiss = { pendingMutationDoc = null },
         )
     }
     blocked?.let { finding ->
-        AlertDialog(
-            onDismissRequest = {
-                if (blockedDuplicate != null) onDismiss()
+        BlockedFindingDialog(
+            finding = finding,
+            hasDuplicate = blockedDuplicate != null,
+            onConfirm = {
+                val dup = blockedDuplicate
                 blocked = null
+                if (dup != null) onEditExisting(dup)
             },
-            confirmButton = {
-                TextButton(onClick = {
-                    val dup = blockedDuplicate
-                    blocked = null
-                    if (dup != null) onEditExisting(dup)
-                }) { Text(if (blockedDuplicate != null) "Edit existing" else "Got it") }
+            onDismiss = { blocked = null },
+            onCancel = {
+                blocked = null
+                onDismiss()
             },
-            dismissButton = {
-                if (blockedDuplicate != null) {
-                    TextButton(onClick = {
-                        blocked = null
-                        onDismiss()
-                    }) { Text("Cancel") }
-                }
-            },
-            title = { Text(finding.title) },
-            text = { Text(finding.message) },
         )
     }
+}
+
+/** The validity-period button and its two chained pickers (valid-from → expiry). */
+@Composable
+private fun ValidityPeriodField(
+    validFromDate: Long?,
+    expiryDate: Long?,
+    todayMillis: Long,
+    onValidFrom: (Long?) -> Unit,
+    onExpiry: (Long?) -> Unit,
+) {
+    val validityLabel = when {
+        validFromDate != null || expiryDate != null ->
+            "Validity: ${validFromDate?.let { it.toUtcIsoDate() } ?: "…"} → ${expiryDate?.let { it.toUtcIsoDate() } ?: "…"}"
+        else -> "Validity period (optional)"
+    }
+    var showValidFromPicker by remember { mutableStateOf(false) }
+    var showValidToPicker by remember { mutableStateOf(false) }
+    OutlinedButton(
+        onClick = { showValidFromPicker = true },
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Icon(Icons.Filled.DateRange, contentDescription = null)
+        Spacer(Modifier.width(8.dp))
+        Text(validityLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+    if (showValidFromPicker) {
+        VisaDatePickerDialog(
+            initialMillis = validFromDate ?: todayMillis,
+            confirmLabel = "Next",
+            onConfirm = { date ->
+                onValidFrom(date?.toUtcMillis())
+                showValidFromPicker = false
+                showValidToPicker = true
+            },
+            onDismiss = { showValidFromPicker = false; showValidToPicker = false },
+            secondaryLabel = "Clear",
+            onSecondary = {
+                onValidFrom(null)
+                showValidFromPicker = false
+                showValidToPicker = true
+            },
+        )
+    }
+    if (showValidToPicker) {
+        val fallbackTo = maxOf(validFromDate ?: todayMillis, todayMillis)
+        VisaDatePickerDialog(
+            initialMillis = expiryDate ?: fallbackTo,
+            confirmLabel = "Done",
+            onConfirm = { date ->
+                onExpiry(date?.toUtcMillis())
+                showValidToPicker = false
+            },
+            onDismiss = { showValidToPicker = false },
+            secondaryLabel = "Clear",
+            onSecondary = {
+                onExpiry(null)
+                showValidToPicker = false
+            },
+        )
+    }
+}
+
+/** Confirms saving a visa that covers several countries at once. */
+@Composable
+private fun MultiCountryConfirmDialog(
+    doc: Document,
+    countries: Map<String, Country>,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val names = (doc.kind as? DocKind.Custom)?.countries?.sortedBy { countries[it]?.name ?: it } ?: emptyList()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("Save anyway") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Back") }
+        },
+        text = {
+            Text(
+                buildAnnotatedString {
+                    append("You have multiple countries selected for this visa: ")
+                    names.forEachIndexed { index, iso ->
+                        withStyle(SpanStyle(color = severityColor(Severity.WARN), fontWeight = FontWeight.SemiBold)) {
+                            append(countries[iso]?.name ?: iso)
+                        }
+                        if (index != names.lastIndex) append(", ")
+                    }
+                    append(". Are you sure you want to save?")
+                },
+            )
+        },
+    )
+}
+
+/** Confirms an accompanying mutation (e.g. expiring a superseded document) that a save implies. */
+@Composable
+private fun PendingMutationDialog(
+    warn: GuardFinding?,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("Confirm") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Back") }
+        },
+        title = { Text(warn?.title ?: "Heads up") },
+        text = { Text(warn?.message ?: "This action will also change another of your documents.") },
+    )
+}
+
+/** Shows a blocking guard finding; when the block is a duplicate, offers to jump to the existing doc. */
+@Composable
+private fun BlockedFindingDialog(
+    finding: GuardFinding,
+    hasDuplicate: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = {
+            if (hasDuplicate) onCancel()
+            onDismiss()
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(if (hasDuplicate) "Edit existing" else "Got it") }
+        },
+        dismissButton = {
+            if (hasDuplicate) {
+                TextButton(onClick = onCancel) { Text("Cancel") }
+            }
+        },
+        title = { Text(finding.title) },
+        text = { Text(finding.message) },
+    )
 }
 
 /** Search + list of countries; tap toggles membership in [selected]. */

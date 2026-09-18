@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -544,52 +545,64 @@ internal fun WorldMapCanvas(
             }
         }
 
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 0.dp,
-            shape = MaterialTheme.shapes.large,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(horizontal = 12.dp)
-                .padding(top = 12.dp, bottom = controlsBottomPadding)
-                .onSizeChanged { controlsH = Dp(it.height / density.density) },
+        val cx = canvasSize.width / 2f
+        val cy = canvasSize.height / 2f
+        val zoomCentered = { factor: Float ->
+            val (nz, nc) = zoomAround(centerWorld, zoom, baseScale, Offset(cx, cy), factor, geometry, canvasSize.width, canvasSize.height)
+            zoom = nz
+            centerWorld = nc
+        }
+        MapZoomControls(
+            controlsBottomPadding = controlsBottomPadding,
+            onHeightChanged = { controlsH = it },
+            onZoomIn = { zoomCentered(1.5f) },
+            onZoomOut = { zoomCentered(1f / 1.5f) },
+            onReset = {
+                zoom = 1f
+                centerWorld = Offset(geometry.width * DEFAULT_CENTER_X_FRACTION, geometry.height / 2f)
+            },
+        )
+    }
+}
+
+/** The floating zoom-in / zoom-out / reset buttons in the map's bottom corner. */
+@Composable
+private fun BoxScope.MapZoomControls(
+    controlsBottomPadding: Dp,
+    onHeightChanged: (Dp) -> Unit,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    onReset: () -> Unit,
+) {
+    val density = LocalDensity.current
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 0.dp,
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier
+            .align(Alignment.BottomEnd)
+            .padding(horizontal = 12.dp)
+            .padding(top = 12.dp, bottom = controlsBottomPadding)
+            .onSizeChanged { onHeightChanged(Dp(it.height / density.density)) },
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier.padding(4.dp),
         ) {
-            val cx = canvasSize.width / 2f
-            val cy = canvasSize.height / 2f
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                modifier = Modifier.padding(4.dp),
-            ) {
-                IconButton(
-                    onClick = {
-                        val (nz, nc) = zoomAround(centerWorld, zoom, baseScale, Offset(cx, cy), 1.5f, geometry, canvasSize.width, canvasSize.height)
-                        zoom = nz
-                        centerWorld = nc
-                    },
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = "Zoom in")
-                }
-                IconButton(
-                    onClick = {
-                        val (nz, nc) = zoomAround(centerWorld, zoom, baseScale, Offset(cx, cy), 1f / 1.5f, geometry, canvasSize.width, canvasSize.height)
-                        zoom = nz
-                        centerWorld = nc
-                    },
-                ) {
-                    // M3 IconButton has no contentDescription param; the label comes from child
-                    // semantics, which the clickable button merges.
-                    Text(
-                        "-",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.semantics { contentDescription = "Zoom out" },
-                    )
-                }
-                IconButton(onClick = {
-                    zoom = 1f
-                    centerWorld = Offset(geometry.width * DEFAULT_CENTER_X_FRACTION, geometry.height / 2f)
-                }) {
-                    Icon(Icons.Filled.Home, contentDescription = "Reset view")
-                }
+            IconButton(onClick = onZoomIn) {
+                Icon(Icons.Filled.Add, contentDescription = "Zoom in")
+            }
+            IconButton(onClick = onZoomOut) {
+                // M3 IconButton has no contentDescription param; the label comes from child
+                // semantics, which the clickable button merges.
+                Text(
+                    "-",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.semantics { contentDescription = "Zoom out" },
+                )
+            }
+            IconButton(onClick = onReset) {
+                Icon(Icons.Filled.Home, contentDescription = "Reset view")
             }
         }
     }

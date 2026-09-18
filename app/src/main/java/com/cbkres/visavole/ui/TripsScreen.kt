@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.data.StayRule
 import com.cbkres.visavole.data.WorldData
@@ -758,44 +759,19 @@ private fun AddTripDialog(
         Column(Modifier.padding(20.dp)) {
             Text(if (isEditingExisting) "Edit trip" else "Add trip", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(12.dp))
-                val stopsScroll = rememberScrollState()
-                val (stopsTop, stopsEnd) = stopsScroll.hazeAlphas()
-                HazeBox(
-                    stopsTop,
-                    stopsEnd,
-                    MaterialTheme.colorScheme.surfaceContainerHigh,
-                    modifier = Modifier.fillMaxWidth().heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.45f).dp),
-                ) {
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.45f).dp)
-                            .verticalScroll(stopsScroll),
-                    ) {
-                        if (stops.isEmpty()) {
-                            Text("No stops yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        stops.forEach { stop ->
-                            StopRow(
-                                stop = stop,
-                                world = ready.world,
-                                docs = ready.docs,
-                                today = today,
-                                onClick = { editingStopId = stop.id },
-                                onRemove = {
-                                    stops = stops.filter { it.id != stop.id }
-                                    lastStopSnapshot = null
-                                    refreshGap()
-                                },
-                            )
-                            Spacer(Modifier.height(6.dp))
-                        }
-                        if (stops.size > 1) {
-                            Text("Stops are kept in arrival order.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(Modifier.height(6.dp))
-                        }
-                    }
-                }
+                TripStopList(
+                    stops = stops,
+                    world = ready.world,
+                    docs = ready.docs,
+                    today = today,
+                    maxHeight = (LocalConfiguration.current.screenHeightDp * 0.45f).dp,
+                    onEdit = { editingStopId = it.id },
+                    onRemove = { stop ->
+                        stops = stops.filter { it.id != stop.id }
+                        lastStopSnapshot = null
+                        refreshGap()
+                    },
+                )
                 OutlinedButton(
                     onClick = { requestAddStop() },
                     modifier = Modifier.fillMaxWidth(),
@@ -886,16 +862,13 @@ private fun AddTripDialog(
         )
     }
     if (showAddStopWarning) {
-        TripAlertDialog(
-            title = "Add stop to ongoing trip",
-            confirmLabel = "Add stop",
+        AddStopWarningDialog(
             onConfirm = {
                 showAddStopWarning = false
                 val defaultArrival = TripModel.sortedStops(stops).lastOrNull()?.departure ?: today
                 pendingNewStop = TripStop(UUID.randomUUID().toString(), "", defaultArrival, null)
             },
             onDismiss = { showAddStopWarning = false },
-            content = { Text("This trip is ongoing. Adding a new stop will close the current stop. A departure date will be added automatically and can be edited afterwards.") },
         )
     }
     if (showOngoingConfirm) {
@@ -907,21 +880,12 @@ private fun AddTripDialog(
         )
     }
     ongoingConflict?.let { conflict ->
-        TripAlertDialog(
-            title = "Another trip is ongoing",
-            confirmLabel = "Close previous & add",
-            onConfirm = { resolveOngoingConflict(true) },
-            neutralLabel = "Keep both",
-            onNeutral = { resolveOngoingConflict(false) },
-            dismissLabel = "Cancel",
+        OngoingConflictDialog(
+            conflict = conflict,
+            world = ready.world,
+            onClosePrevious = { resolveOngoingConflict(true) },
+            onKeepBoth = { resolveOngoingConflict(false) },
             onDismiss = { ongoingConflict = null },
-            content = {
-                Text(
-                    "“${tripTitle(conflict.previous, ready.world)}” is still open. Close it on ${conflict.end} and add this trip, or keep both.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            },
         )
     }
     gapIndex?.let { idx ->
@@ -950,35 +914,18 @@ private fun AddTripDialog(
         }
     }
     saveWarnings?.let { (warnings, canSave) ->
-        TripAlertDialog(
-            title = if (canSave) "Check trip" else "Cannot save yet",
-            confirmLabel = if (canSave) "Save anyway" else null,
-            confirmEnabled = canSave,
+        SaveWarningsDialog(
+            warnings = warnings,
+            canSave = canSave,
             onConfirm = {
                 saveWarnings = null
                 save()
             },
-            neutralLabel = if (canSave) null else "Back",
-            onNeutral = {
+            onBack = {
                 saveWarnings = null
                 onDismiss()
             },
-            dismissLabel = "Edit",
             onDismiss = { saveWarnings = null },
-            content = {
-                Column {
-                    warnings.forEach { f ->
-                        Text(
-                            "${f.title}: ${f.message}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = severityColor(
-                                if (f.severity == GuardSeverity.BLOCK || f.code in SAVABLE_DANGER_CODES) Severity.BAD else Severity.WARN,
-                            ),
-                            modifier = Modifier.padding(vertical = 3.dp),
-                        )
-                    }
-                }
-            },
         )
     }
 }
@@ -1035,6 +982,141 @@ private fun StopRow(
                 Icon(Icons.Filled.Close, contentDescription = "Remove stop")
             }
         }
+    }
+}
+
+/** The scrollable list of stop rows inside the trip dialog. */
+@Composable
+private fun TripStopList(
+    stops: List<TripStop>,
+    world: WorldData,
+    docs: List<Document>,
+    today: LocalDate,
+    maxHeight: Dp,
+    onEdit: (TripStop) -> Unit,
+    onRemove: (TripStop) -> Unit,
+) {
+    val stopsScroll = rememberScrollState()
+    val (stopsTop, stopsEnd) = stopsScroll.hazeAlphas()
+    HazeBox(
+        stopsTop,
+        stopsEnd,
+        MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth().heightIn(max = maxHeight),
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = maxHeight)
+                .verticalScroll(stopsScroll),
+        ) {
+            if (stops.isEmpty()) {
+                Text("No stops yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            stops.forEach { stop ->
+                StopRow(
+                    stop = stop,
+                    world = world,
+                    docs = docs,
+                    today = today,
+                    onClick = { onEdit(stop) },
+                    onRemove = { onRemove(stop) },
+                )
+                Spacer(Modifier.height(6.dp))
+            }
+            if (stops.size > 1) {
+                Text("Stops are kept in arrival order.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(6.dp))
+            }
+        }
+    }
+}
+
+/** Warns that adding a stop to an ongoing trip closes the current stop. */
+@Composable
+private fun AddStopWarningDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    TripAlertDialog(
+        title = "Add stop to ongoing trip",
+        confirmLabel = "Add stop",
+        onConfirm = onConfirm,
+        onDismiss = onDismiss,
+        content = { Text("This trip is ongoing. Adding a new stop will close the current stop. A departure date will be added automatically and can be edited afterwards.") },
+    )
+}
+
+/** Asks whether to close the other ongoing trip on its end date before saving. */
+@Composable
+private fun OngoingConflictDialog(
+    conflict: OngoingConflict,
+    world: WorldData,
+    onClosePrevious: () -> Unit,
+    onKeepBoth: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    TripAlertDialog(
+        title = "Another trip is ongoing",
+        confirmLabel = "Close previous & add",
+        onConfirm = onClosePrevious,
+        neutralLabel = "Keep both",
+        onNeutral = onKeepBoth,
+        dismissLabel = "Cancel",
+        onDismiss = onDismiss,
+        content = {
+            Text(
+                "“${tripTitle(conflict.previous, world)}” is still open. Close it on ${conflict.end} and add this trip, or keep both.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+    )
+}
+
+/** Lists guard findings for the candidate trip; blocks forbid saving, warnings allow it. */
+@Composable
+private fun SaveWarningsDialog(
+    warnings: List<GuardFinding>,
+    canSave: Boolean,
+    onConfirm: () -> Unit,
+    onBack: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    TripAlertDialog(
+        title = if (canSave) "Check trip" else "Cannot save yet",
+        confirmLabel = if (canSave) "Save anyway" else null,
+        confirmEnabled = canSave,
+        onConfirm = onConfirm,
+        neutralLabel = if (canSave) null else "Back",
+        onNeutral = onBack,
+        dismissLabel = "Edit",
+        onDismiss = onDismiss,
+        content = {
+            Column {
+                warnings.forEach { f ->
+                    Text(
+                        "${f.title}: ${f.message}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = severityColor(
+                            if (f.severity == GuardSeverity.BLOCK || f.code in SAVABLE_DANGER_CODES) Severity.BAD else Severity.WARN,
+                        ),
+                        modifier = Modifier.padding(vertical = 3.dp),
+                    )
+                }
+            }
+        },
+    )
+}
+
+/** OutlinedButton that opens a date picker: calendar icon + one-line label. */
+@Composable
+private fun StopDateButton(text: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Icon(Icons.Filled.DateRange, contentDescription = null)
+        Spacer(Modifier.width(8.dp))
+        Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -1106,25 +1188,9 @@ private fun StopEditorDialog(
                     label = "Country",
                 )
                 Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = { showArrival = true },
-                    shape = MaterialTheme.shapes.large,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Filled.DateRange, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Arrival: ${stop.arrival}", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
+                StopDateButton("Arrival: ${stop.arrival}", onClick = { showArrival = true })
                 Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = { showDeparture = true },
-                    shape = MaterialTheme.shapes.large,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Filled.DateRange, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Departure: ${stop.departure ?: "open"}", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
+                StopDateButton("Departure: ${stop.departure ?: "open"}", onClick = { showDeparture = true })
                 Spacer(Modifier.height(8.dp))
                 SelectionField(label = "Document", value = selectedDoc?.compactDisplayLabel(passportCounts, passportNumbers) ?: "None") { onSelected ->
                     DropdownMenuItem(
