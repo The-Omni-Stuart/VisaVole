@@ -23,6 +23,9 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarData
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -212,4 +215,46 @@ fun VisaDatePickerDialog(
     ) {
         DatePicker(state = state)
     }
+}
+
+/**
+ * The app's snackbar host: the stock M3 snackbar is a flat full-width bar with square corners and
+ * no margin, so this re-skins it with the card vocabulary — a tonal [surfaceContainerHigh] surface,
+ * 16.dp rounded corners, horizontal margins, and a tonal elevation that reads in light and dark.
+ */
+@Composable
+fun VisaSnackbarHost(hostState: SnackbarHostState, modifier: Modifier = Modifier) {
+    SnackbarHost(
+        hostState = hostState,
+        modifier = modifier,
+        snackbar = { data ->
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 2.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                ) {
+                    Text(
+                        data.visuals.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(vertical = 12.dp),
+                    )
+                    data.visuals.actionLabel?.let { label ->
+                        TextButton(onClick = { hostState.currentSnackbarData?.dismiss() }) {
+                            Text(label)
+                        }
+                    }
+                }
+            }
+        },
+    )
 }

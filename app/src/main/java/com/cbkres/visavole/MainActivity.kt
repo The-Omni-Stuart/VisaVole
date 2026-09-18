@@ -54,7 +54,6 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -93,6 +92,7 @@ import com.cbkres.visavole.ui.DocumentsScreen
 import com.cbkres.visavole.ui.OnboardingScreen
 import com.cbkres.visavole.ui.SettingsScreen
 import com.cbkres.visavole.ui.TripsScreen
+import com.cbkres.visavole.ui.VisaSnackbarHost
 import com.cbkres.visavole.ui.theme.Visa_VoleTheme
 import com.cbkres.visavole.ui.WorldMapCanvas
 import com.cbkres.visavole.ui.HOME
@@ -199,7 +199,7 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
                 )
             }
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { VisaSnackbarHost(snackbarHostState) },
         bottomBar = {
             // The Settings overlay replaces the tab bar while it's open.
             if (!showSettings) {
