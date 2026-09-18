@@ -813,6 +813,14 @@ private fun AddTripDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(20.dp))
+                if (stops.isEmpty()) {
+                    Text(
+                        "Add at least one stop to save the trip",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                     OutlinedButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(Modifier.width(12.dp))
@@ -1152,6 +1160,14 @@ private fun StopEditorDialog(
                     )
                 }
                 Spacer(Modifier.height(20.dp))
+                if (!countrySelected) {
+                    Text(
+                        if (stop.countryIso2.isBlank()) "Pick a country to continue" else "Country not found",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                     if (onRemove != null) {
                         TextButton(onClick = onRemove) { Text("Remove") }

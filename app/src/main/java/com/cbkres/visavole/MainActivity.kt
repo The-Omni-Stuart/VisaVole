@@ -95,6 +95,7 @@ import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.AppState
 import com.cbkres.visavole.ui.CountryDetailCard
 import com.cbkres.visavole.ui.CountryRow
+import com.cbkres.visavole.ui.EmptyState
 import com.cbkres.visavole.ui.DocumentsScreen
 import com.cbkres.visavole.ui.OnboardingScreen
 import com.cbkres.visavole.ui.TripsScreen
@@ -345,7 +346,7 @@ private fun MapTab(
             }
         }
         AnimatedVisibility(
-            visible = query.isNotBlank() && matches.isNotEmpty(),
+            visible = query.isNotBlank(),
             enter = fadeIn(tween(120)) + scaleIn(tween(120), initialScale = 0.95f),
             exit = fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 0.95f),
         ) {
@@ -364,8 +365,12 @@ private fun MapTab(
                 val (searchTop, searchEnd) = searchScroll.hazeAlphas()
                 HazeBox(searchTop, searchEnd, MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
                     Column(Modifier.verticalScroll(searchScroll)) {
-                        matches.forEach { c ->
-                            CountryRow(name = c.name, onClick = { pick(c.iso2) })
+                        if (matches.isEmpty()) {
+                            EmptyState("No matching countries")
+                        } else {
+                            matches.forEach { c ->
+                                CountryRow(name = c.name, onClick = { pick(c.iso2) })
+                            }
                         }
                     }
                 }

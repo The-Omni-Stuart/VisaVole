@@ -46,6 +46,8 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.data.WorldMapData
@@ -574,7 +576,13 @@ internal fun WorldMapCanvas(
                         centerWorld = nc
                     },
                 ) {
-                    Text("-", style = MaterialTheme.typography.titleMedium)
+                    // M3 IconButton has no contentDescription param; the label comes from child
+                    // semantics, which the clickable button merges.
+                    Text(
+                        "-",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.semantics { contentDescription = "Zoom out" },
+                    )
                 }
                 IconButton(onClick = {
                     zoom = 1f
