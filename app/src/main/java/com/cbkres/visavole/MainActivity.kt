@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -90,6 +91,7 @@ import com.cbkres.visavole.ui.CountryRow
 import com.cbkres.visavole.ui.EmptyState
 import com.cbkres.visavole.ui.DocumentsScreen
 import com.cbkres.visavole.ui.OnboardingScreen
+import com.cbkres.visavole.ui.SettingsScreen
 import com.cbkres.visavole.ui.TripsScreen
 import com.cbkres.visavole.ui.theme.Visa_VoleTheme
 import com.cbkres.visavole.ui.WorldMapCanvas
@@ -169,6 +171,9 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
         if (tab != 0) selected = null
     }
     var mapQuery by rememberSaveable { mutableStateOf("") }
+    // Settings is an overlay over the tabs (the app has no navigation graph); it survives
+    // process death like the other screen state.
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     val expandedTrips = rememberSaveable { mutableStateListOf<String>() }
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(vm) {
@@ -182,31 +187,42 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
     val tripsScroll = rememberLazyListState()
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Visa Vole") },
-            )
+            // The Settings overlay draws its own bar with a back arrow.
+            if (!showSettings) {
+                TopAppBar(
+                    title = { Text("Visa Vole") },
+                    actions = {
+                        IconButton(onClick = { showSettings = true }) {
+                            Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                        }
+                    },
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = tab == 0,
-                    onClick = { tab = 0 },
-                    icon = { Icon(Icons.Filled.Place, contentDescription = null) },
-                    label = { Text("Map") },
-                )
-                NavigationBarItem(
-                    selected = tab == 1,
-                    onClick = { tab = 1 },
-                    icon = { Icon(Icons.Filled.Face, contentDescription = null) },
-                    label = { Text("Documents") },
-                )
-                NavigationBarItem(
-                    selected = tab == 2,
-                    onClick = { tab = 2 },
-                    icon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
-                    label = { Text("Trips") },
-                )
+            // The Settings overlay replaces the tab bar while it's open.
+            if (!showSettings) {
+                NavigationBar {
+                    NavigationBarItem(
+                        selected = tab == 0,
+                        onClick = { tab = 0 },
+                        icon = { Icon(Icons.Filled.Place, contentDescription = null) },
+                        label = { Text("Map") },
+                    )
+                    NavigationBarItem(
+                        selected = tab == 1,
+                        onClick = { tab = 1 },
+                        icon = { Icon(Icons.Filled.Face, contentDescription = null) },
+                        label = { Text("Documents") },
+                    )
+                    NavigationBarItem(
+                        selected = tab == 2,
+                        onClick = { tab = 2 },
+                        icon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
+                        label = { Text("Trips") },
+                    )
+                }
             }
         },
     ) { pad ->
@@ -236,6 +252,14 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
                     scrollState = tripsScroll,
                     expandedTrips = expandedTrips,
                     onToggleExpanded = { id -> if (id in expandedTrips) expandedTrips.remove(id) else expandedTrips.add(id) },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            if (showSettings) {
+                SettingsScreen(
+                    vm,
+                    s,
+                    onBack = { showSettings = false },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
