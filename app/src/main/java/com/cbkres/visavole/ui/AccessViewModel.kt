@@ -3,6 +3,7 @@ package com.cbkres.visavole.ui
 import android.app.Application
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.cbkres.visavole.data.BackupManager
@@ -337,18 +338,34 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     private fun persist() {
         try {
             file.writeText(StateCodec.encode(PersistedState(primaryDocId, docs.toList(), trips.toList())))
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not persist state to $file", e)
         }
     }
 
     private fun readPersisted() {
+        val f = file
         try {
-            if (!file.exists()) return
-            val state = StateCodec.decode(file.readText())
+            if (!f.exists()) return
+            val state = StateCodec.decode(f.readText())
             primaryDocId = state.primaryDocId
             docs = state.docs.toMutableList()
             trips = state.trips.toMutableList()
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            // Never start empty on top of a file we could not read: the next persist() would
+            // overwrite it and the user's data would be gone for good. Quarantine it instead,
+            // so it can be inspected or recovered later.
+            Log.e(TAG, "Could not decode state file $f; quarantining", e)
+            val quarantine = File(f.parentFile, "${f.name}.corrupt-${System.currentTimeMillis()}")
+            if (f.renameTo(quarantine)) {
+                Log.w(TAG, "Quarantined unreadable state file as $quarantine")
+            } else {
+                Log.e(TAG, "Could not rename $f to $quarantine; starting with empty state")
+            }
         }
+    }
+
+    companion object {
+        private const val TAG = "AccessViewModel"
     }
 }

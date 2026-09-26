@@ -144,4 +144,50 @@ class StateCodecTest {
             // expected
         }
     }
+
+    @Test
+    fun corruptDocEntriesAreSkippedButValidDocsSurvive() {
+        // A non-object entry AND an object missing its "kind" field must both be skipped
+        // without taking the valid passport down with them.
+        val json = """
+            {"schemaVersion":3,"primaryDocId":"doc-passport",
+             "docs":[42,
+                     {"id":"doc-passport","label":"P","kind":"passport","iso2":"CZ","expiry":"2031-05-01"},
+                     {"id":"doc-broken","label":"B"}],
+             "trips":[]}
+        """.trimIndent()
+        val state = StateCodec.decode(json)
+        assertEquals(1, state.docs.size)
+        assertEquals("doc-passport", state.docs.single().id)
+        assertEquals("doc-passport", state.primaryDocId)
+    }
+
+    @Test
+    fun futureSchemaVersionIsRejected() {
+        // A file written by a NEWER app must not be misread: decode throws so the caller can
+        // quarantine the file (a downgraded app must never rewrite a newer format).
+        val json = """
+            {"schemaVersion":4,"primaryDocId":null,"docs":[],"trips":[]}
+        """.trimIndent()
+        try {
+            StateCodec.decode(json)
+            throw AssertionError("expected IllegalArgumentException for a future schemaVersion")
+        } catch (e: IllegalArgumentException) {
+            // expected
+        }
+    }
+
+    @Test
+    fun missingOrLegacySchemaVersionIsAccepted() {
+        // Only versions NEWER than the app are rejected; missing/older versions get a
+        // best-effort parse (the format is additive and this app has only ever written v3).
+        val json = """
+            {"primaryDocId":"doc-passport",
+             "docs":[{"id":"doc-passport","label":"P","kind":"passport","iso2":"CZ"}],
+             "trips":[]}
+        """.trimIndent()
+        val state = StateCodec.decode(json)
+        assertEquals(1, state.docs.size)
+        assertEquals("doc-passport", state.primaryDocId)
+    }
 }

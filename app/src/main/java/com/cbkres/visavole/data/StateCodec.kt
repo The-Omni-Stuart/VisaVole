@@ -39,14 +39,23 @@ object StateCodec {
         return root.toString()
     }
 
-    /** Decode persisted state. Tolerant of a partially corrupt file: malformed stops and trips
-     *  are skipped rather than failing the whole load. */
+    /** Decode persisted state. Tolerant of a partially corrupt file: malformed docs, stops and
+     *  trips are skipped rather than failing the whole load, so one bad entry can never wipe the
+     *  rest of the user's data. A [SCHEMA_VERSION] written by a NEWER app is rejected outright
+     *  (the caller quarantines the file) rather than risking a misread. */
     fun decode(text: String): PersistedState {
         val root = JSONObject(text)
+        if (root.optInt("schemaVersion", 0) > SCHEMA_VERSION) {
+            throw IllegalArgumentException(
+                "Unsupported schemaVersion ${root.getInt("schemaVersion")} (this app supports up to $SCHEMA_VERSION)",
+            )
+        }
         val primaryDocId = root.strOrNull("primaryDocId")
         val arr = root.optJSONArray("docs") ?: JSONArray()
         val list = mutableListOf<Document>()
-        for (i in 0 until arr.length()) list.add(jsonToDoc(arr.getJSONObject(i)))
+        for (i in 0 until arr.length()) {
+            runCatching { jsonToDoc(arr.getJSONObject(i)) }.getOrNull()?.let { list.add(it) }
+        }
         val tripArr = root.optJSONArray("trips") ?: JSONArray()
         val tripList = mutableListOf<Trip>()
         for (i in 0 until tripArr.length()) {
