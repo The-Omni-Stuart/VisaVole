@@ -206,6 +206,28 @@ class TripModelTest {
     }
 
     @Test
+    fun lapsedDeclaredGateCapsZoneEvenWhenPassportCoversCountry() {
+        // Regression: a stay runs on the document its stop declares. The passport covers both
+        // zone countries visa-free, so the best-document fallback shadows the lapsed visa and
+        // the zone would show OK — but the declared (lapsed) visa is what the stay is on.
+        val visa = gateVisa("2026-09-10") // 3 days past
+        val w = world(
+            baseline = mapOf(
+                "GB" to listOf(
+                    Corridor("GB", "DE", "visa-free", 90),
+                    Corridor("GB", "FR", "visa-free", 90),
+                ),
+            ),
+            stayRules = listOf(schengen),
+        )
+        val trips = listOf(trip("t1", stop("s1", "DE", today.minusDays(5), null, "v"))) // in use, on the visa
+        val calc = TripModel.calculate(trips, listOf(passport("GB"), visa), w, today)
+        val a = allowance(calc, "stay:schengen")
+        assertEquals(AllowanceStatus.DANGER, a.status)
+        assertEquals(0, a.remainingDays)
+    }
+
+    @Test
     fun residenceDocumentGetsItsOwnAllowanceSnapshot() {
         val residence = Document("r", "Residence", Custom(setOf("FR"), kind = "residence"), expiry = "2026-12-31")
         val calc = TripModel.calculate(emptyList(), listOf(passport("GB"), residence), world(stayRules = listOf(schengen)), today)

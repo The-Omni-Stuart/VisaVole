@@ -463,8 +463,12 @@ object TripModel {
     /**
      * The earliest date on which the document gating entry to any country of [rule] stops
      * authorising a stay — the day a stay in this zone stops being legal, regardless of the
-     * window. An in-use entry caps at the document's own expiry; a lapsed gate caps the window
-     * into the past (DANGER). Null when no held document documents the zone.
+     * window. A stay runs on the document its stop declares ([TripStop.documentId]): that
+     * document gates the stay even after it lapses (capping the window into the past → DANGER)
+     * and even where a passport could in principle cover the country — the declared document is
+     * what the stay is on. Stops without a declared document fall back to the best document held
+     * for the country, then its lapsed-gate counterpart. Null when no held document documents
+     * the zone.
      */
     private fun expiryCapFor(
         rule: StayRule,
@@ -473,18 +477,30 @@ object TripModel {
         asOf: LocalDate,
         trips: List<Trip>,
         statuses: Map<String, DocStatus>,
-    ): LocalDate? =
-        rule.countries
+    ): LocalDate? {
+        val docById = docs.associateBy { it.id }
+        return rule.countries
             .mapNotNull { country ->
-                val gate = AccessModel.bestDocumentId(country, docs, world, asOf, trips = trips, statuses = statuses)
-                    ?: AccessModel.gateDocumentId(country, docs, world, asOf, trips = trips, statuses = statuses)
-                gate?.let { id ->
-                    val status = statuses[id] ?: return@let null
-                    val doc = docs.firstOrNull { it.id == id } ?: return@let null
-                    gateCapDate(doc, status, docs)
-                }
+                val declared = trips
+                    .flatMap { it.stops }
+                    .filter { it.countryIso2 == country }
+                    .mapNotNull { it.documentId }
+                    .filter { docById.containsKey(it) }
+                    .toSet()
+                val gateIds = if (declared.isNotEmpty()) declared
+                else listOfNotNull(
+                    AccessModel.bestDocumentId(country, docs, world, asOf, trips = trips, statuses = statuses)
+                        ?: AccessModel.gateDocumentId(country, docs, world, asOf, trips = trips, statuses = statuses),
+                )
+                gateIds
+                    .mapNotNull { id ->
+                        val status = statuses[id] ?: return@mapNotNull null
+                        gateCapDate(docById.getValue(id), status, docs)
+                    }
+                    .minOrNull()
             }
             .minOrNull()
+    }
 
     /**
      * The day [doc] stops authorising a stay. A document whose entry is in progress
