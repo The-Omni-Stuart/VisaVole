@@ -87,6 +87,7 @@ import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import java.time.LocalDate
 import java.util.UUID
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -120,6 +121,20 @@ fun TripsScreen(
         AddButtonRow("Add trip") { showAdd = true }
         Spacer(Modifier.height(12.dp))
         val sections = ready.tripSections
+        // Every trip card's position in the LazyColumn below, keyed by trip id: the allowances item
+        // sits at 0, then each non-empty section adds a header before its cards. A ring tap centres
+        // its trip from here instead of re-deriving the header offsets by hand.
+        val tripIndex = remember(sections.upcoming, sections.current, sections.previous) {
+            val m = HashMap<String, Int>()
+            var i = 1
+            for (section in listOf(sections.upcoming, sections.current, sections.previous)) {
+                if (section.isEmpty()) continue
+                i += 1
+                section.forEachIndexed { n, t -> m[t.id] = i + n }
+                i += section.size
+            }
+            m
+        }
         // One scroll plane under the add button: the allowance section is the first item of the
         // same list as the trip sections (its horizontal card switcher keeps its own scroll + haze).
         val tripsListState = scrollState
@@ -145,23 +160,20 @@ fun TripsScreen(
                                 ?.let { id -> ready.trips.firstOrNull { t -> t.id == id } }
                             if (trip != null) {
                                 if (trip.id !in expandedTrips) onToggleExpanded(trip.id)
-                                var cursor = 1
-                                var target = -1
-                                for (section in listOf(sections.upcoming, sections.current, sections.previous)) {
-                                    val i = section.indexOfFirst { it.id == trip.id }
-                                    if (i >= 0) {
-                                        target = cursor + 1 + i
-                                        break
-                                    }
-                                    if (section.isNotEmpty()) cursor += 1 + section.size
-                                }
-                                if (target >= 0) {
+                                val target = tripIndex[trip.id]
+                                if (target != null) {
                                     // Fire the flash only once the centring scroll has settled, so it
                                     // lands on the trip wherever it sits in the list — not while the
                                     // card is still off-screen mid-scroll.
                                     scope.launch {
                                         tripsListState.animateItemToCenter(target, listViewportPx)
-                                        flashTrip = trip.id to ((flashTrip?.takeIf { it.first == trip.id }?.second ?: 0) + 1)
+                                        val n = (flashTrip?.takeIf { it.first == trip.id }?.second ?: 0) + 1
+                                        flashTrip = trip.id to n
+                                        // Clear the trigger once the ripple has had time to play (150 ms
+                                        // delay + 600 ms animation): a card re-entering the composition
+                                        // with the trigger still set would replay the flash.
+                                        delay(900)
+                                        if (flashTrip == (trip.id to n)) flashTrip = null
                                     }
                                 }
                             }

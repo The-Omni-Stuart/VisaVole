@@ -90,6 +90,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Days from [today] until [date]; null when unset. */
@@ -184,6 +185,23 @@ fun DocumentsScreen(
             }
             val active = ready.docs.filter { !statuses.getValue(it.id).expired }
             val archived = ready.docs.filter { statuses.getValue(it.id).expired }
+            // Every card's position in the LazyColumn below, keyed by doc id: the allowances item
+            // sits at 0, then each non-empty section adds a header before its cards. A ring tap
+            // centres its card from here instead of re-deriving the header offsets by hand.
+            val docIndex = remember(active, archived) {
+                val m = HashMap<String, Int>()
+                var i = 1
+                if (active.isNotEmpty()) {
+                    i += 1
+                    active.forEachIndexed { n, d -> m[d.id] = i + n }
+                    i += active.size
+                }
+                if (archived.isNotEmpty()) {
+                    i += 1
+                    archived.forEachIndexed { n, d -> m[d.id] = i + n }
+                }
+                m
+            }
             // The tab-top allowance display (the same one the Trips tab uses), fed from the
             // documents that actually have an expiry to watch: every visa, plus passports /
             // residence permits with under 24 months left.
@@ -246,18 +264,20 @@ fun DocumentsScreen(
                                 // card so the landing is obvious.
                                 val doc = ready.docs.firstOrNull { d -> d.id == snap.key.removePrefix("doc:") }
                                 if (doc != null) {
-                                    val index = when {
-                                        active.contains(doc) -> 2 + active.indexOf(doc)
-                                        archived.contains(doc) -> 2 + (if (active.isNotEmpty()) active.size + 1 else 0) + archived.indexOf(doc)
-                                        else -> -1
-                                    }
-                                    if (index >= 0) {
+                                    val index = docIndex[doc.id]
+                                    if (index != null) {
                                         // Fire the flash only once the centring scroll has settled, so it
                                         // lands on the card wherever it sits in the list — not while the
                                         // card is still off-screen mid-scroll.
                                         scope.launch {
                                             docsListState.animateItemToCenter(index, listViewportPx)
-                                            flashDoc = doc.id to ((flashDoc?.takeIf { it.first == doc.id }?.second ?: 0) + 1)
+                                            val n = (flashDoc?.takeIf { it.first == doc.id }?.second ?: 0) + 1
+                                            flashDoc = doc.id to n
+                                            // Clear the trigger once the ripple has had time to play (150 ms
+                                            // delay + 600 ms animation): a card re-entering the composition
+                                            // with the trigger still set would replay the flash.
+                                            delay(900)
+                                            if (flashDoc == (doc.id to n)) flashDoc = null
                                         }
                                     }
                                 }

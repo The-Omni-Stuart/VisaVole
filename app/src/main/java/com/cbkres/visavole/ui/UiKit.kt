@@ -235,19 +235,23 @@ fun CountryRow(
  * A one-shot ripple in the card-tap ripple's look, fired programmatically: whenever [trigger]
  * changes to a new non-zero value, a circle expands from the centre while fading out. Clipped to
  * [shape] so it never spills past the card's rounded corners; [startDelay] lets a list scroll
- * settle first so the flash lands on the arriving card.
+ * settle first so the flash lands on the arriving card. The caller must give this node a size —
+ * inside a Box use [androidx.compose.foundation.layout.BoxScope.matchParentSize], because in a
+ * lazy-list item a bare [Modifier.fillMaxSize] resolves to zero height.
  */
 @Composable
 internal fun RippleFlash(trigger: Int, shape: Shape, startDelay: Int = 0, modifier: Modifier = Modifier) {
-    if (trigger == 0) return
     val progress = remember { Animatable(0f) }
     LaunchedEffect(trigger) {
+        if (trigger == 0) return@LaunchedEffect
         if (startDelay > 0) delay(startDelay.toLong())
         progress.snapTo(0f)
         progress.animateTo(1f, animationSpec = tween(600, easing = FastOutSlowInEasing))
     }
     val alpha = (1f - progress.value) * 0.2f
-    if (alpha > 0.004f) {
+    // While idle the progress sits at 0 and the circle would be a full-alpha zero-radius dot —
+    // skip the draw pass entirely until an animation has actually started.
+    if (progress.value > 0f && alpha > 0.004f) {
         // The theme read is composable, so it happens outside the Canvas draw lambda.
         val flashColor = MaterialTheme.colorScheme.onSurface
         // 0.75 of the longer side beats half the diagonal for any aspect ratio, so at full
@@ -303,7 +307,9 @@ fun VisaListCard(
             }
             // Starts 150 ms after the screen has fired the trigger — which it does only once the
             // ring-tap centring scroll has settled, so the ripple plays on the landed card.
-            RippleFlash(flashTrigger, shape, startDelay = 150)
+            // matchParentSize, not fillMaxSize: inside a LazyColumn item the height constraint is
+            // unbounded, so a fillMaxSize overlay would collapse to zero height and never draw.
+            RippleFlash(flashTrigger, shape, startDelay = 150, modifier = Modifier.matchParentSize())
         }
     }
 }
