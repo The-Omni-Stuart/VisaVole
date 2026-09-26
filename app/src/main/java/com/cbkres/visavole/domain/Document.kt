@@ -35,7 +35,6 @@ data class Document(
     val id: String,
     val label: String,
     val kind: DocKind,
-    val countryNumber: String? = null,
     val expiry: String? = null, // valid to — ISO-8601 date (YYYY-MM-DD)
     val validFrom: String? = null, // valid from — ISO-8601 date (YYYY-MM-DD)
     val residenceClass: ResidenceClass? = null, // residence docs only (temporary / long-term / permanent)
@@ -53,7 +52,7 @@ fun passportDocument(
     expiry: String? = null,
     validFrom: String? = null,
     id: String = UUID.randomUUID().toString(),
-): Document = Document(id, "Passport · ${countryName ?: iso2}", DocKind.Passport(iso2), null, expiry, validFrom)
+): Document = Document(id, "Passport · ${countryName ?: iso2}", DocKind.Passport(iso2), expiry, validFrom)
 
 /** The document's entry type, if it carries one; passports and residence documents return null. */
 fun Document.entryType(): String? = when (val k = kind) {
@@ -70,7 +69,7 @@ fun Document.entryType(): String? = when (val k = kind) {
  */
 fun Document.duplicateSignature(): String = when (val k = kind) {
     is DocKind.Passport ->
-        "P|${k.iso2}|${countryNumber.orEmpty()}|${validFrom.orEmpty()}|${expiry.orEmpty()}"
+        "P|${k.iso2}|${validFrom.orEmpty()}|${expiry.orEmpty()}"
     is DocKind.Holding ->
         "H|${k.holdingId}|${k.entryType.orEmpty()}|${validFrom.orEmpty()}|${expiry.orEmpty()}"
     is DocKind.Custom ->

@@ -20,7 +20,6 @@ class StateCodecTest {
         "doc-passport",
         "Passport · Czech Republic",
         DocKind.Passport("CZ"),
-        null,
         "2031-05-01",
         "2021-05-01",
     )
@@ -29,7 +28,6 @@ class StateCodecTest {
         "doc-holding",
         "Schengen residence",
         DocKind.Holding("schengen-residence", "multiple"),
-        null,
         "2029-11-30",
         null,
         ResidenceClass.LONG_TERM,

@@ -228,12 +228,4 @@ data class WorldData(
         rule.id.isNotBlank() -> "stay:${rule.id}"
         else -> "stay:${rule.zoneName}"
     }
-
-    val stayRulesByCountry: Map<String, List<StayRule>> by lazy {
-        val out = HashMap<String, MutableList<StayRule>>()
-        for (rule in stayRules) {
-            for (c in rule.countries) out.getOrPut(c) { mutableListOf() }.add(rule)
-        }
-        out
-    }
 }

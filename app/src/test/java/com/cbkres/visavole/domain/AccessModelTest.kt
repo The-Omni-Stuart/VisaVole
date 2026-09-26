@@ -503,7 +503,7 @@ class AccessModelTest {
 
     // ---- expiry + Schengen travel-area (Bug A/B/C fixes) ----
 
-    private fun docEx(id: String, kind: DocKind, expiry: String?) = Document(id, id, kind, null, expiry, null)
+    private fun docEx(id: String, kind: DocKind, expiry: String?) = Document(id, id, kind, expiry, null)
 
     @Test fun travelBlocForPrefersVisaFreeOverFreedom() {
         val w = world(
@@ -768,7 +768,7 @@ class AccessModelTest {
     // ---- residence classes + benefit residence-minimum gating ----
 
     private fun residenceDoc(id: String, cls: ResidenceClass?) =
-        Document(id, id, Holding("schengen-residence"), null, null, null, cls)
+        Document(id, id, Holding("schengen-residence"), null, null, cls)
 
     private fun schengenWorld() = world(
         holdings = mapOf("schengen-residence" to DataHolding("schengen-residence", "Schengen/EU Residence", "residency", "EU")),
@@ -831,7 +831,7 @@ class AccessModelTest {
         val temp = AccessModel.compute(listOf(doc("d", Custom(setOf("CZ"), "eu", "residence", "schengen-residence"))), w)
         assertEquals(null, temp["BA"]) // default temporary < permanent
         val perm = AccessModel.compute(
-            listOf(Document("d", "d", Custom(setOf("CZ"), "eu", "residence", "schengen-residence"), null, null, null, ResidenceClass.PERMANENT)),
+            listOf(Document("d", "d", Custom(setOf("CZ"), "eu", "residence", "schengen-residence"), null, null, ResidenceClass.PERMANENT)),
             w,
         )
         assertEquals(VISA_FREE, perm["BA"]!!.level)
@@ -908,7 +908,7 @@ class AccessModelTest {
         assertEquals(ResidenceClass.PERMANENT, residenceDoc("d", ResidenceClass.PERMANENT).residenceClassFor(w))
         assertEquals(ResidenceClass.LONG_TERM, Document("s", "s", Holding("sg-visa")).residenceClassFor(w))
         assertEquals(ResidenceClass.TEMPORARY, Document("c", "c", Custom(setOf("CZ"), null, "residence")).residenceClassFor(w))
-        assertEquals(ResidenceClass.LONG_TERM, Document("c", "c", Custom(setOf("SG"), null, "residence"), null, null, null, ResidenceClass.LONG_TERM).residenceClassFor(w))
+        assertEquals(ResidenceClass.LONG_TERM, Document("c", "c", Custom(setOf("SG"), null, "residence"), null, null, ResidenceClass.LONG_TERM).residenceClassFor(w))
         assertNull(Document("c", "c", Custom(setOf("CZ"), null, "visa")).residenceClassFor(w))
     }
 }

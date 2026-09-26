@@ -150,6 +150,6 @@ object StateCodec {
         val validFrom = o.strOrNull("validFrom")
         val residenceClass = ResidenceClass.fromId(o.strOrNull("residenceClass"))
         val supersededBy = o.strOrNull("supersededBy")
-        return Document(o.getString("id"), o.getString("label"), kind, null, expiry, validFrom, residenceClass, supersededBy)
+        return Document(o.getString("id"), o.getString("label"), kind, expiry, validFrom, residenceClass, supersededBy)
     }
 }

@@ -145,11 +145,6 @@ object JdbcRepository {
         return out
     }
 
-    private fun intOrNull(rs: java.sql.ResultSet, col: String): Int? {
-        val v = rs.getInt(col)
-        return if (rs.wasNull()) null else v
-    }
-
     /** Parse a JSON array of ISO2 strings like `["AT", "BE"]` without a JSON library. */
     private fun iso2Array(json: String?): List<String> {
         if (json == null) return emptyList()

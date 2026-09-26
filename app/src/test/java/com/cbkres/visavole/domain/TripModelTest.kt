@@ -69,7 +69,7 @@ class TripModelTest {
 
     private fun trip(id: String, vararg stops: TripStop, note: String? = null) = Trip(id, stops.toList(), note)
 
-    private fun schengenDoc() = Document("v", "Visa", Holding("x", "single"), null, "2030-01-01")
+    private fun schengenDoc() = Document("v", "Visa", Holding("x", "single"), "2030-01-01")
 
     private fun schengenWorld(holdings: Map<String, DataHolding> = mapOf("x" to DataHolding("x", "X Visa", "short_term_visa", "US"))) =
         world(holdings = holdings, stayRules = listOf(schengen, ca4))
@@ -252,7 +252,7 @@ class TripModelTest {
 
     @Test
     fun doubleEntryUsageCountsSeparateEntries() {
-        val doc = Document("v", "Visa", Holding("x", "double"), null, "2030-01-01")
+        val doc = Document("v", "Visa", Holding("x", "double"), "2030-01-01")
         val trips = listOf(
             trip("t1", stop("s1", "US", today.minusDays(40), today.minusDays(36), "v")),
             trip("t2", stop("s2", "US", today.minusDays(12), today.minusDays(8), "v")),
@@ -266,7 +266,7 @@ class TripModelTest {
 
     @Test
     fun contiguousStopsUseTheSameEntry() {
-        val doc = Document("v", "Visa", Holding("x", "single"), null, "2030-01-01")
+        val doc = Document("v", "Visa", Holding("x", "single"), "2030-01-01")
         val trips = listOf(
             trip("t1", stop("s1", "US", today.minusDays(40), today.minusDays(36), "v")),
             trip("t2", stop("s2", "US", today.minusDays(35), today.minusDays(31), "v")),

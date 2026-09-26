@@ -32,7 +32,7 @@ class DocStatusTest {
         iso: String,
         expiry: String? = null,
         validFrom: String? = null,
-    ) = Document(id, "Passport · $iso", DocKind.Passport(iso), null, expiry, validFrom)
+    ) = Document(id, "Passport · $iso", DocKind.Passport(iso), expiry, validFrom)
 
     private fun visa(
         id: String,
@@ -45,7 +45,6 @@ class DocStatusTest {
         id,
         "Visa: ${countries.joinToString(",")}",
         DocKind.Custom(countries, null, "visa", null, entry),
-        null,
         expiry,
         validFrom,
         null,

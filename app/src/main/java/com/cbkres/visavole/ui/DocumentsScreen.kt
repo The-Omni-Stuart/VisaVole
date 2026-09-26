@@ -691,14 +691,14 @@ fun AddDocumentDialog(
             initHolding != null && customIso.isEmpty() -> {
                 val h = holdingChoice!!
                 val label = (world.holdings[h]?.name ?: h) + residenceClass.let { " · ${it.label}" }
-                Document(id, label, DocKind.Holding(h), null, exp, vfrom, residenceClass)
+                Document(id, label, DocKind.Holding(h), exp, vfrom, residenceClass)
             }
             else -> {
                 val names = customIso.joinToString(", ") { countries[it]?.name ?: it }.take(80)
                 val typeSuffix = effectiveHolding?.let { hid -> " (${world.holdings[hid]?.name ?: hid})" } ?: ""
                 val entry = if (docType == DocType.VISA) entryType else null
                 val rc = if (docType == DocType.RESIDENCE) residenceClass else null
-                Document(id, "${docType.label}: $names$typeSuffix", DocKind.Custom(customIso, effectiveBloc, docType.kind, effectiveHolding, entry), null, exp, vfrom, rc)
+                Document(id, "${docType.label}: $names$typeSuffix", DocKind.Custom(customIso, effectiveBloc, docType.kind, effectiveHolding, entry), exp, vfrom, rc)
             }
         }
     }

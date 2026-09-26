@@ -89,9 +89,9 @@ class DocumentTest {
         assertNotEquals(a.identityKey(), b.identityKey())
     }
 
-    @Test fun passportDatesAndNumberDoNotChangeIdentity() {
-        val a = Document("a", "Passport · GB", DocKind.Passport("GB"), countryNumber = "123", expiry = "2031-05-01", validFrom = "2021-05-01")
-        val b = Document("b", "Passport · GB", DocKind.Passport("GB"), countryNumber = "456", expiry = "2035-05-01", validFrom = "2022-01-01")
+    @Test fun passportDatesDoNotChangeIdentity() {
+        val a = Document("a", "Passport · GB", DocKind.Passport("GB"), expiry = "2031-05-01", validFrom = "2021-05-01")
+        val b = Document("b", "Passport · GB", DocKind.Passport("GB"), expiry = "2035-05-01", validFrom = "2022-01-01")
         assertEquals(a.identityKey(), b.identityKey())
     }
 

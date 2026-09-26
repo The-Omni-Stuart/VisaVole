@@ -41,10 +41,9 @@ class GuardTest {
     private fun passport(
         id: String,
         iso: String,
-        number: String? = null,
         expiry: String? = null,
         validFrom: String? = null,
-    ) = Document(id, "Passport · $iso", DocKind.Passport(iso), number, expiry, validFrom)
+    ) = Document(id, "Passport · $iso", DocKind.Passport(iso), expiry, validFrom)
 
     private fun visa(
         id: String,
@@ -56,7 +55,6 @@ class GuardTest {
         id,
         "Visa: ${countries.joinToString(",")}",
         DocKind.Custom(countries, null, "visa", null, entry),
-        null,
         expiry,
         validFrom,
     )
@@ -70,7 +68,6 @@ class GuardTest {
         id,
         "Residence: ${countries.joinToString(",")}",
         DocKind.Custom(countries, null, "residence", null, null),
-        null,
         expiry,
         validFrom,
     )
@@ -98,8 +95,8 @@ class GuardTest {
     // ------------------------------------------------------------------
 
     @Test fun addExactDuplicateIsBlocked() {
-        val p1 = passport("p1", "FR", "123", "2028-01-01", "2018-01-01")
-        val dup = passport("p2", "FR", "123", "2028-01-01", "2018-01-01")
+        val p1 = passport("p1", "FR", "2028-01-01", "2018-01-01")
+        val dup = passport("p2", "FR", "2028-01-01", "2018-01-01")
         val r = add(dup, listOf(p1))
         assertFalse(r.canProceed)
         assertTrue("codes=${codes(r)}", codes(r).contains("doc.duplicate"))
@@ -152,9 +149,9 @@ class GuardTest {
     }
 
     @Test fun changingInUseDatesOnlyIsAllowed() {
-        val p1 = passport("p1", "FR", "123", "2028-01-01")
+        val p1 = passport("p1", "FR", "2028-01-01")
         val t = trip("t1", stop("s1", "DE", LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 10), "p1"))
-        val candidate = passport("p1", "FR", "456", "2029-01-01", "2019-01-01")
+        val candidate = passport("p1", "FR", "2029-01-01", "2019-01-01")
         val r = update(candidate, p1, listOf(t))
         assertTrue("codes=${codes(r)}", r.canProceed)
         assertFalse(codes(r).contains("doc.inUse.identity"))
@@ -368,13 +365,13 @@ class GuardTest {
     /** [n] valid passports spread over the fixture countries so no per-country count reaches the cap. */
     private fun validPassports(n: Int): List<Document> {
         val isos = listOf("FR", "DE", "CA")
-        return (1..n).map { i -> passport("p$i", isos[(i - 1) % 3], "N$i", "2028-01-01") }
+        return (1..n).map { i -> passport("p$i", isos[(i - 1) % 3], "2028-%02d-01".format(i)) }
     }
 
     @Test fun eleventhValidPassportIsBlocked() {
         // 10 valid passports (FR 3, DE 3, CA 4) so only the total cap, not the per-country one, fires.
-        val existing = validPassports(9) + passport("pCA4", "CA", "NCA4", "2028-01-01")
-        val candidate = passport("pFR4", "FR", "NFR4", "2028-01-01")
+        val existing = validPassports(9) + passport("pCA4", "CA", "2028-12-01")
+        val candidate = passport("pFR4", "FR", "2028-10-01")
         val r = add(candidate, existing)
         assertFalse(r.canProceed)
         assertTrue("codes=${codes(r)}", codes(r).contains("doc.cap.passportTotal"))
@@ -383,7 +380,7 @@ class GuardTest {
 
     @Test fun tenthValidPassportIsAllowed() {
         val existing = validPassports(9)
-        val candidate = passport("pFR4", "FR", "NFR4", "2028-01-01")
+        val candidate = passport("pFR4", "FR", "2028-10-01")
         val r = add(candidate, existing)
         assertTrue("codes=${codes(r)}", r.canProceed)
         assertFalse(codes(r).contains("doc.cap.passportTotal"))
@@ -391,16 +388,16 @@ class GuardTest {
 
     @Test fun expiredPassportDoesNotCountTowardsCap() {
         // 9 valid + 1 expired FR: counting the expired one would reach the per-country cap (4).
-        val existing = validPassports(9) + passport("pX", "FR", "NX", "2025-01-01")
-        val candidate = passport("pFR4", "FR", "NFR4", "2028-01-01")
+        val existing = validPassports(9) + passport("pX", "FR", "2025-01-01")
+        val candidate = passport("pFR4", "FR", "2028-10-01")
         val r = add(candidate, existing)
         assertTrue("codes=${codes(r)}", r.canProceed)
     }
 
     @Test fun fifthPassportForCountryIsBlocked() {
-        val existing = (1..4).map { passport("p$it", "FR", "N$it", "2028-01-01") } +
-            (1..3).map { passport("d$it", "DE", "N$it", "2028-01-01") }
-        val candidate = passport("p5", "FR", "N5", "2028-01-01")
+        val existing = (1..4).map { passport("p$it", "FR", "2028-%02d-01".format(it)) } +
+            (1..3).map { passport("d$it", "DE", "2028-%02d-01".format(it)) }
+        val candidate = passport("p5", "FR", "2028-05-01")
         val r = add(candidate, existing)
         assertFalse(r.canProceed)
         assertTrue("codes=${codes(r)}", codes(r).contains("doc.cap.passportPerCountry"))
@@ -428,7 +425,7 @@ class GuardTest {
 
     @Test fun expiredCandidateIsNotSubjectToCaps() {
         val existing = validPassports(10)
-        val candidate = passport("pX", "FR", "NX", "2025-01-01")
+        val candidate = passport("pX", "FR", "2025-01-01")
         val r = add(candidate, existing)
         assertFalse(codes(r).contains("doc.cap.passportTotal"))
     }
