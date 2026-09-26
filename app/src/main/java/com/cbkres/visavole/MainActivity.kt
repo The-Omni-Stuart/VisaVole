@@ -312,15 +312,18 @@ private fun MapTab(
     var legendH by remember { mutableStateOf(0.dp) }
     val selName = selected?.let { iso -> s.world.countries[iso]?.name ?: s.geometry.countries[iso]?.name ?: iso }
     val cardVisible = selected != null && selName != null
+    // The bottom padding the map's floating UI keeps between itself and the card/legend: the
+    // measured card height plus 24dp while a card is up, the legend height plus 8dp otherwise.
+    val settledBottomPadding = if (cardVisible) cardH + 24.dp else legendH + 8.dp
     // Animated (same spring as the card slide). The map canvas is never shrunk for the card —
     // the card slides over the full-bleed map — so no dark band can appear between the map
     // edge and the card while the fixed 420dp drop exceeds the card's actual height. The
-    // floating zoom controls instead ride cardH above the bottom, keeping them 24dp above the
-    // card's top edge; the map's focus-fit reads the same padding, so the selected country is
-    // centred above the card, not underneath it.
+    // floating zoom controls ride cardH above the bottom, keeping them 24dp above the card's
+    // top edge. The map's focus-fit uses the SETTLED padding instead, so its centre-on-country
+    // target is stable while the card slides in (see WorldMapCanvas).
     val cardAnimSpec = spring<Dp>(Spring.DampingRatioNoBouncy, Spring.StiffnessMedium)
     val controlsBottomPadding by animateDpAsState(
-        targetValue = if (cardVisible) cardH + 24.dp else legendH + 8.dp,
+        targetValue = settledBottomPadding,
         animationSpec = cardAnimSpec,
         label = "controlsBottomPadding",
     )
@@ -337,6 +340,7 @@ private fun MapTab(
             homeCountries = s.homeCountries,
             ownVisaCountries = s.ownVisaCountries,
             controlsBottomPadding = controlsBottomPadding,
+            centeringBottomPadding = settledBottomPadding,
             topInset = searchBarH,
             modifier = Modifier.fillMaxSize(),
         )
@@ -371,21 +375,31 @@ private fun MapTab(
         ) {
             if (selected != null) {
                 val selectedAccess = s.access[selected]
-                val stayRule = when {
-                    selected in s.homeCountries -> null
-                    selectedAccess?.level == AccessLevel.RESIDENCE -> null // you live here — no short-stay limit
-                    else -> s.world.stayRuleFor(selected, s.homeCountries)
+                // The springs above recompose this screen every frame while the card slides, so
+                // the per-selection domain lookups are remembered rather than recomputed inline.
+                val stayRule = remember(selected, s.homeCountries, s.access, s.world) {
+                    when {
+                        selected in s.homeCountries -> null
+                        s.access[selected]?.level == AccessLevel.RESIDENCE -> null // you live here — no short-stay limit
+                        else -> s.world.stayRuleFor(selected, s.homeCountries)
+                    }
+                }
+                val breakdown = remember(selected, s.docs, s.world, s.trips) {
+                    AccessModel.breakdownFor(selected, s.docs, s.world, trips = s.trips)
+                }
+                val daysLabel = remember(selectedAccess, stayRule) {
+                    AccessModel.stayLabelFor(selectedAccess, stayRule)
                 }
                 CountryDetailCard(
                     countryName = selName!!,
                     access = selectedAccess,
-                    breakdown = AccessModel.breakdownFor(selected, s.docs, s.world, trips = s.trips),
+                    breakdown = breakdown,
                     onDismiss = { pick(null) },
                     modifier = Modifier.graphicsLayer { translationY = cardDrop.toPx() },
                     isHome = selected in s.homeCountries,
                     isOwnCovered = selected in s.ownVisaCountries,
                     homePassport = if (selected in s.homeCountries) s.world.countries[selected]?.name else null,
-                    daysLabel = AccessModel.stayLabelFor(selectedAccess, stayRule),
+                    daysLabel = daysLabel,
                 )
             }
         }

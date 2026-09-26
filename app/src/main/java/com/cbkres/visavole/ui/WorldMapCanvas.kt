@@ -205,16 +205,22 @@ internal fun WorldMapCanvas(
     homeCountries: Set<String> = emptySet(),
     ownVisaCountries: Set<String> = emptySet(),
     controlsBottomPadding: Dp = 24.dp,
+    centeringBottomPadding: Dp = 24.dp,
     topInset: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
     val topInsetPx = with(density) { topInset.toPx() }
     var controlsH by remember { mutableStateOf(0.dp) }
-    // When a country is selected, keep the tap-to-zoom target above the floating zoom controls so
-    // the country is not visually “inside” the control box.
-    val controlsBottomInsetPx = if (selected != null) {
-        with(density) { (controlsH + controlsBottomPadding + 12.dp).toPx() }
+    // The bottom inset the centre-on-country tween aims for: the controls' height plus the
+    // SETTLED bottom padding (the measured card height), so the country is not visually
+    // “inside” the control box or the card. It must not be derived from the animated padding —
+    // that changes every frame while the card slides in, and keying the effect on it would
+    // cancel and restart the 350 ms tween on every one of those frames. The settled value
+    // changes at most once per selection (when the card is first measured), so the tween runs
+    // to completion.
+    val centeringBottomInsetPx = if (selected != null) {
+        with(density) { (controlsH + centeringBottomPadding + 12.dp).toPx() }
     } else {
         0f
     }
@@ -241,13 +247,13 @@ internal fun WorldMapCanvas(
     val baseScale = if (canvasSize.width > 0f) baseScaleFor(geometry, canvasSize.width, canvasSize.height) else 1f
 
     // Smoothly centre and zoom in when a country becomes selected.
-    LaunchedEffect(selected, canvasSize, topInsetPx, controlsBottomInsetPx) {
+    LaunchedEffect(selected, canvasSize, topInsetPx, centeringBottomInsetPx) {
         if (selected == null || canvasSize.width <= 0f) return@LaunchedEffect
         val f = focus[selected] ?: return@LaunchedEffect
         val w = canvasSize.width
         val h = canvasSize.height
         val top = topInsetPx.coerceIn(0f, h)
-        val bottom = controlsBottomInsetPx.coerceIn(0f, h - top)
+        val bottom = centeringBottomInsetPx.coerceIn(0f, h - top)
         val visibleH = (h - top - bottom).coerceAtLeast(1f)
         val bs = baseScaleFor(geometry, w, h)
         val targetZoom = (minOf(w * 0.75f / f.bbox.w, visibleH * 0.75f / f.bbox.h) / bs).coerceIn(MIN_ZOOM, MAX_ZOOM)
