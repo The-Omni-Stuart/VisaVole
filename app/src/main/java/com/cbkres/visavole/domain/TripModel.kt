@@ -78,10 +78,11 @@ object TripModel {
         docs: List<Document>,
         world: WorldData,
         today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        statuses: Map<String, DocStatus>? = null,
     ): TripCalculation {
         val tripSections = sections(trips, today)
         val entryStatus = entryStatusFor(docs, trips, world, today)
-        val docStatuses = DocStatus.all(docs, trips, world, today)
+        val docStatuses = statuses ?: DocStatus.all(docs, trips, world, today)
         val zoneAllowances = zoneUsages(trips, docs, world, today).mapNotNull { (key, usage) ->
             zoneSnapshot(key, usage, world, today, docs, trips, docStatuses)
         }
@@ -128,10 +129,11 @@ object TripModel {
         trips: List<Trip>,
         world: WorldData,
         today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        statuses: Map<String, DocStatus>? = null,
     ): List<Document> {
-        val statuses = DocStatus.all(docs, trips, world, today)
+        val all = statuses ?: DocStatus.all(docs, trips, world, today)
         return docs.map { doc ->
-            statuses[doc.id]?.effectiveExpiry?.let { doc.copy(expiry = it.toString()) } ?: doc
+            all[doc.id]?.effectiveExpiry?.let { doc.copy(expiry = it.toString()) } ?: doc
         }
     }
 
@@ -474,8 +476,8 @@ object TripModel {
     ): LocalDate? =
         rule.countries
             .mapNotNull { country ->
-                val gate = AccessModel.bestDocumentId(country, docs, world, asOf, trips = trips)
-                    ?: AccessModel.gateDocumentId(country, docs, world, asOf, trips = trips)
+                val gate = AccessModel.bestDocumentId(country, docs, world, asOf, trips = trips, statuses = statuses)
+                    ?: AccessModel.gateDocumentId(country, docs, world, asOf, trips = trips, statuses = statuses)
                 gate?.let { id ->
                     val status = statuses[id] ?: return@let null
                     val doc = docs.firstOrNull { it.id == id } ?: return@let null

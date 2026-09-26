@@ -20,6 +20,7 @@ import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.DocumentMigration
 import com.cbkres.visavole.domain.DocKind
+import com.cbkres.visavole.domain.DocStatus
 import com.cbkres.visavole.domain.GuardAction
 import com.cbkres.visavole.domain.GuardContext
 import com.cbkres.visavole.domain.GuardEngine
@@ -140,12 +141,16 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         val w = world ?: return
         today = LocalDate.now(ZoneOffset.UTC)
         val homeCountries = AccessModel.homeCountries(docs)
+        // The unified document validity, computed once per publish and threaded through the
+        // derivations below — each of which used to recompute it per document (~5× per document
+        // per publish, plus 2× per zone country inside the allowance caps).
+        val statuses = DocStatus.all(docs, trips.toList(), w, today)
         val ownVisaCountries =
-            if (homeCountries.isNotEmpty()) AccessModel.ownVisaCountries(docs, w, trips = trips.toList()) else emptySet()
-        val effectiveDocs = if (homeCountries.isNotEmpty()) TripModel.effectiveDocs(docs, trips, w) else docs
+            if (homeCountries.isNotEmpty()) AccessModel.ownVisaCountries(docs, w, today, trips = trips.toList(), statuses = statuses) else emptySet()
+        val effectiveDocs = if (homeCountries.isNotEmpty()) TripModel.effectiveDocs(docs, trips, w, today, statuses = statuses) else docs
         val access =
-            if (homeCountries.isNotEmpty()) AccessModel.compute(effectiveDocs, w, today, trips = trips.toList()) else emptyMap()
-        val calc = if (homeCountries.isNotEmpty()) TripModel.calculate(trips, docs, w, today)
+            if (homeCountries.isNotEmpty()) AccessModel.compute(effectiveDocs, w, today, trips = trips.toList(), statuses = statuses) else emptyMap()
+        val calc = if (homeCountries.isNotEmpty()) TripModel.calculate(trips, docs, w, today, statuses = statuses)
         else TripCalculation(TripSections(emptyList(), emptyList(), emptyList()), emptyList(), emptyMap())
         _state.value = AppState.Ready(
             homeCountries = homeCountries,

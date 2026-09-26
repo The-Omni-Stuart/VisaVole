@@ -78,6 +78,16 @@ object AccessModel {
         trips: List<Trip> = emptyList(),
     ): Boolean = DocStatus.of(doc, docs, trips, world, today).expired
 
+    /** [isExpired] that reuses a precomputed [DocStatus.all] map when one is provided. */
+    private fun expiredOf(
+        doc: Document,
+        docs: List<Document>,
+        world: WorldData,
+        today: LocalDate,
+        trips: List<Trip>,
+        statuses: Map<String, DocStatus>?,
+    ): Boolean = statuses?.get(doc.id)?.expired ?: isExpired(doc, docs, world, today, trips)
+
     /** A document whose `validFrom` lies after [today] is not usable at [today] yet. */
     internal fun notYetValid(doc: Document, today: LocalDate): Boolean {
         val from = doc.validFrom?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return false
@@ -194,9 +204,10 @@ object AccessModel {
         world: WorldData,
         today: LocalDate = LocalDate.now(ZoneOffset.UTC),
         trips: List<Trip> = emptyList(),
+        statuses: Map<String, DocStatus>? = null,
     ): Set<String> =
         docs.flatMap { d ->
-            if (isExpired(d, docs, world, today, trips)) return@flatMap emptyList()
+            if (expiredOf(d, docs, world, today, trips, statuses)) return@flatMap emptyList()
             when (val k = d.kind) {
                 is Passport -> emptyList()
                 is Holding -> {
@@ -284,7 +295,8 @@ object AccessModel {
         today: LocalDate = LocalDate.now(ZoneOffset.UTC),
         primaryId: String? = null,
         trips: List<Trip> = emptyList(),
-    ): String? = bestDocumentIdCore(dest, docs, world, today, primaryId, trips, ignoreExpiry = false)
+        statuses: Map<String, DocStatus>? = null,
+    ): String? = bestDocumentIdCore(dest, docs, world, today, primaryId, trips, ignoreExpiry = false, statuses = statuses)
 
     /**
      * The strongest held document with a documented rule for [dest], regardless of validity — the
@@ -298,7 +310,8 @@ object AccessModel {
         world: WorldData,
         today: LocalDate = LocalDate.now(ZoneOffset.UTC),
         trips: List<Trip> = emptyList(),
-    ): String? = bestDocumentIdCore(dest, docs, world, today, primaryId = null, trips = trips, ignoreExpiry = true)
+        statuses: Map<String, DocStatus>? = null,
+    ): String? = bestDocumentIdCore(dest, docs, world, today, primaryId = null, trips = trips, ignoreExpiry = true, statuses = statuses)
 
     private fun bestDocumentIdCore(
         dest: String,
@@ -308,10 +321,11 @@ object AccessModel {
         primaryId: String?,
         trips: List<Trip>,
         ignoreExpiry: Boolean,
+        statuses: Map<String, DocStatus>? = null,
     ): String? {
         val evaluated = docs
             .mapNotNull { doc ->
-                val expired = isExpired(doc, docs, world, today, trips)
+                val expired = expiredOf(doc, docs, world, today, trips, statuses)
                 if (doc.kind !is Passport && !ignoreExpiry && expired) return@mapNotNull null
                 val candidates = when (val k = doc.kind) {
                     is Passport -> passportCandidates(k.iso2, world, expired)
@@ -370,12 +384,18 @@ object AccessModel {
      * Effective access for every destination, given the held [docs] (passports included). [today]
      * drives expiry: a lapsed visa/residence/permit grants nothing, and an expired passport keeps
      * only its home country + freedom-of-movement bloc(s).
+     *
+     * [statuses] is a precomputed `DocStatus.all` for the same (docs, trips, world, today),
+     * reused instead of recomputing each document's status. A map computed for the *unclamped*
+     * docs is equally valid here: this method only reads `.expired`, which is identical for a
+     * doc with its expiry clamped to its effective expiry.
      */
     fun compute(
         docs: List<Document>,
         world: WorldData,
         today: LocalDate = LocalDate.now(ZoneOffset.UTC),
         trips: List<Trip> = emptyList(),
+        statuses: Map<String, DocStatus>? = null,
     ): Map<String, Access> {
         val result = LinkedHashMap<String, Access>()
         for (doc in docs) {
@@ -384,13 +404,13 @@ object AccessModel {
             when (val k = doc.kind) {
                 is Passport -> {
                     // Pure best-of across passports; an expired one still grants home + freedom blocs.
-                    for ((dest, access) in passportCandidates(k.iso2, world, isExpired(doc, docs, world, today, trips))) {
+                    for ((dest, access) in passportCandidates(k.iso2, world, expiredOf(doc, docs, world, today, trips, statuses))) {
                         merge(result, dest, access)
                     }
                 }
                 else -> {
                     // A lapsed document (visa / residence / permit) no longer unlocks anything.
-                    if (isExpired(doc, docs, world, today, trips)) continue
+                    if (expiredOf(doc, docs, world, today, trips, statuses)) continue
                     for ((dest, access) in documentCandidates(doc, world)) merge(result, dest, access)
                 }
             }
