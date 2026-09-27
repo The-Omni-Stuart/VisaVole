@@ -3,10 +3,28 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URI
 import java.security.MessageDigest
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+}
+
+// Release signing: the keystore lives OUTSIDE the repo (see the keystore.properties
+// path) and is referenced by a gitignored keystore.properties. Without it, release
+// artifacts are built unsigned (CI can inject it via secrets).
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties: Properties? = if (keystorePropertiesFile.exists()) {
+    val props = Properties()
+    val stream = keystorePropertiesFile.inputStream()
+    try {
+        props.load(stream)
+    } finally {
+        stream.close()
+    }
+    props
+} else {
+    null
 }
 
 android {
@@ -23,13 +41,26 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (keystoreProperties != null) {
+            create("release") {
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = keystoreProperties?.let { signingConfigs.getByName("release") }
         }
     }
     compileOptions {
@@ -39,13 +70,13 @@ android {
     buildFeatures {
         compose = true
     }
-    aaptOptions {
+    androidResources {
         // Keep the bundled SQLite DB stored (uncompressed) so it can be opened via a file
         // descriptor and its size compared on launch to detect bundled-data refreshes.
-        noCompress("db")
+        noCompress += "db"
         // Keep the binary world geometry uncompressed so first launch can read it without APK
         // decompression.
-        noCompress("bin")
+        noCompress += "bin"
     }
 }
 
@@ -179,10 +210,7 @@ tasks.register("updateVisaDb") {
     }
 }
 
-tasks.named("preBuild") {
-    dependsOn("updateVisaDb")
-}
-
-tasks.withType<Test>().configureEach {
-    dependsOn("updateVisaDb")
-}
+// updateVisaDb is OPT-IN: it fetches from the network and can overwrite the committed
+// asset, so it is deliberately NOT wired into preBuild/Test — builds and tests run
+// hermetically against the committed visa_data.db. Refresh manually with:
+//   ./gradlew updateVisaDb

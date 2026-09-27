@@ -1,14 +1,7 @@
 *.iml
 .gradle
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-/.idea/inspectionProfiles/
-/.idea/vcs.xml
+/.idea/
 /icon_temp/
 .DS_Store
 /build
@@ -19,5 +12,17 @@ local.properties
 
 .kotlin/
 
+# Large map source shapefiles (regenerated from Natural Earth, not shipped)
+/tools/data/admin0/
+
+# Release signing: the keystore lives outside the repo; these props reference it.
+# NEVER commit keystore.properties or any *.jks / *.keystore.
+keystore.properties
+*.jks
+*.keystore
+
 # Local working notes / bug tracker (not committed)
 issues.md
+centralised-guard.md
+migration-audit-report.md
+implementation-trip-tracker.md

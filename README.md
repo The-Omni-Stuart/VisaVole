@@ -30,7 +30,13 @@ From the repository root:
 ./gradlew :app:assembleDebug
 ```
 
-The build automatically fetches the latest [VisaDB](https://github.com/The-Omni-Stuart/VisaDB) release and refreshes the bundled database when its SHA-256 changes.
+The bundled database is committed to the repository, so builds and tests are
+fully offline. To refresh it from the latest [VisaDB](https://github.com/The-Omni-Stuart/VisaDB)
+release (and commit the refreshed `visa_data.db` + `visa_data.db.sha256` together):
+
+```bash
+./gradlew :app:updateVisaDb
+```
 
 Install the debug APK:
 
@@ -59,6 +65,14 @@ python3 tools/gen_robinson2.py
 ```
 
 The generator expects the project’s local shapefile data and Python geometry dependencies to be available.
+
+## Data & geometry credits
+
+- **Visa rules** — bundled from [VisaDB](https://github.com/The-Omni-Stuart/VisaDB)
+  (CC BY-SA 4.0), refreshed via `./gradlew :app:updateVisaDb`.
+- **Map geometry** — country polygons derived from [Natural Earth](https://www.naturalearthdata.com/)
+  public-domain admin-0 shapes (see `tools/data/`), projected to the Robinson
+  projection by `tools/gen_robinson2.py`.
 
 ## License
 

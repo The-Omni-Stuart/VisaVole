@@ -21,11 +21,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: "25"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
@@ -39,8 +39,10 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Run unit tests and build debug APK
-        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace
+      - name: Run unit tests, lint and build debug APK
+        # Tests run hermetically against the committed visa_data.db — the
+        # network updateVisaDb task is opt-in (./gradlew updateVisaDb).
+        run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
 
       - name: Extract version name
         id: version
@@ -69,5 +71,55 @@ jobs:
           generate_release_notes: true
           files: |
             VisaVole-*.apk
+            VisaVole-*.aab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release:
+    name: Build signed AAB
+    # Opt-in: set the repo VARIABLE RELEASE_ENABLED to "true" and add the
+    # secrets RELEASE_KEYSTORE_BASE64 (base64 of the .jks) and
+    # RELEASE_KEYSTORE_PASSWORD before it runs.
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') && vars.RELEASE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Restore release keystore
+        run: |
+          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > visavole-release.jks
+          printf 'storeFile=visavole-release.jks\nstorePassword=%s\nkeyAlias=visavole\nkeyPassword=%s\n' \
+            "${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" \
+            "${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" > keystore.properties
+
+      - name: Build signed AAB
+        run: ./gradlew :app:bundleRelease --stacktrace
+
+      - name: Rename AAB
+        run: |
+          cp app/build/outputs/bundle/release/app-release.aab "VisaVole-${{ needs.build.outputs.name }}.aab"
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VisaVole-release-aab
+          path: VisaVole-*.aab
+          if-no-files-found: error
+
+      - name: Attach AAB to the tag release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: VisaVole-*.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

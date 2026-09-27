@@ -144,6 +144,15 @@ fun SettingsScreen(
                     modifier = Modifier.clickable { openUrl(context, LICENSE_URL) },
                 )
             }
+            Spacer(Modifier.height(16.dp))
+            val version = runCatching {
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            }.getOrDefault("dev")
+            Text(
+                "Version $version",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
     }
 
     val pending = pendingRestore
@@ -174,6 +183,10 @@ fun SettingsScreen(
 }
 
 /** The app icon, resolved from the manifest at runtime so it always matches what's installed. */
+// Suppressing the Compose "resource via LocalContext" rule on purpose: we rasterize the
+// manifest icon (adaptive icons can't be loaded through painterResource), and the icon
+// resource ID is fixed for the lifetime of the installed app, so no recomposition risk.
+@Suppress("LocalContextGetResourceValueCall")
 @Composable
 private fun AppIcon() {
     val context = LocalContext.current
