@@ -100,6 +100,42 @@ fun HazeBox(
     }
 }
 
+/**
+ * [HazeBox] for a [LazyListState] that reads the alphas from the scroll state ITSELF: the
+ * per-frame layout reads then invalidate only the haze edges, not the whole surrounding
+ * screen — otherwise every visible card recomposes on every scroll frame.
+ */
+@Composable
+fun HazeBox(
+    scrollState: LazyListState,
+    color: Color,
+    horizontal: Boolean = false,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val (start, end) = scrollState.hazeAlphas()
+    Box(modifier) {
+        content()
+        HazeEdges(start, end, color, horizontal, modifier = Modifier.matchParentSize())
+    }
+}
+
+/** [HazeBox] for a classic [ScrollState]; see the [LazyListState] overload. */
+@Composable
+fun HazeBox(
+    scrollState: ScrollState,
+    color: Color,
+    horizontal: Boolean = false,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val (start, end) = scrollState.hazeAlphas()
+    Box(modifier) {
+        content()
+        HazeEdges(start, end, color, horizontal, modifier = Modifier.matchParentSize())
+    }
+}
+
 /** Start/end haze opacity for a classic [ScrollState]. */
 fun ScrollState.hazeAlphas(): Pair<Float, Float> {
     val start = (value / HAZE_RAMP).coerceIn(0f, 1f)

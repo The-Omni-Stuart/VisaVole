@@ -228,6 +228,44 @@ class TripModelTest {
     }
 
     @Test
+    fun pastTripDeclaredDocDoesNotCapCurrentZone() {
+        // Regression (P1-5): a document declared on a PAST stay must not cap today's zone. The
+        // past trip exhausted single-entry visa V; the current open stay is on the passport,
+        // which covers the zone visa-free — the ring must show the full window, not 0/DANGER.
+        val visa = Document("v", "Visa", Custom(setOf("DE", "FR"), kind = "visa", entryType = "single"))
+        val w = world(
+            baseline = mapOf(
+                "GB" to listOf(
+                    Corridor("GB", "DE", "visa-free", 90),
+                    Corridor("GB", "FR", "visa-free", 90),
+                ),
+            ),
+            stayRules = listOf(schengen),
+        )
+        val trips = listOf(
+            trip("t1", stop("s1", "DE", today.minusDays(30), today.minusDays(20), "v")), // past stay, exhausted
+            trip("t2", stop("s2", "DE", today.minusDays(2), null)),                       // open stay, on passport
+        )
+        val calc = TripModel.calculate(trips, listOf(passport("GB"), visa), w, today)
+        val a = allowance(calc, "stay:schengen")
+        assertEquals(AllowanceStatus.OK, a.status)
+        assertEquals(76, a.remainingDays) // 90 - 11 past days - 3 current days
+    }
+
+    @Test
+    fun inProgressEntryWithoutDateExpiryKeepsFullWindow() {
+        // Regression (P1-6): a single-entry visa with NO date expiry, mid-entry, must not cap
+        // the zone at 0 — exhaustion has not happened, the entry count limits re-entries only.
+        val visa = Document("v", "Visa", Custom(setOf("DE", "FR"), kind = "visa", entryType = "single"))
+        val w = world(stayRules = listOf(schengen))
+        val trips = listOf(trip("t1", stop("s1", "DE", today.minusDays(2), null, "v")))
+        val calc = TripModel.calculate(trips, listOf(passport("GB"), visa), w, today)
+        val a = allowance(calc, "stay:schengen")
+        assertEquals(AllowanceStatus.OK, a.status)
+        assertEquals(87, a.remainingDays) // 90 - 3 days used
+    }
+
+    @Test
     fun residenceDocumentGetsItsOwnAllowanceSnapshot() {
         val residence = Document("r", "Residence", Custom(setOf("FR"), kind = "residence"), expiry = "2026-12-31")
         val calc = TripModel.calculate(emptyList(), listOf(passport("GB"), residence), world(stayRules = listOf(schengen)), today)

@@ -227,8 +227,9 @@ fun DocumentsScreen(
             val passportIsoTotal = remember(ready.docs) { passportCountsByIso(ready.docs) }
             val passportNumber = remember(ready.docs) { passportNumbers(ready.docs) }
             val docsListState = scrollState
-            val (docsTop, docsEnd) = docsListState.hazeAlphas()
-            HazeBox(docsTop, docsEnd, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
+            // State-taking overload: the per-frame haze read stays inside HazeBox, so scrolling
+            // recomposes only the haze edges — not the whole screen and every visible card (P1-14).
+            HazeBox(docsListState, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
                 LazyColumn(
                     state = docsListState,
                     modifier = Modifier
@@ -670,9 +671,14 @@ fun AddDocumentDialog(
         }
     }
 
+    // `holdingChoice` is null=auto, ""=the "No known type (custom only)" option, else an id.
+    // With no countries selected, "" would build a broken DocKind.Holding("") (empty title,
+    // matches nothing) — so saving a holding doc requires a real holding choice, and picking
+    // "no known type" forces a country selection (which saves as a custom doc instead).
     val valid = when {
         docType == DocType.PASSPORT -> lastIso != null && customIso.isNotEmpty()
-        initHolding != null && customIso.isEmpty() -> docType == DocType.RESIDENCE && holdingChoice != null
+        initHolding != null && customIso.isEmpty() -> docType == DocType.RESIDENCE &&
+            holdingChoice != null && holdingChoice != ""
         docType == DocType.RESIDENCE || docType == DocType.VISA -> customIso.isNotEmpty()
         else -> false
     }

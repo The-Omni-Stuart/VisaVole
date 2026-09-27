@@ -134,6 +134,22 @@ data class WorldData(
     }
 
     /**
+     * The short-stay travel area a bloc-issued [Holding] actually unlocks: the visa-free travel
+     * bloc for its freedom area — a bloc residence/visa earns short-stay travel, not freedom of
+     * movement — falling back to the whole area when no visa-free bloc covers it. Single-country
+     * holdings cover exactly their issuing country. Used for the "one valid visa/residence per
+     * country" supersession scope, so a Schengen document doesn't claim non-Schengen bloc members
+     * such as Ireland or Cyprus.
+     */
+    fun holdingTravelCoverage(holdingId: String): Set<String> {
+        val h = holdings[holdingId] ?: return emptySet()
+        val area = blocHoldings[h.issuingCountry]
+            ?.let { id -> regimes.firstOrNull { it.id == id }?.members?.toSet() }
+            ?: return setOf(h.issuingCountry)
+        return travelBlocFor(area)?.members?.toSet() ?: area
+    }
+
+    /**
      * The known holding that best matches a custom document built from [countries] + [kind], so its
      * travel perks apply automatically (e.g. a Czech residence → `schengen-residence`). Returns null
      * when no known holding covers the selected area.

@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
@@ -42,6 +43,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
@@ -246,10 +248,15 @@ internal fun WorldMapCanvas(
     // The scale at which the world fits the canvas at the minimum zoom (zoom == 1).
     val baseScale = if (canvasSize.width > 0f) baseScaleFor(geometry, canvasSize.width, canvasSize.height) else 1f
 
+    // Job of the running centre-on-country tween, so a pan starting mid-tween can cancel it
+    // (otherwise the tween keeps writing zoom/centre for up to 350 ms and the finger loses).
+    var centeringJob by remember { mutableStateOf<Job?>(null) }
+
     // Smoothly centre and zoom in when a country becomes selected.
     LaunchedEffect(selected, canvasSize, topInsetPx, centeringBottomInsetPx) {
         if (selected == null || canvasSize.width <= 0f) return@LaunchedEffect
         val f = focus[selected] ?: return@LaunchedEffect
+        centeringJob = coroutineContext[Job]
         val w = canvasSize.width
         val h = canvasSize.height
         val top = topInsetPx.coerceIn(0f, h)
@@ -271,6 +278,50 @@ internal fun WorldMapCanvas(
                 fromCenter.y + (targetCenter.y - fromCenter.y) * k,
             )
         }
+        centeringJob = null
+    }
+
+    // Keep the draw lambda's IDENTITY stable across recompositions where nothing the map draws
+    // has changed (e.g. the country-card slide animating controlsBottomPadding): a fresh lambda
+    // per recomposition forces a full redraw of every fill and stroke, while the keyed captures
+    // here (zoom/centre/selection/geometry) change exactly when a redraw is needed.
+    val mapDraw: DrawScope.() -> Unit = remember(geometry, drawShapes, selected, canvasSize, zoom, centerWorld) {
+        {
+            drawRect(OCEAN)
+            val ds = if (canvasSize.width > 0f) canvasSize else size
+            val sc = baseScaleFor(geometry, ds.width, ds.height) * zoom
+            // Screen point for a world point: (canvasCenter) + (world - centerWorld) * sc.
+            val tx = ds.width / 2f - centerWorld.x * sc
+            val ty = ds.height / 2f - centerWorld.y * sc
+            translate(tx, ty) {
+                scale(sc, sc, pivot = Offset.Zero) {
+                    val hair = 1.0f / sc
+                    val invSc = 1.0f / sc
+                    val cullPad = 2.0f * invSc
+                    val vxMin = centerWorld.x - (ds.width * invSc) / 2f - cullPad
+                    val vyMin = centerWorld.y - (ds.height * invSc) / 2f - cullPad
+                    val vxMax = centerWorld.x + (ds.width * invSc) / 2f + cullPad
+                    val vyMax = centerWorld.y + (ds.height * invSc) / 2f + cullPad
+                    // Pass 1: fills. Pass 2: borders on top of every fill so shared borders are
+                    // crisp (not overdrawn by a neighbour's fill). Width is constant on screen.
+                    for (s in drawShapes) {
+                        if (ENABLE_VIEWPORT_CULLING && !s.bbox.intersectsViewport(vxMin, vyMin, vxMax, vyMax)) continue
+                        drawPath(s.path, s.fill)
+                    }
+                    for (s in drawShapes) {
+                        if (ENABLE_VIEWPORT_CULLING && !s.bbox.intersectsViewport(vxMin, vyMin, vxMax, vyMax)) continue
+                        drawPath(s.path, LAND_STROKE, style = Stroke(width = hair))
+                    }
+                    selected?.let { sel ->
+                        drawShapes.firstOrNull { it.iso == sel }?.let { s ->
+                            if (!ENABLE_VIEWPORT_CULLING || s.bbox.intersectsViewport(vxMin, vyMin, vxMax, vyMax)) {
+                                drawPath(s.path, Color.White, style = Stroke(width = 2.2f / sc))
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     Box(modifier.clipToBounds()) {
@@ -288,6 +339,7 @@ internal fun WorldMapCanvas(
                         flingJob?.cancel()
                         zoomFlingJob?.cancel()
                         settleJob?.cancel()
+                        centeringJob?.cancel()
                         val panSlop = maxOf(8f, viewConfiguration.touchSlop / 2f)
                         val downTime = SystemClock.uptimeMillis()
                         var last = down.position
@@ -515,40 +567,7 @@ internal fun WorldMapCanvas(
                     }
                 },
         ) {
-            drawRect(OCEAN)
-            val ds = if (canvasSize.width > 0f) canvasSize else size
-            val sc = baseScaleFor(geometry, ds.width, ds.height) * zoom
-            // Screen point for a world point: (canvasCenter) + (world - centerWorld) * sc.
-            val tx = ds.width / 2f - centerWorld.x * sc
-            val ty = ds.height / 2f - centerWorld.y * sc
-            translate(tx, ty) {
-                scale(sc, sc, pivot = Offset.Zero) {
-                    val hair = 1.0f / sc
-                    val invSc = 1.0f / sc
-                    val cullPad = 2.0f * invSc
-                    val vxMin = centerWorld.x - (ds.width * invSc) / 2f - cullPad
-                    val vyMin = centerWorld.y - (ds.height * invSc) / 2f - cullPad
-                    val vxMax = centerWorld.x + (ds.width * invSc) / 2f + cullPad
-                    val vyMax = centerWorld.y + (ds.height * invSc) / 2f + cullPad
-                    // Pass 1: fills. Pass 2: borders on top of every fill so shared borders are
-                    // crisp (not overdrawn by a neighbour's fill). Width is constant on screen.
-                    for (s in drawShapes) {
-                        if (ENABLE_VIEWPORT_CULLING && !s.bbox.intersectsViewport(vxMin, vyMin, vxMax, vyMax)) continue
-                        drawPath(s.path, s.fill)
-                    }
-                    for (s in drawShapes) {
-                        if (ENABLE_VIEWPORT_CULLING && !s.bbox.intersectsViewport(vxMin, vyMin, vxMax, vyMax)) continue
-                        drawPath(s.path, LAND_STROKE, style = Stroke(width = hair))
-                    }
-                    selected?.let { sel ->
-                        drawShapes.firstOrNull { it.iso == sel }?.let { s ->
-                            if (!ENABLE_VIEWPORT_CULLING || s.bbox.intersectsViewport(vxMin, vyMin, vxMax, vyMax)) {
-                                drawPath(s.path, Color.White, style = Stroke(width = 2.2f / sc))
-                            }
-                        }
-                    }
-                }
-            }
+            mapDraw()
         }
 
         val cx = canvasSize.width / 2f

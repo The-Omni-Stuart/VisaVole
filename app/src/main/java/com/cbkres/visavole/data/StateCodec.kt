@@ -52,12 +52,18 @@ object StateCodec {
         }
         val primaryDocId = root.strOrNull("primaryDocId")
         val arr = root.optJSONArray("docs") ?: JSONArray()
+        // Duplicate ids (e.g. from a hand-edited backup) would crash the lists — items are keyed
+        // on id — and make an edit delete both twins, so the first occurrence wins.
         val list = mutableListOf<Document>()
+        val seenDocIds = mutableSetOf<String>()
         for (i in 0 until arr.length()) {
-            runCatching { jsonToDoc(arr.getJSONObject(i)) }.getOrNull()?.let { list.add(it) }
+            runCatching { jsonToDoc(arr.getJSONObject(i)) }.getOrNull()
+                ?.takeIf { seenDocIds.add(it.id) }
+                ?.let { list.add(it) }
         }
         val tripArr = root.optJSONArray("trips") ?: JSONArray()
         val tripList = mutableListOf<Trip>()
+        val seenTripIds = mutableSetOf<String>()
         for (i in 0 until tripArr.length()) {
             runCatching { tripArr.getJSONObject(i) }.getOrNull()?.let { o ->
                 val stops = mutableListOf<TripStop>()
@@ -75,7 +81,8 @@ object StateCodec {
                     }.getOrNull()?.let { stops.add(it) }
                 }
                 if (stops.isNotEmpty()) {
-                    tripList.add(Trip(o.optString("id").ifBlank { UUID.randomUUID().toString() }, stops, o.strOrNull("note")))
+                    val trip = Trip(o.optString("id").ifBlank { UUID.randomUUID().toString() }, stops, o.strOrNull("note"))
+                    if (seenTripIds.add(trip.id)) tripList.add(trip)
                 }
             }
         }

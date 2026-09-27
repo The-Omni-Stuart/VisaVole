@@ -61,6 +61,36 @@ class StateCodecTest {
     }
 
     @Test
+    fun duplicateDocIdsDedupeFirstWins() {
+        // A hand-edited backup with two docs sharing an id would crash the keyed lists and make
+        // an edit delete both twins — decode keeps the first occurrence (P1-7).
+        val text = StateCodec.encode(
+            PersistedState(
+                "doc-passport",
+                listOf(passport, passport.copy(label = "Twin passport"), custom),
+                emptyList(),
+            ),
+        )
+        val decoded = StateCodec.decode(text)
+        assertEquals(2, decoded.docs.size)
+        assertEquals("Passport · Czech Republic", decoded.docs.first { it.id == "doc-passport" }.label)
+    }
+
+    @Test
+    fun duplicateTripIdsDedupeFirstWins() {
+        val text = StateCodec.encode(
+            PersistedState(
+                null,
+                emptyList(),
+                listOf(trip, trip.copy(note = "Twin trip")),
+            ),
+        )
+        val decoded = StateCodec.decode(text)
+        assertEquals(1, decoded.trips.size)
+        assertEquals("Berlin then Paris", decoded.trips.first().note)
+    }
+
+    @Test
     fun roundTripWithNullPrimaryAndEmptyCollections() {
         val state = PersistedState(null, emptyList(), emptyList())
         val decoded = StateCodec.decode(StateCodec.encode(state))

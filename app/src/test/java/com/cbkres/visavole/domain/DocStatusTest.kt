@@ -204,13 +204,64 @@ class DocStatusTest {
         assertEquals(ExpiryReason.DATE, s.reason)
     }
 
-    @Test fun replacementWithoutValidFromGivesNoSupersession() {
+    @Test fun replacementWithoutValidFromSupersedesFromToday() {
+        // The validity field is optional in the add dialog, so a replacement usually has no
+        // validFrom — the supersession must still happen, from today (P1-1).
         val v1 = visa("v1", setOf("CA"), expiry = "2028-01-01", supersededBy = "v2")
         val v2 = visa("v2", setOf("CA"), expiry = "2029-01-01")
         val s = DocStatus.of(v1, listOf(v1, v2), emptyList(), world(), today)
+        assertFalse(s.expired) // an expiry of today is still valid
+        assertEquals(ExpiryReason.SUPERSEDED, s.reason)
+        assertEquals(today, s.effectiveExpiry)
+    }
+
+    // ------------------------------------------------------------------
+    // NOT YET VALID
+    // ------------------------------------------------------------------
+
+    @Test fun futureValidFromFlagsNotYetValid() {
+        val v1 = visa("v1", setOf("CA"), expiry = "2029-01-01", validFrom = "2026-10-01")
+        val s = status(v1)
+        assertFalse(s.expired)
+        assertTrue(s.notYetValid)
+    }
+
+    @Test fun validFromOnTodayIsAlreadyValid() {
+        val v1 = visa("v1", setOf("CA"), validFrom = "2026-09-16")
+        val s = status(v1)
+        assertFalse(s.notYetValid)
+        assertFalse(s.expired)
+    }
+
+    @Test fun noValidFromIsNotNotYetValid() {
+        val v1 = visa("v1", setOf("CA"))
+        assertFalse(status(v1).notYetValid)
+    }
+
+    // ------------------------------------------------------------------
+    // ENTRIES — in-progress stay
+    // ------------------------------------------------------------------
+
+    @Test fun inProgressSingleEntryKeepsOwnDateExpiry() {
+        // While the (only) entry is being used, exhaustion is NOT the effective expiry — the
+        // stay runs on the document's own date, so "expires today" must not appear (P1-6).
+        val v1 = visa("v1", setOf("CA"), entry = "single", expiry = "2027-01-01")
+        val t = Trip("t1", listOf(stop("s1", "CA", LocalDate.of(2026, 9, 1), null, "v1")))
+        val s = DocStatus.of(v1, listOf(v1), listOf(t), world(), today)
         assertFalse(s.expired)
         assertEquals(ExpiryReason.DATE, s.reason)
-        assertEquals(LocalDate.of(2028, 1, 1), s.effectiveExpiry)
+        assertEquals(LocalDate.of(2027, 1, 1), s.effectiveExpiry)
+        assertEquals(EntryState.IN_USE, s.entries!!.state)
+    }
+
+    @Test fun inProgressSingleEntryWithoutDateHasNoEffectiveExpiry() {
+        val v1 = visa("v1", setOf("CA"), entry = "single")
+        val t = Trip("t1", listOf(stop("s1", "CA", LocalDate.of(2026, 9, 1), null, "v1")))
+        val s = DocStatus.of(v1, listOf(v1), listOf(t), world(), today)
+        assertFalse(s.expired)
+        assertNull(s.reason)
+        assertNull(s.effectiveExpiry)
+        assertEquals(EntryState.IN_USE, s.entries!!.state)
     }
 
     // ------------------------------------------------------------------

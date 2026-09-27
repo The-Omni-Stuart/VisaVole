@@ -106,12 +106,14 @@ fun Document.docCategory(world: WorldData): String? = when (val k = kind) {
 }
 
 /**
- * The ISO2 countries a document applies to: a passport's nationality, a holding's coverage
- * ([WorldData.holdingCountries]), or a custom document's explicit [DocKind.Custom.countries].
+ * The ISO2 countries a document applies to: a passport's nationality, a holding's short-stay
+ * travel area ([WorldData.holdingTravelCoverage] — the visa-free bloc, not the freedom bloc, so a
+ * bloc document doesn't claim non-Schengen members), or a custom document's explicit
+ * [DocKind.Custom.countries].
  */
 fun Document.coveredCountries(world: WorldData): Set<String> = when (val k = kind) {
     is DocKind.Passport -> setOf(k.iso2)
-    is DocKind.Holding -> world.holdingCountries(k.holdingId)
+    is DocKind.Holding -> world.holdingTravelCoverage(k.holdingId)
     is DocKind.Custom -> k.countries
 }
 

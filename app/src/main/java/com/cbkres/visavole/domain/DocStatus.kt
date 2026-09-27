@@ -27,15 +27,19 @@ enum class ExpiryReason {
  * guard rules) derives expiry from this instead of its own date/entry heuristics.
  *
  * - [effectiveExpiry] is the earliest of the document's own expiry date, its entry-driven
- *   exhaustion date, and the superseding document's `validFrom` (null when unconstrained);
+ *   exhaustion date, and the superseding document's `validFrom` (null when unconstrained); a
+ *   superseding document *without* a `validFrom` supersedes from [today];
  * - [reason] is the [ExpiryReason] attached to that earliest date;
- * - [expired] is true once [effectiveExpiry] is past (an expiry of *today* is still valid).
+ * - [expired] is true once [effectiveExpiry] is past (an expiry of *today* is still valid);
+ * - [notYetValid] is true when the document's `validFrom` lies after [today] — such a document
+ *   unlocks nothing at [today] (see [com.cbkres.visavole.domain.AccessModel.compute]).
  */
 data class DocStatus(
     val expired: Boolean,
     val reason: ExpiryReason?,
     val effectiveExpiry: LocalDate?,
     val entries: EntryStatus?,
+    val notYetValid: Boolean,
 ) {
     companion object {
         fun of(
@@ -55,11 +59,14 @@ data class DocStatus(
                 candidates += entry.effectiveExpiry to ExpiryReason.ENTRIES
             }
             doc.supersededBy?.let { id ->
-                docs.firstOrNull { it.id == id }
-                    ?.validFrom
-                    ?.let { parse(it) }
-                    ?.let { candidates += it to ExpiryReason.SUPERSEDED }
+                docs.firstOrNull { it.id == id }?.let { replacement ->
+                    // A replacement without a `validFrom` supersedes from today — the supersession
+                    // still happens (the old doc lapses at the end of today); otherwise a document
+                    // added without a validity date would silently keep both docs "valid".
+                    candidates += (parse(replacement.validFrom) ?: today) to ExpiryReason.SUPERSEDED
+                }
             }
+            val validFrom = parse(doc.validFrom)
             val best = candidates.minWithOrNull(compareBy({ it.first }, { it.second.ordinal }))
             val effective = best?.first
             return DocStatus(
@@ -67,6 +74,7 @@ data class DocStatus(
                 reason = best?.second,
                 effectiveExpiry = effective,
                 entries = entry,
+                notYetValid = validFrom != null && validFrom.isAfter(today),
             )
         }
 

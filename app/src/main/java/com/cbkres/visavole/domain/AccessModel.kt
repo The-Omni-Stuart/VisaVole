@@ -32,18 +32,14 @@ import java.time.ZoneOffset
  */
 object AccessModel {
 
-    /** Pure best-of: higher [AccessLevel.rank] wins; on a tie, the one carrying a days limit, then
-     *  the higher residence class, so the strongest held residence document is displayed. */
+    /**
+     * Pure best-of — the same ordering [compareDocumentAccess] uses for document selection, so the
+     * merged map and the suggested gate document can never disagree. Higher [AccessLevel.rank]
+     * wins; on a tie the longer day limit, then the higher residence class.
+     */
     private fun best(a: Access?, b: Access): Access {
         if (a == null) return b
-        if (b.level.rank > a.level.rank) return b
-        if (a.level.rank > b.level.rank) return a
-        if (a.days == null && b.days != null) return b
-        val aClass = a.residenceClass?.ordinal ?: -1
-        val bClass = b.residenceClass?.ordinal ?: -1
-        if (bClass > aClass) return b
-        if (aClass > bClass) return a
-        return a
+        return if (compareDocumentAccess(b, a) > 0) b else a
     }
 
     private fun merge(map: MutableMap<String, Access>, dest: String, candidate: Access) {
@@ -87,6 +83,23 @@ object AccessModel {
         trips: List<Trip>,
         statuses: Map<String, DocStatus>?,
     ): Boolean = statuses?.get(doc.id)?.expired ?: isExpired(doc, docs, world, today, trips)
+
+    /**
+     * True when [doc] unlocks nothing at [today]: expired *or* not valid yet. Mirrors the skip in
+     * [compute], which is the only place [notYetValid] was previously honoured.
+     */
+    private fun unusableOf(
+        doc: Document,
+        docs: List<Document>,
+        world: WorldData,
+        today: LocalDate,
+        trips: List<Trip>,
+        statuses: Map<String, DocStatus>?,
+    ): Boolean {
+        val status = statuses?.get(doc.id)
+        if (status != null) return status.expired || status.notYetValid
+        return isExpired(doc, docs, world, today, trips) || notYetValid(doc, today)
+    }
 
     /** A document whose `validFrom` lies after [today] is not usable at [today] yet. */
     internal fun notYetValid(doc: Document, today: LocalDate): Boolean {
@@ -207,7 +220,7 @@ object AccessModel {
         statuses: Map<String, DocStatus>? = null,
     ): Set<String> =
         docs.flatMap { d ->
-            if (expiredOf(d, docs, world, today, trips, statuses)) return@flatMap emptyList()
+            if (unusableOf(d, docs, world, today, trips, statuses)) return@flatMap emptyList()
             when (val k = d.kind) {
                 is Passport -> emptyList()
                 is Holding -> {
@@ -231,7 +244,7 @@ object AccessModel {
         trips: List<Trip> = emptyList(),
     ): List<DocAccess> =
         docs
-            .filter { d -> d.kind is Passport || !isExpired(d, docs, world, today, trips) }
+            .filter { d -> d.kind is Passport || (!isExpired(d, docs, world, today, trips) && !notYetValid(d, today)) }
             .map { d ->
                 val candidates = when (val k = d.kind) {
                     is Passport -> passportCandidates(k.iso2, world, isExpired(d, docs, world, today, trips))
@@ -271,7 +284,7 @@ object AccessModel {
     ): List<Document> =
         docs.filter { d ->
             val expired = isExpired(d, docs, world, today, trips)
-            if (d.kind !is Passport && expired) return@filter false
+            if (d.kind !is Passport && (expired || notYetValid(d, today))) return@filter false
             val candidates = when (val k = d.kind) {
                 is Passport -> passportCandidates(k.iso2, world, expired)
                 else -> documentCandidates(d, world)
@@ -326,7 +339,7 @@ object AccessModel {
         val evaluated = docs
             .mapNotNull { doc ->
                 val expired = expiredOf(doc, docs, world, today, trips, statuses)
-                if (doc.kind !is Passport && !ignoreExpiry && expired) return@mapNotNull null
+                if (doc.kind !is Passport && !ignoreExpiry && (expired || notYetValid(doc, today))) return@mapNotNull null
                 val candidates = when (val k = doc.kind) {
                     is Passport -> passportCandidates(k.iso2, world, expired)
                     else -> documentCandidates(doc, world)

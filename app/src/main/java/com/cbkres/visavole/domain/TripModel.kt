@@ -466,7 +466,9 @@ object TripModel {
      * window. A stay runs on the document its stop declares ([TripStop.documentId]): that
      * document gates the stay even after it lapses (capping the window into the past → DANGER)
      * and even where a passport could in principle cover the country — the declared document is
-     * what the stay is on. Stops without a declared document fall back to the best document held
+     * what the stay is on. Only stops that are actually in progress at [asOf] declare a gate: a
+     * document used by a *past* stay must not cap today's zone (its exhaustion belongs to that
+     * stay, not this one). Stops without a declared document fall back to the best document held
      * for the country, then its lapsed-gate counterpart. Null when no held document documents
      * the zone.
      */
@@ -483,7 +485,11 @@ object TripModel {
             .mapNotNull { country ->
                 val declared = trips
                     .flatMap { it.stops }
-                    .filter { it.countryIso2 == country }
+                    .filter {
+                        it.countryIso2 == country &&
+                            !it.arrival.isAfter(asOf) &&
+                            (it.departure == null || !it.departure.isBefore(asOf))
+                    }
                     .mapNotNull { it.documentId }
                     .filter { docById.containsKey(it) }
                     .toSet()
@@ -633,9 +639,14 @@ object TripModel {
         val lastUsedOn = if (active != null) asOf else lastCompleted?.second
         val sourceTripId = if (active != null) active.tripId else lastCompleted?.first?.tripId
         val original = iso(doc.expiry)
+        // Exhaustion by entry count is an effective expiry only once the stay is actually OVER
+        // (active == null): while an entry is in progress the stay runs on the document's own date
+        // expiry, so a single-entry visa mid-stay must not report "expires today" — that poisoned
+        // the edit guard and capped the zone ring at 0 days.
+        val exhaustion = if (active == null) lastCompleted?.second else null
         val effective = when {
-            total != null && used >= total && lastUsedOn != null && !lastUsedOn.isAfter(asOf) ->
-                if (original == null || lastUsedOn.isBefore(original)) lastUsedOn else original
+            total != null && used >= total && exhaustion != null && !exhaustion.isAfter(asOf) ->
+                if (original == null || exhaustion.isBefore(original)) exhaustion else original
             else -> original
         }
         val state = when {

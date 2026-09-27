@@ -138,8 +138,9 @@ fun TripsScreen(
         // One scroll plane under the add button: the allowance section is the first item of the
         // same list as the trip sections (its horizontal card switcher keeps its own scroll + haze).
         val tripsListState = scrollState
-        val (tripsTop, tripsEnd) = tripsListState.hazeAlphas()
-        HazeBox(tripsTop, tripsEnd, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
+        // State-taking overload: the per-frame haze read stays inside HazeBox, so scrolling
+        // recomposes only the haze edges — not the whole screen and every visible card (P1-14).
+        HazeBox(tripsListState, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
             LazyColumn(
                 state = tripsListState,
                 modifier = Modifier

@@ -109,6 +109,58 @@ class AccessModelTest {
         assertEquals(VISA_FREE, acc["FR"]!!.level)
     }
 
+    @Test fun futureDatedDocUnlocksNothingAnywhere() {
+        // P1-2: a visa whose validFrom lies after today unlocks nothing — not just in compute,
+        // but in the breakdown, relevant docs, own-visa countries and the suggested document.
+        // The gate still sees it (a gate exists even once lapsed/not-yet).
+        val w = world(baseline = mapOf("GB" to listOf(corridor("GB", "CA", "visa-required"))))
+        val d = Document(
+            "d",
+            "Visa: CA",
+            Custom(setOf("CA"), null, "visa", null, "multiple"),
+            "2029-01-01",
+            "2026-10-01",
+        )
+        val today = LocalDate.of(2026, 9, 16)
+        assertNull(AccessModel.compute(listOf(d), w, today)["CA"])
+        assertTrue(AccessModel.breakdownFor("CA", listOf(d), w, today).isEmpty())
+        assertTrue(AccessModel.relevantDocuments("CA", listOf(d), w, today).isEmpty())
+        assertTrue(AccessModel.ownVisaCountries(listOf(d), w, today).isEmpty())
+        assertNull(AccessModel.bestDocumentId("CA", listOf(d), w, today))
+        assertEquals("d", AccessModel.gateDocumentId("CA", listOf(d), w, today))
+    }
+
+    @Test fun mergePrefersLongerDaysOnTieRegardlessOfOrder() {
+        // Two passports, same rank (visa-free), different day limits: the merged access must
+        // carry the LONGER limit no matter the insertion order (P1-3).
+        val w = world(
+            baseline = mapOf(
+                "GB" to listOf(corridor("GB", "AD", "visa-free", 90)),
+                "FR" to listOf(corridor("FR", "AD", "visa-free", 183)),
+            ),
+        )
+        val docs = listOf(doc("p1", Passport("GB")), doc("p2", Passport("FR")))
+        assertEquals(183, AccessModel.compute(docs, w)["AD"]!!.days)
+        assertEquals(183, AccessModel.compute(docs.reversed(), w)["AD"]!!.days)
+    }
+
+    @Test fun blocHoldingCoverageIsTravelBlocNotFreedomBloc() {
+        // A bloc-issued holding (issuingCountry "EU") must cover the visa-free travel bloc
+        // (Schengen), not the whole freedom-of-movement bloc — otherwise it would supersede
+        // valid docs for non-Schengen members like Ireland (P1-4).
+        val w = world(
+            regimes = listOf(
+                regime("eu-eea-efta", "EU/EEA/EFTA", "freedom-of-movement", "IE", "CY", "DE", "FR", "CZ"),
+                regime("schengen", "Schengen", "visa-free", "DE", "FR", "CZ"),
+            ),
+            holdings = mapOf("eu-res" to DataHolding("eu-res", "EU Residence", "residency", "EU")),
+        )
+        assertEquals(setOf("DE", "FR", "CZ"), doc("h", Holding("eu-res")).coveredCountries(w))
+        // A single-country holding is unchanged.
+        val w2 = world(holdings = mapOf("cz-res" to DataHolding("cz-res", "CZ Residence", "residency", "CZ")))
+        assertEquals(setOf("CZ"), doc("h", Holding("cz-res")).coveredCountries(w2))
+    }
+
     @Test fun documentNeverWorsensBaseline() {
         // baseline visa-free 90; a visa holding that only confers a 30d e-visa must not downgrade
         val w = world(

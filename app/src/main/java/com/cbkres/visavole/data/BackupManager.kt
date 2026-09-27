@@ -2,6 +2,7 @@ package com.cbkres.visavole.data
 
 import android.content.Context
 import android.net.Uri
+import java.io.ByteArrayOutputStream
 import java.io.File
 
 /**
@@ -42,10 +43,32 @@ class BackupManager(context: Context) {
         }
     }
 
-    /** Read and validate the backup at [uri]; the caller decides when to apply the state. */
+    /**
+     * Read and validate the backup at [uri]; the caller decides when to apply the state. Reads are
+     * capped at [MAX_IMPORT_BYTES] — the picker can offer any file on the device, and reading a
+     * video/ISO in one shot would OOM the process.
+     */
     fun importFrom(uri: Uri): Outcome = try {
-        val text = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+        val stream = appContext.contentResolver.openInputStream(uri)
             ?: return Outcome.Failed("Could not open the backup file.")
+        val text = stream.use { input ->
+            val bytes = ByteArrayOutputStream()
+            val buffer = ByteArray(8192)
+            var total = 0
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                total += read
+                if (total > MAX_IMPORT_BYTES) {
+                    return Outcome.Failed(
+                        "That file is larger than ${MAX_IMPORT_BYTES / (1024 * 1024)} MB, " +
+                            "so it can't be a Visa Vole backup.",
+                    )
+                }
+                bytes.write(buffer, 0, read)
+            }
+            bytes.toString(Charsets.UTF_8.name())
+        }
         Outcome.Imported(uri, StateCodec.decode(text))
     } catch (e: Exception) {
         Outcome.Failed("That file does not look like a Visa Vole backup.")
@@ -56,5 +79,7 @@ class BackupManager(context: Context) {
         const val STATE_FILE_NAME = "visavole_state.json"
         /** Suggested name for a new backup file. */
         const val BACKUP_FILE_NAME = "visavole_userdata.json"
+        /** Hard cap for backup imports — a real backup is a few KB of JSON. */
+        const val MAX_IMPORT_BYTES = 16 * 1024 * 1024
     }
 }

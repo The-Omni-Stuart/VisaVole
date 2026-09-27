@@ -117,7 +117,9 @@ fun SettingsScreen(
             }
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
-                onClick = { restoreLauncher.launch(arrayOf("*/*")) },
+                // JSON only: backups are small text files; keeping the picker to text types
+                // steers users away from offering the app a video/ISO (imports are capped anyway).
+                onClick = { restoreLauncher.launch(arrayOf("application/json", "text/*")) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Restore from Backup")

@@ -301,10 +301,14 @@ private fun MapTab(
             .sortedBy { it.name }
             .take(20)
     }
-    val pick: (String?) -> Unit = { iso ->
-        keyboardController?.hide()
-        onQuery("")
-        onSelect(iso)
+    // Stable identity: a fresh lambda on every recomposition would make WorldMapCanvas re-run
+    // and repaint every country for the whole duration of the card slide (P1-13).
+    val pick: (String?) -> Unit = remember {
+        { iso: String? ->
+            keyboardController?.hide()
+            onQuery("")
+            onSelect(iso)
+        }
     }
     val density = LocalDensity.current
     var searchBarH by remember { mutableStateOf(0.dp) }

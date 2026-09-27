@@ -546,6 +546,35 @@ class GuardTest {
         assertEquals(listOf(GuardMutation.SupersedeDocument("v1", "v2")), r.mutations)
     }
 
+    @Test fun blocHoldingDoesNotSupersedeNonTravelBlocMemberDoc() {
+        // P1-4: a bloc-issued (issuingCountry "EU") residence spans the visa-free travel bloc
+        // (Schengen) for supersession purposes — NOT the freedom-of-movement bloc — so a valid
+        // Irish or Cypriot document is untouched, while a German one is superseded.
+        val w = WorldData(
+            mapOf(
+                "IE" to Country("IE", "Ireland"),
+                "CY" to Country("CY", "Cyprus"),
+                "DE" to Country("DE", "Germany"),
+            ),
+            emptyMap(),
+            listOf(
+                Regime("eu-eea-efta", "EU/EEA/EFTA", "freedom-of-movement", listOf("IE", "CY", "DE", "FR", "CZ")),
+                Regime("schengen", "Schengen", "visa-free", listOf("DE", "FR", "CZ")),
+            ),
+            mapOf("eu-res" to Holding("eu-res", "EU Residence", "residency", "EU")),
+            emptyMap(),
+            emptyList(),
+        )
+        val candidate = Document("h-new", "EU residence", DocKind.Holding("eu-res"), "2030-01-01")
+        val ieRes = residence("r-ie", setOf("IE"), "2028-06-30")
+        val r = GuardEngine.evaluate(GuardAction.AddDocument(candidate), ctx(docs = listOf(ieRes), w = w))
+        assertTrue("codes=${codes(r)}", r.canProceed)
+        assertTrue(r.mutations.isEmpty())
+        val deRes = residence("r-de", setOf("DE"), "2028-06-30")
+        val r2 = GuardEngine.evaluate(GuardAction.AddDocument(candidate), ctx(docs = listOf(deRes), w = w))
+        assertEquals(listOf(GuardMutation.SupersedeDocument("r-de", "h-new")), r2.mutations)
+    }
+
     @Test fun passportsAreNotSubjectToSinglePerCountry() {
         val p1 = passport("p1", "FR", "123", "2028-01-01")
         val p2 = passport("p2", "FR", "456", "2028-01-01")

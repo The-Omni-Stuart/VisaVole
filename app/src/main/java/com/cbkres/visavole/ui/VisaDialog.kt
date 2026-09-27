@@ -28,7 +28,8 @@ import androidx.compose.ui.window.DialogProperties
  *
  * [width] is the fixed dialog width (340.dp for confirms, 400.dp for forms); [maxHeight]
  * caps form dialogs against the screen height; [dismissable] = false keeps filled forms
- * open on outside tap (use the explicit Cancel button to discard).
+ * open on outside tap AND on the system Back button (both are swallowed — use the explicit
+ * Cancel button to discard).
  */
 @Composable
 fun VisaDialog(
@@ -41,7 +42,10 @@ fun VisaDialog(
     var shown by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { shown = true }
     Dialog(
-        onDismissRequest = onDismissRequest,
+        // The platform still dispatches Back to onDismissRequest for non-dismissable dialogs
+        // (only outside TAP is gated by dismissOnClickOutside) — swallow it there too, or Back
+        // would wipe a filled form.
+        onDismissRequest = { if (dismissable) onDismissRequest() },
         properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = dismissable),
     ) {
         AnimatedVisibility(
