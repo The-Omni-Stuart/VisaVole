@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -136,6 +137,7 @@ fun VisaVoleApp() {
     val state by vm.state.collectAsState(initial = AppState.Loading)
     when (val s = state) {
         AppState.Loading -> LoadingScreen()
+        is AppState.Failed -> ErrorScreen(s.message) { vm.retryLoad() }
         is AppState.Ready -> {
             if (s.homeCountries.isEmpty()) {
                 OnboardingScreen(countries = s.world.countries, today = s.today, onAddPassport = { iso, expiry -> vm.addOnboardingPassport(iso, expiry) })
@@ -154,6 +156,25 @@ private fun LoadingScreen() {
                 CircularProgressIndicator()
                 Spacer(Modifier.height(12.dp))
                 Text("Loading…", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+/** Shown when the bundled visa data could not be loaded; retry reruns the initial load. */
+@Composable
+private fun ErrorScreen(message: String, onRetry: () -> Unit) {
+    Surface(color = MaterialTheme.colorScheme.background) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(32.dp),
+            ) {
+                Text("Something went wrong", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(8.dp))
+                Text(message, style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(24.dp))
+                Button(onClick = onRetry) { Text("Retry") }
             }
         }
     }

@@ -47,6 +47,8 @@ import kotlinx.coroutines.withContext
 
 sealed interface AppState {
     data object Loading : AppState
+    /** The bundled world data could not be loaded; [message] is shown with a retry action. */
+    data class Failed(val message: String) : AppState
     data class Ready(
         val homeCountries: Set<String>,
         val ownVisaCountries: Set<String>,
@@ -99,16 +101,43 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         readPersisted()
+        launchLoad()
+    }
+
+    /**
+     * Loads the bundled world once and publishes. Kept as a single method so [retryLoad] (the
+     * error screen's retry button) reruns exactly the same path as the first launch.
+     */
+    private fun launchLoad() {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                world = repository.loadWorld(AccessModel.homeCountries(docs))
-                geometry
+            try {
+                val initialHomes = AccessModel.homeCountries(docs)
+                withContext(Dispatchers.IO) {
+                    world = repository.loadWorld(initialHomes)
+                    geometry
+                }
+                // ensurePrimaryPassport/normalizeResidenceClasses mutate docs + persist; they run
+                // here on the main thread, keeping every state mutation single-threaded.
                 ensurePrimaryPassport()
                 normalizeResidenceClasses(world!!)
-                world = repository.loadWorld(AccessModel.homeCountries(docs))
+                val finalHomes = AccessModel.homeCountries(docs)
+                if (finalHomes != initialHomes) {
+                    withContext(Dispatchers.IO) { world = repository.loadWorld(finalHomes) }
+                }
+                publish()
+            } catch (e: Exception) {
+                // A corrupted/missing bundled DB (or any load failure) must not crash the process:
+                // surface it as a state the UI can show with a retry.
+                Log.e(TAG, "Failed to load world data", e)
+                _state.value = AppState.Failed("Could not load the bundled visa data. ${e.message ?: e.javaClass.simpleName}")
             }
-            publish()
         }
+    }
+
+    /** Reruns the initial load (exposed for the error screen's retry button). */
+    fun retryLoad() {
+        _state.value = AppState.Loading
+        launchLoad()
     }
 
     /** Fill in the residence class of residence documents saved before the field existed
@@ -187,12 +216,22 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         val homes = AccessModel.homeCountries(docs)
         val gen = ++reloadGeneration
         viewModelScope.launch {
-            withContext(Dispatchers.IO) {
-                val w = repository.loadWorld(homes)
-                if (gen != reloadGeneration) return@withContext
-                world = w
+            val w = withContext(Dispatchers.IO) {
+                try {
+                    repository.loadWorld(homes)
+                } catch (e: Exception) {
+                    // Keep the last good world rather than crashing: the user's documents are
+                    // still usable, the new home corridor simply cannot be computed yet.
+                    Log.e(TAG, "Failed to reload world data; keeping last good state", e)
+                    null
+                }
             }
             if (gen != reloadGeneration) return@launch
+            if (w == null) {
+                snack("Could not reload the visa database; showing the last good state.")
+                return@launch
+            }
+            world = w
             publish()
         }
     }
@@ -340,9 +379,25 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     // ---- persistence (JSON in the app's files dir, formatted by StateCodec) ----
     private val file get() = backup.stateFile
 
+    /** Set when the state file exists but cannot be read or quarantined; while set, persist()
+     *  refuses to run, because writing would overwrite the user's only copy of the data. */
+    @Volatile private var stateFileBlocked = false
+
     private fun persist() {
+        if (stateFileBlocked) {
+            Log.e(TAG, "Refusing to persist: unreadable state file $file still present (overwriting it would lose the user's data)")
+            return
+        }
         try {
-            file.writeText(StateCodec.encode(PersistedState(primaryDocId, docs.toList(), trips.toList())))
+            // Write to a sibling temp file and rename over the target: the rename is atomic, so a
+            // process death mid-write leaves the previous file intact instead of truncated JSON.
+            val text = StateCodec.encode(PersistedState(primaryDocId, docs.toList(), trips.toList()))
+            val tmp = File(file.parentFile, "${file.name}.tmp")
+            tmp.writeText(text)
+            if (!tmp.renameTo(file)) {
+                tmp.copyTo(file, overwrite = true)
+                tmp.delete()
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Could not persist state to $file", e)
         }
@@ -365,7 +420,16 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
             if (f.renameTo(quarantine)) {
                 Log.w(TAG, "Quarantined unreadable state file as $quarantine")
             } else {
-                Log.e(TAG, "Could not rename $f to $quarantine; starting with empty state")
+                // Renaming failed: copy the file aside best-effort, keep the original untouched
+                // and BLOCK persisting for this process — writing would destroy the user's data.
+                try {
+                    f.copyTo(quarantine, overwrite = false)
+                    Log.w(TAG, "Copied unreadable state file to $quarantine")
+                } catch (copyError: Exception) {
+                    Log.e(TAG, "Could not copy $f to $quarantine", copyError)
+                }
+                stateFileBlocked = true
+                Log.e(TAG, "Unreadable state file $f could not be quarantined; persisting disabled for this process")
             }
         }
     }

@@ -2,6 +2,8 @@ package com.cbkres.visavole.data
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteException
+import android.util.Log
 import java.io.File
 import java.io.IOException
 
@@ -24,10 +26,33 @@ class VisaDb(context: Context) {
         get() {
             db?.takeIf { it.isOpen }?.let { return it }
             ensureCopied()
-            val opened = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
-            db = opened
-            return opened
+            db = openWithSelfHeal()
+            return db!!
         }
+
+    /**
+     * Opens the internal copy read-only and probes it with a query: a file can pass
+     * [SQLiteDatabase.openDatabase] yet still be damaged, in which case only the first query
+     * fails. A damaged internal copy (its meta matches, so it is never re-copied) would otherwise
+     * crash the app on every launch — drop the pair once and retry from the bundled asset.
+     */
+    private fun openWithSelfHeal(): SQLiteDatabase {
+        try {
+            return openAndProbe()
+        } catch (e: SQLiteException) {
+            Log.w(TAG, "Internal visa_data.db failed to open/probe; re-copying from assets", e)
+            dbFile.delete()
+            metaFile.delete()
+            ensureCopied()
+            return openAndProbe()
+        }
+    }
+
+    private fun openAndProbe(): SQLiteDatabase {
+        val conn = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
+        conn.rawQuery("SELECT 1 FROM countries LIMIT 1", null).use { it.moveToNext() }
+        return conn
+    }
 
     private fun ensureCopied() {
         // Re-copy when the bundled asset has changed (a schema/data refresh in an app update), so
@@ -39,8 +64,9 @@ class VisaDb(context: Context) {
         } catch (_: IOException) {
             null
         }
-        val expected = if (sha != null) "$sha|$assetLen" else "$DB_VERSION|$assetLen"
-        if (dbFile.exists() && metaFile.exists() && metaFile.readText().trim() == expected) return
+        val expected = fingerprint(sha, assetLen)
+        val metaText = if (metaFile.exists()) metaFile.readText() else null
+        if (!shouldRecopy(dbFile.exists(), metaText, expected)) return
         if (dbFile.exists()) dbFile.delete()
         appContext.assets.open(ASSET_NAME).use { input ->
             dbFile.outputStream().use { input.copyTo(it) }
@@ -53,5 +79,14 @@ class VisaDb(context: Context) {
         private const val ASSET_SHA_NAME = "visa_data.db.sha256"
         private const val DB_NAME = "visa_data.db"
         private const val DB_VERSION = 2
+        private const val TAG = "VisaDb"
+
+        /** The refresh trigger: the SHA sidecar when present, else the legacy version constant. */
+        internal fun fingerprint(sha: String?, assetLength: Long): String =
+            if (sha != null) "$sha|$assetLength" else "$DB_VERSION|$assetLength"
+
+        /** Re-copy when the internal file is missing or its recorded fingerprint is stale/absent. */
+        internal fun shouldRecopy(dbFileExists: Boolean, metaText: String?, expected: String): Boolean =
+            !dbFileExists || metaText?.trim() != expected
     }
 }
