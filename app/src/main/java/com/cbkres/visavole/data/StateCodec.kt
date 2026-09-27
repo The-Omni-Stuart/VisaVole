@@ -69,11 +69,13 @@ object StateCodec {
                 val stops = mutableListOf<TripStop>()
                 val stopArr = o.optJSONArray("stops") ?: JSONArray()
                 for (j in 0 until stopArr.length()) {
+                    val so = runCatching { stopArr.getJSONObject(j) }.getOrNull() ?: continue
+                    // A missing/null country is garbage (getString would mint "null"): drop the stop.
+                    val country = so.strOrNull("country") ?: continue
                     runCatching {
-                        val so = stopArr.getJSONObject(j)
                         TripStop(
                             so.optString("id").ifBlank { UUID.randomUUID().toString() },
-                            so.getString("country"),
+                            country,
                             LocalDate.parse(so.getString("arrival")),
                             so.strOrNull("departure")?.let { LocalDate.parse(it) },
                             so.strOrNull("documentId"),
@@ -86,7 +88,17 @@ object StateCodec {
                 }
             }
         }
-        return PersistedState(primaryDocId, list, tripList)
+        // Backups and hand-edited state files are trusted input but never passed through the
+        // guard, so the invariants the mutation paths maintain are re-established here (the
+        // single choke point for both the state file and restores): a supersession pointer must
+        // name a real, DIFFERENT document in this set. Dangling or self-referencing pointers are
+        // dropped — a self pointer in particular would make the doc supersede itself and vanish.
+        val ids = list.mapTo(mutableSetOf()) { it.id }
+        val cleanedDocs = list.map { d ->
+            val ref = d.supersededBy
+            if (ref != null && (ref == d.id || ref !in ids)) d.copy(supersededBy = null) else d
+        }
+        return PersistedState(primaryDocId, cleanedDocs, tripList)
     }
 
     private fun docToJson(d: Document): JSONObject = JSONObject().apply {
@@ -136,10 +148,15 @@ object StateCodec {
         put("stops", stops)
     }
 
-    private fun jsonToDoc(o: JSONObject): Document {
+    /** Parses one doc object; returns null (→ skipped) when a REQUIRED field is missing, JSON
+     *  null, or a number coerced to a garbage string — org.json's getString on a null value
+     *  returns the literal "null", which would mint docs with id/iso2 "null". */
+    private fun jsonToDoc(o: JSONObject): Document? {
+        val id = o.strOrNull("id") ?: return null
+        val label = o.strOrNull("label") ?: return null
         val kind = when (o.optString("kind")) {
-            "passport" -> DocKind.Passport(o.getString("iso2"))
-            "holding" -> DocKind.Holding(o.getString("holdingId"), o.strOrNull("entryType"))
+            "passport" -> DocKind.Passport(o.strOrNull("iso2") ?: return null)
+            "holding" -> DocKind.Holding(o.strOrNull("holdingId") ?: return null, o.strOrNull("entryType"))
             else -> {
                 val arr = o.getJSONArray("countries")
                 val set = LinkedHashSet<String>()
@@ -157,6 +174,6 @@ object StateCodec {
         val validFrom = o.strOrNull("validFrom")
         val residenceClass = ResidenceClass.fromId(o.strOrNull("residenceClass"))
         val supersededBy = o.strOrNull("supersededBy")
-        return Document(o.getString("id"), o.getString("label"), kind, expiry, validFrom, residenceClass, supersededBy)
+        return Document(id, label, kind, expiry, validFrom, residenceClass, supersededBy)
     }
 }

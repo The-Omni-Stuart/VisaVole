@@ -191,6 +191,109 @@ class StateCodecTest {
     }
 
     @Test
+    fun nullIdDocIsSkippedNotMintedAsLiteralNull() {
+        // org.json's getString on a JSON null returns the string "null": without the guard, a
+        // corrupt doc would decode to a document whose id is literally "null" (P2-3).
+        val json = """
+            {"schemaVersion":3,"primaryDocId":null,
+             "docs":[
+               {"id":null,"label":"Ghost","kind":"passport","iso2":"CZ"},
+               {"id":"doc-passport","label":"P","kind":"passport","iso2":"CZ"}
+             ],"trips":[]}
+        """.trimIndent()
+        val state = StateCodec.decode(json)
+        assertEquals(1, state.docs.size)
+        assertEquals("doc-passport", state.docs.single().id)
+    }
+
+    @Test
+    fun nullIso2PassportIsSkipped() {
+        val json = """
+            {"schemaVersion":3,"primaryDocId":null,
+             "docs":[{"id":"doc-1","label":"P","kind":"passport","iso2":null}],
+             "trips":[]}
+        """.trimIndent()
+        assertTrue(StateCodec.decode(json).docs.isEmpty())
+    }
+
+    @Test
+    fun nullHoldingIdIsSkipped() {
+        val json = """
+            {"schemaVersion":3,"primaryDocId":null,
+             "docs":[{"id":"doc-1","label":"H","kind":"holding","holdingId":null,"entryType":null}],
+             "trips":[]}
+        """.trimIndent()
+        assertTrue(StateCodec.decode(json).docs.isEmpty())
+    }
+
+    @Test
+    fun danglingSupersededByPointerIsClearedOnDecode() {
+        // A backup that references a replacement not in the set would leave a chip that can never
+        // resolve; the decode choke point drops the dangling pointer (P2-4).
+        val json = """
+            {"schemaVersion":3,"primaryDocId":null,
+             "docs":[
+               {"id":"doc-old","label":"Old","kind":"passport","iso2":"CZ","supersededBy":"doc-missing"},
+               {"id":"doc-keep","label":"Keep","kind":"passport","iso2":"CZ","supersededBy":null}
+             ],"trips":[]}
+        """.trimIndent()
+        val state = StateCodec.decode(json)
+        assertNull(state.docs.first { it.id == "doc-old" }.supersededBy)
+        assertEquals(2, state.docs.size)
+    }
+
+    @Test
+    fun selfSupersededByPointerIsClearedOnDecode() {
+        // A doc superseding itself would expire from today and vanish from the valid lists;
+        // decode drops the pointer (P2-4).
+        val json = """
+            {"schemaVersion":3,"primaryDocId":null,
+             "docs":[{"id":"doc-1","label":"Self","kind":"passport","iso2":"CZ","supersededBy":"doc-1"}],
+             "trips":[]}
+        """.trimIndent()
+        val state = StateCodec.decode(json)
+        assertEquals(1, state.docs.size)
+        assertNull(state.docs.single().supersededBy)
+    }
+
+    @Test
+    fun validSupersededByPointerSurvivesDecode() {
+        val json = """
+            {"schemaVersion":3,"primaryDocId":null,
+             "docs":[
+               {"id":"doc-old","label":"Old","kind":"passport","iso2":"CZ","supersededBy":"doc-new"},
+               {"id":"doc-new","label":"New","kind":"passport","iso2":"CZ","supersededBy":null}
+             ],"trips":[]}
+        """.trimIndent()
+        assertEquals("doc-new", StateCodec.decode(json).docs.first { it.id == "doc-old" }.supersededBy)
+    }
+
+    @Test
+    fun stopWithNullCountryIsSkippedButSiblingsSurvive() {
+        val json = """
+            {"schemaVersion":3,"primaryDocId":null,"docs":[],
+             "trips":[{"id":"trip-1","note":null,
+                       "stops":[
+                         {"id":"bad","country":null,"arrival":"2026-10-01"},
+                         {"id":"stop-ok","country":"FR","arrival":"2026-10-05","departure":null,"documentId":null}
+                       ]}]}
+        """.trimIndent()
+        val stops = StateCodec.decode(json).trips.single().stops
+        assertEquals(1, stops.size)
+        assertEquals("FR", stops.single().countryIso2)
+    }
+
+    @Test
+    fun primaryDocIdSurvivesDecodeIncludingDangling() {
+        // The primary pointer is preserved verbatim (even when dangling) — the ViewModel
+        // re-derives a valid pointer on load; decode only enforces doc-set invariants (P2-40).
+        val json = """
+            {"schemaVersion":3,"primaryDocId":"doc-gone","docs":[],"trips":[]}
+        """.trimIndent()
+        assertEquals("doc-gone", StateCodec.decode(json).primaryDocId)
+    }
+
+    @Test
     fun futureSchemaVersionIsRejected() {
         // A file written by a NEWER app must not be misread: decode throws so the caller can
         // quarantine the file (a downgraded app must never rewrite a newer format).
