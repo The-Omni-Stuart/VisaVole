@@ -882,6 +882,17 @@ class GuardTest {
         assertFalse(r.findings.any { it.code == "trip.timeOverlap" || it.code == "trip.overlap" })
     }
 
+    @Test fun updatingTripDoesNotWarnAgainstItself() {
+        // P2-39: UpdateTrip's self-exclusion (others = trips.filter { it.id != candidate.id }) —
+        // the trip being updated still sits in ctx.trips, so without the filter it would warn
+        // about overlapping itself.
+        val t = trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(20)))
+        val r = GuardEngine.evaluate(GuardAction.UpdateTrip(t), ctx(trips = listOf(t)))
+        assertFalse(r.findings.any { it.code == "trip.overlap" })
+        assertFalse(r.findings.any { it.code == "trip.timeOverlap" })
+        assertTrue(r.canProceed)
+    }
+
     @Test fun sameTimeOverlapAcrossZoneStillUsesZoneFinding() {
         val rule = StayRule("Schengen", setOf("FR", "DE"), "rolling", 90, 180, true, setOf("*"), null, "schengen", "schengen")
         val w = WorldData(

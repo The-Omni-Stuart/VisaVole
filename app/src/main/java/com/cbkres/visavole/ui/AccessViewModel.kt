@@ -179,7 +179,13 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         val effectiveDocs = if (homeCountries.isNotEmpty()) TripModel.effectiveDocs(docs, trips, w, today, statuses = statuses) else docs
         val access =
             if (homeCountries.isNotEmpty()) AccessModel.compute(effectiveDocs, w, today, trips = trips.toList(), statuses = statuses) else emptyMap()
-        val calc = if (homeCountries.isNotEmpty()) TripModel.calculate(trips, docs, w, today, statuses = statuses)
+        // P2-27/28: thread this publish's access map + per-doc candidate maps into the
+        // calculation so zone usage and gate probes reuse them instead of recomputing.
+        val calc = if (homeCountries.isNotEmpty()) TripModel.calculate(
+            trips, docs, w, today, statuses = statuses,
+            access = access,
+            candidateMaps = AccessModel.candidateMaps(docs, w, statuses),
+        )
         else TripCalculation(TripSections(emptyList(), emptyList(), emptyList()), emptyList(), emptyMap())
         _state.value = AppState.Ready(
             homeCountries = homeCountries,

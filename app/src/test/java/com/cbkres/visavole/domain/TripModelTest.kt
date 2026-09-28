@@ -481,6 +481,22 @@ class TripModelTest {
     }
 
     @Test
+    fun closeTripDoesNotExtendAlreadyClosedFinalStop() {
+        // P2-12: a final stop already closed with an EARLIER departure is kept — extending
+        // recorded history would silently inflate the country's zone usage. Truncating to an
+        // earlier close date is allowed.
+        val original = trip(
+            "t",
+            stop("s1", "DE", today.minusDays(10), today.minusDays(8)),
+            stop("s2", "FR", today.minusDays(6), today.minusDays(4)),
+        )
+        val extended = TripModel.closeTrip(original, today)
+        assertEquals(today.minusDays(4), extended.stops.first { it.id == "s2" }.departure)
+        val truncated = TripModel.closeTrip(original, today.minusDays(5))
+        assertEquals(today.minusDays(5), truncated.stops.first { it.id == "s2" }.departure)
+    }
+
+    @Test
     fun splitStopsKeepsLeftHalfSortedAndRightHalfRemaining() {
         val stops = listOf(
             stop("s1", "DE", today.plusDays(10), today.plusDays(12)),
@@ -506,5 +522,144 @@ class TripModelTest {
 
         assertEquals(today.plusDays(12), left.first().departure)
         assertEquals(listOf("s2"), right.map { it.id })
+    }
+
+    @Test
+    fun rollingWindowDropsStaysOutsideLookback() {
+        // P2-36: pin the 180-day lookback boundary — a stay that ended well outside the window
+        // counts nothing, and one day at exactly the window start (today-179) still counts.
+        // A lookback off-by-one flips one of these two.
+        val outside = trip("t1", stop("s1", "DE", today.minusDays(200), today.minusDays(190))) // 11 days, outside
+        val boundary = trip("t2", stop("s2", "FR", today.minusDays(179), today.minusDays(179))) // 1 day, inside
+        val calc = TripModel.calculate(listOf(outside, boundary), listOf(passport("GB")), world(stayRules = listOf(schengen)), today)
+        val a = allowance(calc, "stay:schengen")
+        assertEquals(1, a.usedDays)
+        assertEquals(89, a.remainingDays)
+    }
+
+    @Test
+    fun projectionWarnsWhenAllowanceWouldGetLow() {
+        // P2-37: trip.allowance.low — the candidate does not exceed the window, but only
+        // ≤7 days remain after it.
+        val candidate = trip("c", stop("s1", "DE", today.plusDays(5), today.plusDays(91))) // 87 of the 90 days
+        val warnings = TripModel.projectionWarningsFor(candidate, emptyList(), listOf(passport("GB")), world(stayRules = listOf(schengen)), today)
+        val w = warnings.first { it.code == "trip.allowance.low" }
+        assertEquals(WarningSeverity.WARNING, w.severity)
+        assertTrue(w.message.contains("3 Schengen Area days left"))
+    }
+
+    @Test
+    fun projectionWarnsWhenCandidateUsesLastEntry() {
+        // P2-37: trip.entries.last — the candidate's own future stop consumes the document's
+        // final entry (remaining hits 0, not negative).
+        val v = Document("v", "Visa", Custom(setOf("US"), null, "visa", null, "double"), "2030-01-01")
+        val past = trip("t1", stop("s1", "US", today.minusDays(30), today.minusDays(25), "v"))
+        val candidate = trip("c", stop("s2", "US", today.plusDays(10), today.plusDays(14), "v"))
+        val warnings = TripModel.projectionWarningsFor(candidate, listOf(past), listOf(v), world(), today)
+        val w = warnings.first { it.code == "trip.entries.last" }
+        assertEquals(WarningSeverity.WARNING, w.severity)
+        assertTrue(w.message.contains("last Visa entry"))
+    }
+
+    @Test
+    fun projectionCountsSeparatedFutureStopOnOpenStayAsReEntry() {
+        // P2-13: a single-entry visa with an open in-progress stay plus the candidate's separated
+        // future stop on the same doc is a re-entry — 2 entries against 1 → DANGER
+        // "Not enough entries" (the old merge-into-the-open-entry logic reported
+        // WARNING "Last entry used" instead).
+        val v = Document("v", "Visa", Custom(setOf("AT"), null, "visa", null, "single"), "2030-01-01")
+        val inProgress = trip("t1", stop("s1", "AT", today.minusDays(5), null, "v"))
+        val candidate = trip("t2", stop("s2", "AT", today.plusDays(10), null, "v"))
+        val warnings = TripModel.projectionWarningsFor(candidate, listOf(inProgress), listOf(v), world(), today)
+        assertTrue(warnings.any { it.code == "trip.entries.over" && it.severity == WarningSeverity.DANGER })
+    }
+
+    @Test
+    fun projectionWarnsWhenCountryNeedsExtraStep() {
+        // P2-37: trip.access.extraStep — a destination needing an e-visa/ETA on the trip dates
+        // (a warning, not a block).
+        val w = world(
+            countries = mapOf("AU" to Country("AU", "Australia")),
+            baseline = mapOf("GB" to listOf(Corridor("GB", "AU", "e-visa", 90))),
+        )
+        val candidate = trip("c", stop("s1", "AU", today.plusDays(10), today.plusDays(14)))
+        val warnings = TripModel.projectionWarningsFor(candidate, emptyList(), listOf(passport("GB")), w, today)
+        val extra = warnings.first { it.code == "trip.access.extraStep" }
+        assertEquals(WarningSeverity.WARNING, extra.severity)
+        assertTrue(extra.message.contains("e-visa"))
+    }
+
+    @Test
+    fun expiredPassportNationalityDoesNotDriveStayRule() {
+        // P2-30: the traveller holds a valid GB passport and an expired FR passport, staying in a
+        // neutral country (DE) with no document declared. The stay rule must resolve on the valid
+        // GB nationality's 60-day rule — the expired FR nationality must not pull in the FR-keyed
+        // 90-day rule. (DE, not FR: an FR stay is suppressed as a home-country stay regardless.)
+        val gbRule = StayRule("GB-60", setOf("DE"), "per-entry", 60, null, true, setOf("GB"), null, id = "gb60", zoneId = "gb60")
+        val frRule = StayRule("FR-90", setOf("DE"), "per-entry", 90, null, true, setOf("FR"), null, id = "fr90", zoneId = "fr90")
+        val w = world(stayRules = listOf(gbRule, frRule))
+        val trips = listOf(trip("t1", stop("s1", "DE", today.minusDays(5), null)))
+        val calc = TripModel.calculate(trips, listOf(passport("GB"), Document("p2", "FR", Passport("FR"), "2025-01-01")), w, today)
+        val a = calc.allowances.first { it.key == "stay:gb60" }
+        assertEquals(60, a.totalDays)
+        assertEquals(6, a.usedDays)
+        assertTrue(calc.allowances.none { it.key == "stay:fr90" })
+    }
+
+    @Test
+    fun exhaustedDocSnapshotShowsDangerAtExhaustionDate() {
+        // P2-38: a single-entry visa whose one stay is over is spent: zero entries left, pinned
+        // to the exhaustion date (the stay's end). (The AllowanceStatus.EXHAUSTED branch is
+        // shadowed here — an exhausted doc's effective expiry is by definition in the past, so
+        // the expiry check reports DANGER first; that is what the UI shows.)
+        val v = Document("v", "Visa", Custom(setOf("US"), null, "visa", null, "single"), "2030-01-01")
+        val trips = listOf(trip("t1", stop("s1", "US", today.minusDays(12), today.minusDays(8), "v")))
+        val calc = TripModel.calculate(trips, listOf(v), world(), today)
+        val a = calc.allowances.first { it.key == "doc:v" }
+        assertEquals(AllowanceKind.ENTRY_COUNT, a.kind)
+        assertEquals(1, a.entryTotal)
+        assertEquals(1, a.entryUsed)
+        assertEquals(0, a.entryRemaining)
+        assertEquals(today.minusDays(8), a.effectiveExpiry)
+        assertEquals(0, a.remainingDays)
+        assertEquals(AllowanceStatus.DANGER, a.status)
+    }
+
+    @Test
+    fun lastEntryDocSnapshotWarns() {
+        // P2-38: WARNING at remaining == 1 — a double-entry visa with one entry used.
+        val v = Document("v", "Visa", Custom(setOf("US"), null, "visa", null, "double"), "2030-01-01")
+        val trips = listOf(trip("t1", stop("s1", "US", today.minusDays(12), today.minusDays(8), "v")))
+        val calc = TripModel.calculate(trips, listOf(v), world(), today)
+        val a = calc.allowances.first { it.key == "doc:v" }
+        assertEquals(2, a.entryTotal)
+        assertEquals(1, a.entryUsed)
+        assertEquals(1, a.entryRemaining)
+        assertEquals(AllowanceStatus.WARNING, a.status)
+    }
+
+    @Test
+    fun docSnapshotSubtitleFormat() {
+        // P2-38: the subtitle is "<entry type> · Expires <date>"; the entry-type half is omitted
+        // for unlimited-entry docs and the date half when there is no expiry.
+        val double = Document("v", "Visa", Custom(setOf("US"), null, "visa", null, "double"), "2030-01-01")
+        val unlimited = Document("u", "Visa", Custom(setOf("US"), null, "visa", null, "multiple"), "2030-01-01")
+        val noExpiry = Document("n", "Visa", Custom(setOf("US"), null, "visa", null, "single"))
+        val calc = TripModel.calculate(emptyList(), listOf(double, unlimited, noExpiry), world(), today)
+        assertEquals("Double entry · Expires 2030-01-01", calc.allowances.first { it.key == "doc:v" }.subtitle)
+        assertEquals("Expires 2030-01-01", calc.allowances.first { it.key == "doc:u" }.subtitle)
+        assertEquals("Single entry", calc.allowances.first { it.key == "doc:n" }.subtitle)
+    }
+
+    @Test
+    fun passportSnapshotShowsValidityNotEntries() {
+        // P2-38: a passport gets a DOCUMENT_VALIDITY snapshot — no entry count, just "Expires".
+        val p = Document("p", "Passport · GB", Passport("GB"), expiry = "2026-10-12")
+        val calc = TripModel.calculate(emptyList(), listOf(p), world(), today)
+        val a = calc.allowances.first { it.key == "doc:p" }
+        assertEquals(AllowanceKind.DOCUMENT_VALIDITY, a.kind)
+        assertEquals("Expires 2026-10-12", a.subtitle)
+        assertEquals(29, a.remainingDays)
+        assertEquals(AllowanceStatus.OK, a.status)
     }
 }

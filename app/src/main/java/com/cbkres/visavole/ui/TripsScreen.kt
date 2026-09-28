@@ -280,13 +280,15 @@ private fun TripCard(
     val stopCountLabel = if (sortedStops.size > 1) "${sortedStops.size} stops" else null
     val passportCounts = remember(docs) { passportCountsByIso(docs) }
     val passportNumbers = remember(docs) { passportNumbers(docs) }
+    // Stay windows resolve against the passports that are not expired (P2-30).
+    val validHomes = remember(docs, world, today) { AccessModel.validHomeCountries(docs, world, today) }
     val docLabels = sortedStops.mapNotNull { it.documentId }.distinct().joinToString(", ") { id ->
         docs.firstOrNull { it.id == id }?.displayLabel(passportCounts, passportNumbers) ?: id
     }
     val zones = sortedStops
         .map { stop ->
             val countryName = world.countries[stop.countryIso2]?.name ?: stop.countryIso2
-            zoneLabel(world.stayRuleFor(stop.countryIso2, AccessModel.homeCountries(docs), today), countryName)
+            zoneLabel(world.stayRuleFor(stop.countryIso2, validHomes, today), countryName)
         }
         .distinct()
     val relatedAllowance = allowances.firstOrNull { it.currentTripId == trip.id && !it.key.startsWith("doc:") }
@@ -371,7 +373,7 @@ private fun TripCard(
                             Text("${index + 1}.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             Text(countryName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                             Text(
-                                zoneLabel(world.stayRuleFor(stop.countryIso2, AccessModel.homeCountries(docs), today), countryName),
+                                zoneLabel(world.stayRuleFor(stop.countryIso2, validHomes, today), countryName),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -910,7 +912,8 @@ private fun StopRow(
     onClick: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    val rule = world.stayRuleFor(stop.countryIso2, AccessModel.homeCountries(docs), today)
+    val validHomes = remember(docs, world, today) { AccessModel.validHomeCountries(docs, world, today) }
+    val rule = world.stayRuleFor(stop.countryIso2, validHomes, today)
     val passportCounts = remember(docs) { passportCountsByIso(docs) }
     val passportNumbers = remember(docs) { passportNumbers(docs) }
     Surface(
@@ -1107,8 +1110,8 @@ private fun StopEditorDialog(
             stop = stop.copy(documentId = preferred)
         }
     }
-    val rule = remember(stop.countryIso2, stop.arrival, docs) {
-        world.stayRuleFor(stop.countryIso2, AccessModel.homeCountries(docs), stop.arrival)
+    val rule = remember(stop.countryIso2, stop.arrival, docs, world) {
+        world.stayRuleFor(stop.countryIso2, AccessModel.validHomeCountries(docs, world, stop.arrival), stop.arrival)
     }
     val stopAccess = remember(stop.countryIso2, stop.arrival, docs, trips) {
         AccessModel.compute(docs, world, stop.arrival, trips)[stop.countryIso2]

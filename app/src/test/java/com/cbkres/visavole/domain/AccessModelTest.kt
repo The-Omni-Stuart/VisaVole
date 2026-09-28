@@ -962,5 +962,38 @@ class AccessModelTest {
         assertEquals(ResidenceClass.TEMPORARY, Document("c", "c", Custom(setOf("CZ"), null, "residence")).residenceClassFor(w))
         assertEquals(ResidenceClass.LONG_TERM, Document("c", "c", Custom(setOf("SG"), null, "residence"), null, null, ResidenceClass.LONG_TERM).residenceClassFor(w))
         assertNull(Document("c", "c", Custom(setOf("CZ"), null, "visa")).residenceClassFor(w))
+        // P2-29: a Custom residence typed as a known holding inherits that holding's default class
+        // (a green card is permanent, not blanket temporary) — matching the identical Holding doc.
+        assertEquals(
+            ResidenceClass.PERMANENT,
+            Document("g", "g", Custom(setOf("US"), null, "residence", "us-green-card")).residenceClassFor(w),
+        )
+    }
+
+    @Test fun ownVisaCountriesCollectsIssuingAndCustomCountries() {
+        // P2-35: pin the positive paths — a short-term visa holding contributes its issuing
+        // country, a custom visa its countries — alongside the exclusions (residences, expired).
+        val w = world(
+            holdings = mapOf(
+                "jp-visa" to DataHolding("jp-visa", "Japan Visa", "short_term_visa", "JP"),
+                "cz-res" to DataHolding("cz-res", "CZ Residence", "residency", "CZ"),
+            ),
+        )
+        val today = LocalDate.of(2026, 9, 16)
+        val jp = doc("jp", Holding("jp-visa"))
+        val czRes = doc("cz", Holding("cz-res"))
+        val ca = Document("ca", "CA Visa", Custom(setOf("CA"), null, "visa", null, "multiple"), "2028-01-01")
+        val expiredJp = Document("jp2", "Old JP Visa", Holding("jp-visa"), "2025-01-01")
+        assertEquals(setOf("JP", "CA"), AccessModel.ownVisaCountries(listOf(jp, czRes, ca, expiredJp), w, today))
+    }
+
+    @Test fun validHomeCountriesDropsExpiredPassports() {
+        // P2-30: only non-expired passports count as home countries for stay-rule resolution.
+        val w = world()
+        val today = LocalDate.of(2026, 9, 16)
+        val valid = doc("p1", Passport("GB"))
+        val expired = Document("p2", "FR", Passport("FR"), "2025-01-01")
+        assertEquals(setOf("GB"), AccessModel.validHomeCountries(listOf(valid, expired), w, today))
+        assertTrue(AccessModel.validHomeCountries(listOf(expired), w, today).isEmpty())
     }
 }

@@ -402,11 +402,13 @@ private fun MapTab(
                 val selectedAccess = s.access[selected]
                 // The springs above recompose this screen every frame while the card slides, so
                 // the per-selection domain lookups are remembered rather than recomputed inline.
-                val stayRule = remember(selected, s.homeCountries, s.access, s.world) {
+                // Stay windows resolve against the passports that are not expired (P2-30).
+                val validHomes = remember(s.docs, s.world, s.today) { AccessModel.validHomeCountries(s.docs, s.world, s.today) }
+                val stayRule = remember(selected, s.homeCountries, s.access, s.world, validHomes) {
                     when {
                         selected in s.homeCountries -> null
                         s.access[selected]?.level == AccessLevel.RESIDENCE -> null // you live here — no short-stay limit
-                        else -> s.world.stayRuleFor(selected, s.homeCountries)
+                        else -> s.world.stayRuleFor(selected, validHomes, s.today)
                     }
                 }
                 val breakdown = remember(selected, s.docs, s.world, s.trips) {

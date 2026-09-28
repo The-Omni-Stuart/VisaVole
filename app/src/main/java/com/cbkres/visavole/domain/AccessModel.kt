@@ -218,6 +218,43 @@ object AccessModel {
         docs.mapNotNull { (it.kind as? Passport)?.iso2 }.toSet()
 
     /**
+     * [homeCountries] restricted to passports that are not expired at [today] — the passports that
+     * can actually support a stay. Stay rules resolve against these, so an expired passport's
+     * nationality cannot drive the allowance window of a stay entered with another passport
+     * (P2-30). Passport validity is date-driven, so [trips] is irrelevant beyond the status call.
+     */
+    fun validHomeCountries(
+        docs: List<Document>,
+        world: WorldData,
+        today: LocalDate,
+        trips: List<Trip> = emptyList(),
+        statuses: Map<String, DocStatus>? = null,
+    ): Set<String> {
+        val all = statuses ?: DocStatus.all(docs, trips, world, today)
+        return docs
+            .filter { d -> d.kind is Passport && all[d.id]?.expired != true }
+            .mapNotNull { (it.kind as Passport).iso2 }
+            .toSet()
+    }
+
+    /**
+     * The expensive per-document candidate maps, built once per publish so every gate probe
+     * ([bestDocumentId] / [gateDocumentId] inside [com.cbkres.visavole.domain.TripModel]) can share
+     * them instead of rebuilding each doc's full candidate map per zone country (P2-27).
+     */
+    fun candidateMaps(
+        docs: List<Document>,
+        world: WorldData,
+        statuses: Map<String, DocStatus>,
+    ): Map<String, Map<String, Access>> = docs.associate { doc ->
+        val candidates = when (val k = doc.kind) {
+            is Passport -> passportCandidates(k.iso2, world, statuses[doc.id]?.expired == true)
+            else -> documentCandidates(doc, world)
+        }
+        doc.id to candidates
+    }
+
+    /**
      * The "own" countries of every non-expired short-term visa the traveller holds — the visa's
      * home / issuing country ([Holding]) or the specific countries it was made for ([Custom]). On the
      * map these render the darker purple; the rest of the bloc a visa unlocks is the lighter shade.
@@ -320,7 +357,8 @@ object AccessModel {
         primaryId: String? = null,
         trips: List<Trip> = emptyList(),
         statuses: Map<String, DocStatus>? = null,
-    ): String? = bestDocumentIdCore(dest, docs, world, today, primaryId, trips, ignoreExpiry = false, statuses = statuses)
+        candidateMaps: Map<String, Map<String, Access>>? = null,
+    ): String? = bestDocumentIdCore(dest, docs, world, today, primaryId, trips, ignoreExpiry = false, statuses = statuses, candidateMaps = candidateMaps)
 
     /**
      * The strongest held document with a documented rule for [dest], regardless of validity — the
@@ -335,7 +373,8 @@ object AccessModel {
         today: LocalDate = LocalDate.now(ZoneOffset.UTC),
         trips: List<Trip> = emptyList(),
         statuses: Map<String, DocStatus>? = null,
-    ): String? = bestDocumentIdCore(dest, docs, world, today, primaryId = null, trips = trips, ignoreExpiry = true, statuses = statuses)
+        candidateMaps: Map<String, Map<String, Access>>? = null,
+    ): String? = bestDocumentIdCore(dest, docs, world, today, primaryId = null, trips = trips, ignoreExpiry = true, statuses = statuses, candidateMaps = candidateMaps)
 
     private fun bestDocumentIdCore(
         dest: String,
@@ -346,15 +385,17 @@ object AccessModel {
         trips: List<Trip>,
         ignoreExpiry: Boolean,
         statuses: Map<String, DocStatus>? = null,
+        candidateMaps: Map<String, Map<String, Access>>? = null,
     ): String? {
         val evaluated = docs
             .mapNotNull { doc ->
                 val expired = expiredOf(doc, docs, world, today, trips, statuses)
                 if (doc.kind !is Passport && !ignoreExpiry && (expired || notYetValid(doc, today))) return@mapNotNull null
-                val candidates = when (val k = doc.kind) {
-                    is Passport -> passportCandidates(k.iso2, world, expired)
-                    else -> documentCandidates(doc, world)
-                }
+                val candidates = candidateMaps?.get(doc.id)
+                    ?: when (val k = doc.kind) {
+                        is Passport -> passportCandidates(k.iso2, world, expired)
+                        else -> documentCandidates(doc, world)
+                    }
                 candidates[dest]?.takeIf { it.level != UNKNOWN }?.let { doc to it }
             }
         val bestPassport = bestWithPrimary(evaluated.filter { it.first.kind is Passport }, primaryId)

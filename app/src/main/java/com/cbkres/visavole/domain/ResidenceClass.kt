@@ -27,7 +27,9 @@ fun Document.residenceClassFor(world: WorldData): ResidenceClass? = when (val k 
         if (h.category in RESIDENCE_LIKE_HOLDING_CATEGORIES) residenceClass ?: defaultResidenceClassFor(h.id, false)
         else null
     }
-    is DocKind.Custom -> if (k.kind == "residence") residenceClass ?: ResidenceClass.TEMPORARY else null
+    // A custom residence inherits the holding's default class (e.g. a custom doc typed as
+    // `us-green-card` defaults to PERMANENT), not a blanket TEMPORARY (P2-29).
+    is DocKind.Custom -> if (k.kind == "residence") residenceClass ?: defaultResidenceClassFor(k.holdingId, true) else null
 }
 
 /**
