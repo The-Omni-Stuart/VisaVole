@@ -417,7 +417,8 @@ fun VisaSnackbarHost(hostState: SnackbarHostState, modifier: Modifier = Modifier
 // --- Allowance ring: shared by the Trips tab (112.dp primary + switcher) and the Documents tab (72.dp per document) ---
 
 internal fun allowanceFraction(a: AllowanceSnapshot): Float = when {
-    a.totalDays != null && a.usedDays != null -> ((a.totalDays - a.usedDays).coerceAtLeast(0) / a.totalDays.toFloat()).coerceIn(0f, 1f)
+    // P3-25: guard a zero-day window — dividing by 0f is NaN and would poison drawArc's sweep.
+    a.totalDays != null && a.usedDays != null && a.totalDays > 0 -> ((a.totalDays - a.usedDays).coerceAtLeast(0) / a.totalDays.toFloat()).coerceIn(0f, 1f)
     a.entryTotal != null && a.entryRemaining != null -> (a.entryRemaining.toFloat() / a.entryTotal).coerceIn(0f, 1f)
     a.remainingDays != null -> (a.remainingDays.coerceAtLeast(0) / 90f).coerceIn(0f, 1f)
     else -> 1f

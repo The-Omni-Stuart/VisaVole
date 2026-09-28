@@ -875,6 +875,16 @@ class AccessModelTest {
         assertEquals(COVERED, AccessModel.compute(listOf(doc("d", Holding("jp-visa"))), w2)["KR"]!!.level)
     }
 
+    @Test fun unparseableResidenceMinimumFailsClosed() {
+        // P3-28: a residenceMin that doesn't parse (a data typo) must deny the grant — it must not
+        // be treated as "no minimum" and over-grant even to a permanent residence.
+        val w = world(
+            holdings = mapOf("schengen-residence" to DataHolding("schengen-residence", "Schengen/EU Residence", "residency", "EU")),
+            benefits = mapOf("schengen-residence" to listOf(Benefit("schengen-residence", "BA", "visa-free", 30, emptySet(), "permant"))),
+        )
+        assertNull(AccessModel.compute(listOf(residenceDoc("d", ResidenceClass.PERMANENT)), w)["BA"])
+    }
+
     @Test fun customResidenceGatedByResidenceMinimum() {
         val w = world(
             holdings = mapOf("schengen-residence" to DataHolding("schengen-residence", "Schengen/EU Residence", "residency", "EU")),

@@ -56,7 +56,12 @@ object AccessModel {
      *  document's effective residence class must rank at or above the minimum, and a
      *  non-residence document (no class) never satisfies a restricted grant. */
     private fun residenceMinSatisfied(doc: Document, world: WorldData, benefit: Benefit): Boolean {
-        val min = ResidenceClass.fromId(benefit.residenceMin) ?: return true
+        val minId = benefit.residenceMin
+        if (minId == null) return true // no minimum — applies to any residence
+        val min = ResidenceClass.fromId(minId)
+        // P3-28: a non-null minimum that doesn't parse is a data error — fail closed (deny) rather
+        // than treating it as "no minimum" and over-granting permanent-only perks.
+        if (min == null) return false
         val effective = doc.residenceClassFor(world) ?: return false
         return effective.ordinal >= min.ordinal
     }

@@ -349,7 +349,12 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     /** UX close of an ongoing trip — intentionally outside the guard (see spec §Phase 3). */
     fun endTrip(id: String, departure: LocalDate) {
-        val trip = trips.firstOrNull { it.id == id } ?: return
+        // P3-50: a stale id used to no-op silently — surface it instead (the path is modal-blocked
+        // today, but it was the last silent return left in the VM).
+        if (trips.none { it.id == id }) {
+            snack("That trip no longer exists.")
+            return
+        }
         trips = trips.map { if (it.id == id) TripModel.closeTrip(it, departure) else it }.toMutableList()
         persist()
         publish()
@@ -445,7 +450,16 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
                 stateFileBlocked = true
                 Log.e(TAG, "Unreadable state file $f could not be quarantined; persisting disabled for this process")
             }
+            // P3-29: cap the quarantine files so repeated decode failures don't accumulate forever.
+            pruneQuarantined(f.parentFile)
         }
+    }
+
+    /** P3-29: keep only the newest [keep] quarantine files so a run of decode failures doesn't fill
+     *  the files dir. Names end in `.corrupt-<epoch-millis>`, so sorting by name is newest-first. */
+    private fun pruneQuarantined(dir: File, keep: Int = 3) {
+        val files = dir.listFiles { f -> f.isFile && f.name.contains(".corrupt-") }?.sortedByDescending { it.name } ?: return
+        for (old in files.drop(keep)) runCatching { old.delete() }
     }
 
     companion object {

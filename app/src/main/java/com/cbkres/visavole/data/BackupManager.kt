@@ -35,8 +35,15 @@ class BackupManager(context: Context) {
             val text = stateFile.takeIf { it.exists() }?.readText()
                 ?: return Outcome.Failed("There is no data to back up yet.")
             StateCodec.decode(text) // fail early if the current state is unreadable
-            appContext.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) }
+            val out = appContext.contentResolver.openOutputStream(uri)
                 ?: return Outcome.Failed("Could not open the backup location.")
+            try {
+                out.use { it.write(text.toByteArray()) }
+            } catch (e: Exception) {
+                // P3-33: a mid-write failure (disk full, permission revoked) can leave a truncated
+                // backup at the chosen location — say so rather than reporting a clean failure.
+                return Outcome.Failed("Export failed mid-way; a partial backup may remain at the chosen location.")
+            }
             Outcome.Exported(uri)
         } catch (e: Exception) {
             Outcome.Failed("Export failed: ${e.message ?: "unknown error"}")
@@ -69,7 +76,7 @@ class BackupManager(context: Context) {
             }
             bytes.toString(Charsets.UTF_8.name())
         }
-        Outcome.Imported(uri, StateCodec.decode(text))
+        Outcome.Imported(uri, StateCodec.decode(text.removePrefix("\uFEFF")))
     } catch (e: Exception) {
         Outcome.Failed("That file does not look like a Visa Vole backup.")
     }

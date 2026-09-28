@@ -105,8 +105,11 @@ fun Document.identityKey(): String = when (val k = kind) {
  */
 fun Document.docCategory(world: WorldData): String? = when (val k = kind) {
     is DocKind.Passport -> null
-    is DocKind.Holding -> world.holdings[k.holdingId]?.let { h ->
-        if (h.category == "residency" || h.category == "long_term_visa") "residence" else "visa"
+    is DocKind.Holding -> {
+        val h = world.holdings[k.holdingId]
+        // P3-26: an unknown holding id must not escape the caps/supersession (which key off this
+        // category) — default it to "visa" instead of null.
+        if (h != null && (h.category == "residency" || h.category == "long_term_visa")) "residence" else "visa"
     }
     is DocKind.Custom -> if (k.kind == "residence") "residence" else "visa"
 }
