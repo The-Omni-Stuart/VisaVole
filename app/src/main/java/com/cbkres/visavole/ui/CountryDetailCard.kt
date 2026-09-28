@@ -47,6 +47,9 @@ fun CountryDetailCard(
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 0.dp,
+        // P3-57: no drop shadow — the default 3dp elevation read as a shadow on the card's
+        // lower edge and washed out the last breakdown row (the card is a flat bottom sheet).
+        shadowElevation = 0.dp,
     ) {
         Column(Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -107,8 +110,10 @@ fun CountryDetailCard(
                 val breakdownSpacing = 8.dp
                 val breakdownMaxHeight = breakdownRowHeight * maxVisibleBreakdownRows +
                     breakdownSpacing * (maxVisibleBreakdownRows - 1)
-                val (breakdownTop, breakdownEnd) = breakdownScroll.hazeAlphas()
-                HazeBox(breakdownTop, breakdownEnd, MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
+                // P3-57: only the top haze (the "scrolled" cue) — the bottom fade is ~fully
+                // opaque for a barely-scrollable breakdown and washes out the last row.
+                val (breakdownTop, _) = breakdownScroll.hazeAlphas()
+                HazeBox(breakdownTop, 0f, MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
                     Column(
                         Modifier.then(
                             if (breakdown.size > maxVisibleBreakdownRows) {
