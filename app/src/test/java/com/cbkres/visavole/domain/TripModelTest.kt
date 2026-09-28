@@ -90,6 +90,19 @@ class TripModelTest {
     }
 
     @Test
+    fun currentTripIdPrefersTheMostInProgressActiveTrip() {
+        // P3-2: two concurrently-active trips in one zone → current is the one with the most
+        // days, not the first inserted (tB is inserted first but is shallower).
+        val trips = listOf(
+            trip("tB", stop("sB", "FR", today.minusDays(1), null)),
+            trip("tA", stop("sA", "DE", today.minusDays(10), null)),
+        )
+        val calc = TripModel.calculate(trips, listOf(passport("GB")), world(stayRules = listOf(schengen)), today)
+        val a = allowance(calc, "stay:schengen")
+        assertEquals("tA", a.currentTripId)
+    }
+
+    @Test
     fun freedomAndResidenceDaysAreNotCounted() {
         val trips = listOf(trip("t1", stop("s1", "DE", today.minusDays(4), today)))
         val calc = TripModel.calculate(trips, listOf(passport("DE")), world(stayRules = listOf(schengen)), today)
@@ -401,6 +414,17 @@ class TripModelTest {
             stop("s2", "FR", today.plusDays(7), null),
         )
         assertEquals(1, TripModel.firstGapIndex(stops))
+    }
+
+    @Test
+    fun firstGapIndexSkipsAnOpenNonFinalStopToFindALaterGap() {
+        // P3-1: a non-final open stop must not bail the scan — a later real gap is still found.
+        val stops = listOf(
+            stop("s1", "DE", today, null),
+            stop("s2", "DE", today.plusDays(5), today.plusDays(6)),
+            stop("s3", "FR", today.plusDays(10), null),
+        )
+        assertEquals(2, TripModel.firstGapIndex(stops))
     }
 
     @Test

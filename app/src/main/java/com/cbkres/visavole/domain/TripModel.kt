@@ -29,6 +29,7 @@ object TripModel {
         val segments: MutableList<ZoneSegment> = mutableListOf(),
         val tripIds: MutableSet<String> = mutableSetOf(),
         val activeTripIds: MutableSet<String> = mutableSetOf(),
+        val activeTripDays: MutableMap<String, Int> = mutableMapOf(),
         var rule: StayRule? = null,
     )
 
@@ -93,8 +94,10 @@ object TripModel {
         candidateMaps: Map<String, Map<String, Access>>? = null,
     ): TripCalculation {
         val tripSections = sections(trips, today)
-        val entryStatus = entryStatusFor(docs, trips, world, today)
         val docStatuses = statuses ?: DocStatus.all(docs, trips, world, today)
+        // P3-4: derive the entry-status map from the threaded DocStatus.entries instead of
+        // re-running computeEntryStatus per doc — DocStatus.all already computed each one.
+        val entryStatus = docStatuses.mapNotNull { (id, status) -> status.entries?.let { id to it } }.toMap()
         val zoneAllowances = zoneUsages(trips, docs, world, today, access).mapNotNull { (key, usage) ->
             zoneSnapshot(key, usage, world, today, docs, trips, docStatuses, candidateMaps)
         }
@@ -220,7 +223,7 @@ object TripModel {
         val usageWith = zoneUsages(trips + candidate, docs, world, asOf)
         for (key in zones) {
             val usage = usageWith[key] ?: continue
-            val rule = usage.rule ?: ruleForZoneKey(world, key) ?: continue
+            val rule = usage.rule ?: continue
             val used = if (rule.windowType == "rolling") rollingUsage(rule, usage.segments, asOf).first
             else perEntryUsage(rule, usage.segments, asOf).first
             val total = rule.windowDays ?: continue
@@ -321,7 +324,9 @@ object TripModel {
     fun firstGapIndex(stops: List<TripStop>): Int? {
         val ordered = sortedStops(stops)
         for (i in 0 until ordered.lastIndex) {
-            val departure = ordered[i].departure ?: return null
+            // P3-1: skip (not bail on) an open stop so a later gap is still found — matches
+            // gapWarningsFor, which `continue`s past open stops.
+            val departure = ordered[i].departure ?: continue
             if (ordered[i + 1].arrival > departure.plusDays(1)) return i + 1
         }
         return null
@@ -394,6 +399,11 @@ object TripModel {
         val out = HashMap<String, ZoneUsage>()
         for (trip in trips) {
             for (stop in trip.stops) {
+                // Stops not yet started as of asOf contribute no usage. This includes an
+                // open-ended final stop whose arrival lies after the projection date (P3-3): its
+                // days are deliberately left out of the allowance usage, while its access is still
+                // checked per stop — the projection is a snapshot as of asOf and a future stop has
+                // not yet consumed any of the window.
                 if (stop.arrival.isAfter(asOf)) continue
                 val end = if (stop.departure != null && stop.departure.isBefore(asOf)) stop.departure else asOf
                 if (end.isBefore(stop.arrival)) continue
@@ -418,6 +428,9 @@ object TripModel {
                 // One (start, end) segment, not one LocalDate per day: a year-old ongoing stop is
                 // one pair instead of ~365 dates re-materialised on every publish (P2-28).
                 usage.segments.add(ZoneSegment(stop.arrival, end))
+                // P3-2: track each trip's zone days (clamped to asOf) so the current-trip pick is
+                // the most-in-progress active trip, not the first one inserted.
+                usage.activeTripDays.merge(trip.id, ChronoUnit.DAYS.between(stop.arrival, end).toInt() + 1, Int::plus)
             }
         }
         return out
@@ -433,7 +446,7 @@ object TripModel {
         statuses: Map<String, DocStatus>,
         candidateMaps: Map<String, Map<String, Access>>? = null,
     ): AllowanceSnapshot? {
-        val rule = usage.rule ?: ruleForZoneKey(world, key) ?: return null
+        val rule = usage.rule ?: return null
         val kind = if (rule.windowType == "rolling") AllowanceKind.ROLLING else AllowanceKind.PER_ENTRY
         val (used, overstay) = if (kind == AllowanceKind.ROLLING) rollingUsage(rule, usage.segments, asOf)
         else perEntryUsage(rule, usage.segments, asOf)
@@ -471,7 +484,7 @@ object TripModel {
             totalDays = windowDays,
             windowPeriodDays = rule.windowPeriodDays,
             overstayDays = overstay,
-            currentTripId = usage.activeTripIds.firstOrNull(),
+            currentTripId = usage.activeTripIds.maxByOrNull { usage.activeTripDays[it] ?: 0 },
             relevantTripIds = usage.tripIds.toList(),
         )
     }
@@ -747,9 +760,6 @@ object TripModel {
         "double" -> 2
         else -> null
     }
-
-    private fun ruleForZoneKey(world: WorldData, key: String): StayRule? =
-        world.stayRules.firstOrNull { world.zoneKeyFor(it) == key }
 
     private fun mergeEnd(a: LocalDate?, b: LocalDate?): LocalDate? = when {
         a == null -> b
