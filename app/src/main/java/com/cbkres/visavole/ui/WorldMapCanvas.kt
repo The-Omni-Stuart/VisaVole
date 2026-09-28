@@ -583,6 +583,9 @@ internal fun WorldMapCanvas(
             onZoomIn = { zoomCentered(1.5f) },
             onZoomOut = { zoomCentered(1f / 1.5f) },
             onReset = {
+                // Reset means "back to the whole world" — close the country card too, or it would
+                // float over the zoomed-out view (the centring effect only runs on a selection).
+                latestOnTap(null)
                 zoom = 1f
                 centerWorld = Offset(geometry.width * DEFAULT_CENTER_X_FRACTION, geometry.height / 2f)
             },

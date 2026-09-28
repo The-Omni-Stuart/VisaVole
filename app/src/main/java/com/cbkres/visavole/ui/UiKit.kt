@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,6 +40,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -315,7 +317,9 @@ fun VisaListCard(
 }
 
 /** M3 date picker with the app's button vocabulary; [onConfirm] receives the chosen date (or
- *  null) and the caller is responsible for closing. [secondaryLabel] replaces "Cancel" (e.g. "Clear"). */
+ *  null) and the caller is responsible for closing. [secondaryLabel] replaces "Cancel" (e.g. "Clear").
+ *  [minDate]/[maxDate] bound the selectable range (dates outside are dimmed and cannot be chosen);
+ *  leave both null for an unbounded picker. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VisaDatePickerDialog(
@@ -325,8 +329,30 @@ fun VisaDatePickerDialog(
     onDismiss: () -> Unit,
     secondaryLabel: String? = null,
     onSecondary: (() -> Unit)? = null,
+    minDate: LocalDate? = null,
+    maxDate: LocalDate? = null,
 ) {
-    val state = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+    // Material 3 bounds dates through a SelectableDates on the state (the older
+    // validations/AllowedDateRange API is gone in 1.4.0). With bounds, any date outside
+    // [minDate, maxDate] is dimmed and cannot be chosen; without, every date is selectable.
+    val selectableDates = remember(minDate, maxDate) {
+        if (minDate == null && maxDate == null) {
+            DatePickerDefaults.AllDates
+        } else {
+            object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    val d = utcTimeMillis.toUtcIsoDate().let(LocalDate::parse)
+                    if (minDate != null && d.isBefore(minDate)) return false
+                    if (maxDate != null && d.isAfter(maxDate)) return false
+                    return true
+                }
+            }
+        }
+    }
+    val state = rememberDatePickerState(
+        initialSelectedDateMillis = initialMillis,
+        selectableDates = selectableDates,
+    )
     DatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {

@@ -205,6 +205,9 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
     val mapFocus = remember(s.geometry) { buildFocus(s.geometry) }
     val mapZoom = remember { mutableFloatStateOf(1f) }
     val mapCenter = remember(s.geometry) { mutableStateOf(defaultCenter(s.geometry)) }
+    // rememberLazyListState() is rememberSaveable(saver = LazyListState.Saver) under the hood,
+    // so the scroll position survives both the tab switch and process death — the same guarantee
+    // the Phase-C saveable pass gave tab/selected/query/expandedTrips (P2-15).
     val docsScroll = rememberLazyListState()
     val tripsScroll = rememberLazyListState()
     Scaffold(

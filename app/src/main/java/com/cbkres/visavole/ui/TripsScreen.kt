@@ -114,7 +114,11 @@ fun TripsScreen(
     // The Trips tab only surfaces zone (stay-window) allowances; per-document entry rings
     // live on the Documents tab, next to the document itself.
     val zoneAllowances = ready.allowances.filter { !it.key.startsWith("doc:") }
-    val primary = TripModel.primaryAllowance(zoneAllowances, focusedKey)
+    // Effective focus: honor the tapped card only while that allowance still exists, so a
+    // focused zone that disappears (deleted trip, lapsed doc) falls back to the primary display
+    // instead of leaving a dead key behind.
+    val effectiveFocusKey = focusedKey?.takeIf { key -> zoneAllowances.any { it.key == key } }
+    val primary = TripModel.primaryAllowance(zoneAllowances, effectiveFocusKey)
 
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         ScreenHeader("Trips", "Record your trips and track visa allowance balances.")
@@ -153,7 +157,7 @@ fun TripsScreen(
                     AllowanceSection(
                         allowances = zoneAllowances,
                         primary = primary,
-                        focusedKey = focusedKey,
+                        focusedKey = effectiveFocusKey,
                         onFocus = { focusedKey = if (focusedKey == it) null else it },
                         onRingClick = { snap ->
                             // Jump the list to the zone's trip (the in-trip one first) and centre it.
@@ -1218,6 +1222,8 @@ private fun StopEditorDialog(
                 showArrival = false
             },
             onDismiss = { showArrival = false },
+            // The arrival may not come after the (already set) departure.
+            maxDate = stop.departure,
         )
     }
     if (showDeparture) {
@@ -1231,6 +1237,8 @@ private fun StopEditorDialog(
             onDismiss = { showDeparture = false },
             secondaryLabel = if (isFinal) "Clear" else null,
             onSecondary = if (isFinal) ({ stop = stop.copy(departure = null); showDeparture = false }) else null,
+            // The departure may not precede the arrival.
+            minDate = stop.arrival,
         )
     }
 }

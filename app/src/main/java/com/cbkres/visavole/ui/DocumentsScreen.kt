@@ -213,7 +213,11 @@ fun DocumentsScreen(
                     else -> (a.remainingDays ?: Int.MAX_VALUE) < EXPIRY_WATCH_DAYS
                 }
             }
-            val docPrimary = TripModel.primaryAllowance(docAllowances, focusedAllowance)
+            // Effective focus: honor the tapped card only while that allowance still exists, so a
+            // focused doc that is deleted or lapses falls back to the primary display instead of
+            // leaving a dead key behind.
+            val effectiveFocusAllowance = focusedAllowance?.takeIf { key -> docAllowances.any { it.key == key } }
+            val docPrimary = TripModel.primaryAllowance(docAllowances, effectiveFocusAllowance)
             // How many VALID (non-expired) passports the user holds of each nationality. The primary
             // star only makes sense when two or more valid passports of the same country compete.
             val validPassportIsoCounts = active
@@ -242,8 +246,11 @@ fun DocumentsScreen(
                         AllowanceSection(
                             allowances = docAllowances,
                             primary = docPrimary,
-                            focusedKey = focusedAllowance,
-                            onFocus = { focusedAllowance = it },
+                            focusedKey = effectiveFocusAllowance,
+                            // Toggle (matching Trips): re-tapping the focused card returns to the
+                            // primary document. Set-only, the old code, trapped the user on a
+                            // secondary doc with no way back.
+                            onFocus = { focusedAllowance = if (focusedAllowance == it) null else it },
                             titleRow = { a ->
                                 val doc = ready.docs.firstOrNull { d -> d.id == a.key.removePrefix("doc:") }
                                 if (doc != null) {
@@ -947,6 +954,11 @@ private fun ValidityPeriodField(
     }
     var showValidFromPicker by remember { mutableStateOf(false) }
     var showValidToPicker by remember { mutableStateOf(false) }
+    // Bound the pickers to a coherent validity period: the start may not come after the end,
+    // and a document being (re)dated may not already be expired.
+    val today = todayMillis.toUtcIsoDate().let(LocalDate::parse)
+    val validFrom = validFromDate?.toUtcIsoDate()?.let(LocalDate::parse)
+    val expiry = expiryDate?.toUtcIsoDate()?.let(LocalDate::parse)
     OutlinedButton(
         onClick = { showValidFromPicker = true },
         shape = MaterialTheme.shapes.large,
@@ -972,6 +984,8 @@ private fun ValidityPeriodField(
                 showValidFromPicker = false
                 showValidToPicker = true
             },
+            // The validity start may not come after the (already set) end.
+            maxDate = expiry,
         )
     }
     if (showValidToPicker) {
@@ -989,6 +1003,8 @@ private fun ValidityPeriodField(
                 onExpiry(null)
                 showValidToPicker = false
             },
+            // The expiry may not precede the start nor already be in the past.
+            minDate = if (validFrom != null && validFrom.isAfter(today)) validFrom else today,
         )
     }
 }

@@ -157,6 +157,8 @@ fun OnboardingScreen(
                 onDismiss = { showDatePicker = false; showExpiryDialog = true },
                 secondaryLabel = "Cancel",
                 onSecondary = { showDatePicker = false; showExpiryDialog = true },
+                // A passport you're adding can't already be expired.
+                minDate = today,
             )
         }
     }
