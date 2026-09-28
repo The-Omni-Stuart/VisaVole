@@ -537,6 +537,75 @@ class AccessModelTest {
         assertEquals("Any", w.stayRuleFor("DE", setOf("GB"))?.zoneName) // falls back to the wildcard
     }
 
+    @Test fun stayRuleOutsideValidityWindowIsIgnored() {
+        // P3-37: a rule whose window excludes `today` is filtered before scoring — validFrom in
+        // the future and validTo in the past both make it invisible even if it's the only match.
+        val future = StayRule("Future", setOf("DE"), "rolling", 90, 180, true, setOf("*"), null,
+            validFrom = "2099-01-01")
+        val past = StayRule("Past", setOf("DE"), "per-entry", 90, null, true, setOf("*"), null,
+            validTo = "2000-01-01")
+        val inWindow = StayRule("InWindow", setOf("DE"), "per-entry", 180, null, true, setOf("*"), null,
+            validFrom = "2020-01-01", validTo = "2030-01-01")
+        val today = LocalDate.parse("2026-09-28")
+        assertEquals(
+            "InWindow",
+            world(stayRules = listOf(future, past, inWindow))
+                .stayRuleFor("DE", setOf("GB"), today = today, allowSynthetic = false)?.zoneName,
+        )
+        // With only out-of-window rules present, the (non-synthetic) lookup finds nothing.
+        assertNull(world(stayRules = listOf(future, past))
+            .stayRuleFor("DE", setOf("GB"), today = today, allowSynthetic = false))
+    }
+
+    @Test fun zoneKeyFallsBackThroughIdToZoneName() {
+        // P3-37: zoneKeyFor tiers — zoneId beats id beats zoneName; the zoneName tier fires only
+        // when both id and zoneId are blank (legacy stay_rules rows without an id).
+        val w = world()
+        assertEquals(
+            "stay:z1",
+            w.zoneKeyFor(StayRule("Z", setOf("DE"), "rolling", 90, 180, true, setOf("*"), null, id = "", zoneId = "z1")),
+        )
+        assertEquals(
+            "stay:r1",
+            w.zoneKeyFor(StayRule("Z", setOf("DE"), "rolling", 90, 180, true, setOf("*"), null, id = "r1")),
+        )
+        assertEquals("stay:Z", w.zoneKeyFor(StayRule("Z", setOf("DE"), "rolling", 90, 180, true, setOf("*"), null)))
+    }
+
+    @Test fun precomputedStatusesMatchTheDefaultPath() {
+        // P3-36: every precompute overload accepts an optional `statuses` map (a precomputed
+        // DocStatus.all), but no test ever passed one, so the memoized path was unpinned — deleting
+        // the parameter would keep the suite green. Pin parity: for a world mixing valid, expired and
+        // superseded docs plus a trip, the explicit-map call must equal the default (recomputed) call.
+        val today = LocalDate.parse("2026-09-28")
+        val docs = listOf(
+            Document("p1", "FR", Passport("FR"), "2031-01-01"),
+            Document("p2", "DE", Passport("DE"), "2020-01-01"),
+            Document("v1", "DE visa", Custom(setOf("DE"), null, "visa"), "2031-01-01"),
+            Document("old", "Old CZ", Passport("CZ"), "2031-01-01", supersededBy = "new"),
+            Document("new", "New CZ", Passport("CZ"), "2031-01-01"),
+        )
+        val trips = listOf(Trip("t1", listOf(TripStop("s1", "DE", today.plusDays(10), today.plusDays(20), null))))
+        val w = world(baseline = mapOf("FR" to listOf(corridor("FR", "DE", "visa-free", 90))))
+        val pre = DocStatus.all(docs, trips, w, today)
+
+        assertEquals(AccessModel.compute(docs, w, today, trips), AccessModel.compute(docs, w, today, trips, statuses = pre))
+        assertEquals(AccessModel.validHomeCountries(docs, w, today, trips), AccessModel.validHomeCountries(docs, w, today, trips, statuses = pre))
+        assertEquals(AccessModel.ownVisaCountries(docs, w, today, trips), AccessModel.ownVisaCountries(docs, w, today, trips, statuses = pre))
+        for (dest in listOf("DE", "FR", "CZ", "XX")) {
+            assertEquals(
+                "bestDocumentId($dest)",
+                AccessModel.bestDocumentId(dest, docs, w, today, "p1", trips),
+                AccessModel.bestDocumentId(dest, docs, w, today, "p1", trips, statuses = pre),
+            )
+            assertEquals(
+                "gateDocumentId($dest)",
+                AccessModel.gateDocumentId(dest, docs, w, today, trips),
+                AccessModel.gateDocumentId(dest, docs, w, today, trips, statuses = pre),
+            )
+        }
+    }
+
     @Test fun stayRuleSummaryFormats() {
         assertEquals(
             "Multiple entry - 90 in 180 (rolling)",

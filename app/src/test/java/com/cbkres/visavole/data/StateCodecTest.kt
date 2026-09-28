@@ -245,6 +245,34 @@ class StateCodecTest {
     }
 
     @Test
+    fun docsAndTripsFieldsPresentButNotArraysYieldEmpty() {
+        // P3-35: a hand-edited backup where `docs`/`trips` exist but aren't arrays must not crash —
+        // optJSONArray returns null and decode falls back to an empty array.
+        val json = """
+            {"schemaVersion":3,"primaryDocId":null,"docs":42,"trips":"oops"}
+        """.trimIndent()
+        val state = StateCodec.decode(json)
+        assertTrue(state.docs.isEmpty())
+        assertTrue(state.trips.isEmpty())
+    }
+
+    @Test
+    fun customDocWithNonArrayCountriesIsSkipped() {
+        // P3-35: a custom doc whose `countries` is present but not an array throws in getJSONArray;
+        // decode catches it and skips the doc (a sibling valid doc survives).
+        val json = """
+            {"schemaVersion":3,"primaryDocId":null,
+             "docs":[
+               {"id":"doc-bad","label":"A","kind":"custom","countries":"DE"},
+               {"id":"doc-good","label":"B","kind":"passport","iso2":"CZ","expiry":"2031-05-01"}
+             ],"trips":[]}
+        """.trimIndent()
+        val state = StateCodec.decode(json)
+        assertEquals(1, state.docs.size)
+        assertEquals("doc-good", state.docs.single().id)
+    }
+
+    @Test
     fun danglingSupersededByPointerIsClearedOnDecode() {
         // A backup that references a replacement not in the set would leave a chip that can never
         // resolve; the decode choke point drops the dangling pointer (P2-4).

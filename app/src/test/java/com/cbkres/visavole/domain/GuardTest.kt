@@ -1054,6 +1054,34 @@ class GuardTest {
         assertTrue(r.canProceed)
     }
 
+    @Test fun passportExpiryAtTierBoundaries() {
+        // P3-39: the 3/6-month tiers are magic ranges 1..92 / 93..183 — pin the exact boundaries so
+        // an off-by-one can't silently move a passport between tiers (existing tests used 61/122/200).
+        val t = trip("t1", stop("s1", "DE", today.plusDays(10), today.plusDays(20)))
+        val at92 = addTrip(t, docs = listOf(passport("p1", "FR", expiry = today.plusDays(92).toString())), primaryId = "p1")
+        assertTrue("92 days is still the 3-month tier", codes(at92).contains("trip.passport.expiringSoon3"))
+        assertFalse("92 days is not the 6-month tier", codes(at92).contains("trip.passport.expiringSoon6"))
+        val at93 = addTrip(t, docs = listOf(passport("p1", "FR", expiry = today.plusDays(93).toString())), primaryId = "p1")
+        assertTrue("93 days steps up to the 6-month tier", codes(at93).contains("trip.passport.expiringSoon6"))
+        assertFalse("93 days is not the 3-month tier", codes(at93).contains("trip.passport.expiringSoon3"))
+        val at183 = addTrip(t, docs = listOf(passport("p1", "FR", expiry = today.plusDays(183).toString())), primaryId = "p1")
+        assertTrue("183 days is still the 6-month tier", codes(at183).contains("trip.passport.expiringSoon6"))
+        val at184 = addTrip(t, docs = listOf(passport("p1", "FR", expiry = today.plusDays(184).toString())), primaryId = "p1")
+        assertFalse("184 days is quiet", at184.findings.any { it.code.startsWith("trip.passport.") })
+    }
+
+    @Test fun openEndedTripExpiresDuringTrip() {
+        // P3-39: an open-ended trip (no final departure) whose passport expires after the trip
+        // starts and after today must warn "expires during trip" — the end == null branch the
+        // closed-trip mid-trip test doesn't reach.
+        val p = passport("p1", "FR", expiry = today.plusDays(200).toString()) // quiet on the tiers
+        val r = addTrip(
+            trip("t1", stop("s1", "DE", today.plusDays(10), null)),
+            docs = listOf(p), primaryId = "p1",
+        )
+        assertTrue(codes(r).contains("trip.passport.expiresDuringTrip"))
+    }
+
     @Test fun passportExpiredBeforeForeignTripIsBlocked() {
         val p = passport("p1", "FR", expiry = today.minusDays(10).toString())
         val r = addTrip(
