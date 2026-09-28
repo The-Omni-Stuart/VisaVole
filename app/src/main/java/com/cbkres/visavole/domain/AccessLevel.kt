@@ -48,7 +48,10 @@ enum class AccessLevel(val rank: Int) {
         }
 
         /** True for benefits that grant entry (transit-free and others are ignored for the entry map). */
-        fun isEntryBenefit(type: String?): Boolean =
-            type in setOf("visa-free", "e-visa", "eta", "visa-on-arrival")
+        fun isEntryBenefit(type: String?): Boolean = type in ENTRY_BENEFIT_TYPES
+
+        // P3-47: hoisted — isEntryBenefit runs per benefit per candidate-map build, so the Set must
+        // not be re-allocated on every call.
+        private val ENTRY_BENEFIT_TYPES = setOf("visa-free", "e-visa", "eta", "visa-on-arrival")
     }
 }

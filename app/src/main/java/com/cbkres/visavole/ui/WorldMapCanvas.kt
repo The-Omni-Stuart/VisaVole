@@ -138,6 +138,9 @@ internal data class BBox(
 
     fun intersectsViewport(left: Float, top: Float, right: Float, bottom: Float): Boolean =
         maxX >= left && minX <= right && maxY >= top && minY <= bottom
+
+    fun contains(x: Float, y: Float): Boolean =
+        x >= minX && x <= maxX && y >= minY && y <= maxY
 }
 
 /** The world point to centre on, plus the bbox used to choose the zoom level for it. */
@@ -302,6 +305,8 @@ internal fun WorldMapCanvas(
                     val vyMin = centerWorld.y - (ds.height * invSc) / 2f - cullPad
                     val vxMax = centerWorld.x + (ds.width * invSc) / 2f + cullPad
                     val vyMax = centerWorld.y + (ds.height * invSc) / 2f + cullPad
+                    // P3-42: hoist the border Stroke — it was allocated per shape per frame (~204/frame).
+                    val borderStroke = Stroke(width = hair)
                     // Pass 1: fills. Pass 2: borders on top of every fill so shared borders are
                     // crisp (not overdrawn by a neighbour's fill). Width is constant on screen.
                     for (s in drawShapes) {
@@ -310,7 +315,7 @@ internal fun WorldMapCanvas(
                     }
                     for (s in drawShapes) {
                         if (ENABLE_VIEWPORT_CULLING && !s.bbox.intersectsViewport(vxMin, vyMin, vxMax, vyMax)) continue
-                        drawPath(s.path, LAND_STROKE, style = Stroke(width = hair))
+                        drawPath(s.path, LAND_STROKE, style = borderStroke)
                     }
                     selected?.let { sel ->
                         drawShapes.firstOrNull { it.iso == sel }?.let { s ->
@@ -764,6 +769,8 @@ private fun hitTest(shapes: List<IsoShape>, px: Float, py: Float): String? {
     var bestArea = Float.MAX_VALUE
     for (s in shapes) {
         if (s.area >= bestArea) continue
+        // P3-45: bbox pre-check — skip ray-casting any ring of a country whose bbox misses the tap.
+        if (!s.bbox.contains(px, py)) continue
         if (pointInAnyRing(s.rings, px, py)) {
             best = s.iso
             bestArea = s.area

@@ -41,8 +41,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import com.cbkres.visavole.data.BackupManager
 import com.cbkres.visavole.data.PersistedState
 
@@ -192,13 +194,16 @@ fun SettingsScreen(
 @Composable
 private fun AppIcon() {
     val context = LocalContext.current
+    val density = LocalDensity.current
     val iconRes = remember { context.packageManager.getApplicationInfo(context.packageName, 0).icon }
+    // P3-46: rasterize at the display size (96.dp in px), not a fixed 384 — the old bitmap was
+    // ~4x oversized for the 96.dp slot. Capped so a very high density can't over-allocate.
+    val size = (96.dp.value * density.density).roundToInt().coerceIn(1, 512)
     // Adaptive icons can't be loaded through painterResource, so rasterize the drawable instead
     // (drawing the AdaptiveIconDrawable applies the launcher mask).
-    val iconBitmap = remember(iconRes) {
+    val iconBitmap = remember(iconRes, size) {
         runCatching {
             val drawable = context.getDrawable(iconRes) ?: throw IllegalStateException("no app icon")
-            val size = 384
             val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
             drawable.setBounds(0, 0, size, size)
             drawable.draw(Canvas(bitmap))

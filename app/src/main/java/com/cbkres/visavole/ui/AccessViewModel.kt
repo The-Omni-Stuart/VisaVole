@@ -120,10 +120,9 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
                 // here on the main thread, keeping every state mutation single-threaded.
                 ensurePrimaryPassport()
                 normalizeResidenceClasses(world!!)
-                val finalHomes = AccessModel.homeCountries(docs)
-                if (finalHomes != initialHomes) {
-                    withContext(Dispatchers.IO) { world = repository.loadWorld(finalHomes) }
-                }
+                // P3-41: neither of the above changes the passport set, so homeCountries is unchanged
+                // and the world loaded above is still correct. The old "reload if finalHomes differs"
+                // branch (a full second read/parse of the ~7.4 MB DB) was dead code.
                 publish()
             } catch (e: Exception) {
                 // A corrupted/missing bundled DB (or any load failure) must not crash the process:

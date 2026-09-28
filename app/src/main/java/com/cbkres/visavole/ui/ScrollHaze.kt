@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -34,6 +35,16 @@ private fun HazeEdges(
     horizontal: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
+    // P3-42: the brushes depend only on `color`/`horizontal`, not the per-frame alphas, so remember
+    // them — otherwise a scroll frame rebuilds up to two gradient brushes per HazeBox.
+    val startFade = remember(color, horizontal) {
+        if (horizontal) Brush.horizontalGradient(0f to color, 1f to Color.Transparent)
+        else Brush.verticalGradient(0f to color, 1f to Color.Transparent)
+    }
+    val endFade = remember(color, horizontal) {
+        if (horizontal) Brush.horizontalGradient(0f to Color.Transparent, 1f to color)
+        else Brush.verticalGradient(0f to Color.Transparent, 1f to color)
+    }
     Box(modifier) {
         if (horizontal) {
             if (startAlpha > 0.01f) {
@@ -43,7 +54,7 @@ private fun HazeEdges(
                         .fillMaxHeight()
                         .width(HAZE_SIZE)
                         .alpha(startAlpha)
-                        .background(Brush.horizontalGradient(0f to color, 1f to Color.Transparent)),
+                        .background(startFade),
                 )
             }
             if (endAlpha > 0.01f) {
@@ -53,7 +64,7 @@ private fun HazeEdges(
                         .fillMaxHeight()
                         .width(HAZE_SIZE)
                         .alpha(endAlpha)
-                        .background(Brush.horizontalGradient(0f to Color.Transparent, 1f to color)),
+                        .background(endFade),
                 )
             }
         } else {
@@ -64,7 +75,7 @@ private fun HazeEdges(
                         .fillMaxWidth()
                         .height(HAZE_SIZE)
                         .alpha(startAlpha)
-                        .background(Brush.verticalGradient(0f to color, 1f to Color.Transparent)),
+                        .background(startFade),
                 )
             }
             if (endAlpha > 0.01f) {
@@ -74,7 +85,7 @@ private fun HazeEdges(
                         .fillMaxWidth()
                         .height(HAZE_SIZE)
                         .alpha(endAlpha)
-                        .background(Brush.verticalGradient(0f to Color.Transparent, 1f to color)),
+                        .background(endFade),
                 )
             }
         }
