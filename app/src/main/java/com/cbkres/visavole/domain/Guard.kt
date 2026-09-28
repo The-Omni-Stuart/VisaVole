@@ -141,7 +141,7 @@ object GuardEngine {
             duplicateRule(candidate, ctx),
             validityInvertedRule(candidate, ctx),
             inUseIdentityRule(action, candidate, ctx),
-            visaMultiCountryRule(candidate, ctx),
+            visaMultiCountryRule(action, candidate, ctx),
             inUseValidityRule(action, candidate, ctx),
             inUseEntriesRule(action, candidate, ctx),
             capRules(candidate, ctx),
@@ -264,9 +264,15 @@ object GuardEngine {
     }
 
     /** `doc.visa.multiCountry` — a custom visa covering more than one country. */
-    private fun visaMultiCountryRule(candidate: Document, ctx: GuardContext): GuardResult? {
+    private fun visaMultiCountryRule(action: GuardAction, candidate: Document, ctx: GuardContext): GuardResult? {
         val k = candidate.kind as? DocKind.Custom ?: return null
         if (k.kind != "visa" || k.countries.size <= 1) return null
+        // P3-6: don't re-ask when an edit leaves the country set unchanged (e.g. editing the expiry
+        // of an existing multi-country visa) — the confirmation was already given at creation.
+        if (action is GuardAction.UpdateDocument) {
+            val orig = action.original.kind as? DocKind.Custom
+            if (orig?.kind == "visa" && orig.countries.toSet() == k.countries.toSet()) return null
+        }
         val names = k.countries
             .sortedBy { ctx.world.countries[it]?.name ?: it }
             .joinToString(", ") { ctx.world.countries[it]?.name ?: it }
@@ -381,6 +387,9 @@ object GuardEngine {
     private fun capRules(candidate: Document, ctx: GuardContext): GuardResult? {
         if (!heldAndValid(candidate, ctx)) return null
         val others = ctx.docs.filter { it.id != candidate.id }
+        // P3-5: a pending supersession frees a slot — subtract the still-valid documents the
+        // candidate would supersede so an 11th overlapping visa/residence isn't blocked.
+        val freed = supersessionTargets(candidate, ctx).count { heldAndValid(it, ctx) }
         return when {
             candidate.kind is DocKind.Passport -> {
                 if (others.count { it.kind is DocKind.Passport && heldAndValid(it, ctx) } >= 10) {
@@ -408,7 +417,7 @@ object GuardEngine {
                 }
             }
             candidate.docCategory(ctx.world) == "residence" ->
-                if (others.count { it.docCategory(ctx.world) == "residence" && heldAndValid(it, ctx) } >= 10) {
+                if (others.count { it.docCategory(ctx.world) == "residence" && heldAndValid(it, ctx) } - freed >= 10) {
                     GuardResult(listOf(
                         GuardFinding(
                             "doc.cap.residenceTotal", GuardSeverity.BLOCK, "Too many residence documents",
@@ -419,7 +428,7 @@ object GuardEngine {
                     null
                 }
             candidate.docCategory(ctx.world) == "visa" ->
-                if (others.count { it.docCategory(ctx.world) == "visa" && heldAndValid(it, ctx) } >= 10) {
+                if (others.count { it.docCategory(ctx.world) == "visa" && heldAndValid(it, ctx) } - freed >= 10) {
                     GuardResult(listOf(
                         GuardFinding(
                             "doc.cap.visaTotal", GuardSeverity.BLOCK, "Too many visas",
@@ -441,16 +450,9 @@ object GuardEngine {
      */
     private fun singlePerCountryRule(candidate: Document, ctx: GuardContext): GuardResult? {
         val category = candidate.docCategory(ctx.world) ?: return null
-        val mine = candidate.coveredCountries(ctx.world)
-        if (mine.isEmpty()) return null
-        val start = parseIso(candidate.validFrom) ?: ctx.today
-        val oldOnes = ctx.docs.filter { o ->
-            o.id != candidate.id &&
-                o.docCategory(ctx.world) == category &&
-                o.coveredCountries(ctx.world).any { it in mine } &&
-                !DocStatus.of(o, ctx.docs, ctx.trips, ctx.world, start).expired
-        }
+        val oldOnes = supersessionTargets(candidate, ctx)
         if (oldOnes.isEmpty()) return null
+        val start = supersessionStart(candidate, ctx)
         return GuardResult(
             findings = oldOnes.map { old ->
                 val usedTrips = ctx.trips.count { t -> t.stops.any { it.documentId == old.id } }
@@ -466,6 +468,29 @@ object GuardEngine {
             },
             mutations = oldOnes.map { GuardMutation.SupersedeDocument(it.id, candidate.id) },
         )
+    }
+
+    /** P3-11: the supersession can't start before today — a backdated validFrom would rewrite
+     *  history (an already-expired doc would read "Replaced by …" instead of "Expired on …") and
+     *  could open a pointer cycle. */
+    private fun supersessionStart(candidate: Document, ctx: GuardContext): LocalDate {
+        val validFrom = parseIso(candidate.validFrom)
+        return if (validFrom != null && validFrom.isAfter(ctx.today)) validFrom else ctx.today
+    }
+
+    /** The valid documents the candidate supersedes: same category, overlapping countries, and
+     *  not expired as of [supersessionStart]. */
+    private fun supersessionTargets(candidate: Document, ctx: GuardContext): List<Document> {
+        val category = candidate.docCategory(ctx.world) ?: return emptyList()
+        val mine = candidate.coveredCountries(ctx.world)
+        if (mine.isEmpty()) return emptyList()
+        val start = supersessionStart(candidate, ctx)
+        return ctx.docs.filter { o ->
+            o.id != candidate.id &&
+                o.docCategory(ctx.world) == category &&
+                o.coveredCountries(ctx.world).any { it in mine } &&
+                !DocStatus.of(o, ctx.docs, ctx.trips, ctx.world, start).expired
+        }
     }
 
     /** True when the document is not archived as of today (date, entries, or supersession). */
@@ -487,7 +512,17 @@ object GuardEngine {
     /** `doc.primary.notPassport` — the primary (star) must be a passport. */
     private fun setPrimaryRule(action: GuardAction.SetPrimary, ctx: GuardContext): GuardResult? {
         val id = action.docId ?: return null
-        val doc = ctx.docs.firstOrNull { it.id == id } ?: return null
+        val doc = ctx.docs.firstOrNull { it.id == id }
+        // P3-10: an unknown id is a ghost — block it instead of silently storing it (it only ever
+        // self-heals, but the rule should reject it outright).
+        if (doc == null) {
+            return GuardResult(listOf(
+                GuardFinding(
+                    "doc.primary.unknown", GuardSeverity.BLOCK, "Unknown document",
+                    "Can't set a primary document that no longer exists.",
+                ),
+            ))
+        }
         if (doc.kind is DocKind.Passport) return null
         return GuardResult(listOf(
             GuardFinding(
@@ -577,11 +612,9 @@ object GuardEngine {
             .filter { it.id != candidate.id && it.isOpen }
             .minByOrNull { it.firstArrival }
             ?: return null
-        val end = when {
-            candidate.firstArrival.isBefore(previous.firstArrival) -> previous.firstArrival
-            candidate.firstArrival.isAfter(ctx.today) -> ctx.today
-            else -> candidate.firstArrival
-        }
+        // P3-7: the "firstArrival after today" branch is unreachable (this rule only runs on
+        // ONGOING trips, which require firstArrival <= today).
+        val end = if (candidate.firstArrival.isBefore(previous.firstArrival)) previous.firstArrival else candidate.firstArrival
         return GuardResult(
             findings = listOf(
                 GuardFinding(
@@ -628,7 +661,10 @@ object GuardEngine {
                 "Your $name passport expires on $expiry (${daysUntil} days from now).",
             )
         }
-        if (expiry.isAfter(start) && (end == null || !expiry.isAfter(end))) {
+        // P3-8: use `!expiry.isBefore(start)` (expiry >= start) so a passport expiring exactly on
+        // the trip start day is flagged — the strict `isAfter` let that case slip through both the
+        // during-trip and the expired-before-trip checks.
+        if (!expiry.isBefore(start) && (end == null || !expiry.isAfter(end))) {
             findings += GuardFinding(
                 "trip.passport.expiresDuringTrip", GuardSeverity.WARN, "Passport expires during trip",
                 "Your $name passport expires on $expiry, before this trip ends${end?.let { " ($it)" } ?: " (open-ended)"}.",
@@ -651,9 +687,12 @@ object GuardEngine {
                     "Your passports are expired and cannot support entry to ${ctx.countryName(uncovered.countryIso2)}.",
                 )
             } else {
+                // P3-9: coverage may come from a *different* held passport, not the evaluated one —
+                // attribute it to the held passports collectively rather than to $name.
                 findings += GuardFinding(
                     "trip.passport.expiredBeforeTrip", GuardSeverity.WARN, "Passport expired",
-                    "Your $name passport expired on $expiry. It's still accepted for this trip because it covers all your destinations.",
+                    "Your $name passport expired on $expiry. It's still accepted for this trip because " +
+                        "your passports cover all your destinations.",
                 )
             }
         }

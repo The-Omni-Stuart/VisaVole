@@ -407,7 +407,8 @@ class GuardTest {
         val existing = (1..10).map {
             visa("v$it", setOf("CA"), "multiple", "2027-0${if (it < 10) it + 1 else 1}-01")
         }
-        val candidate = visa("v11", setOf("CA"), "multiple", "2027-12-01")
+        // A fresh country (FR) frees no slot via supersession, so the total cap still blocks (P3-5).
+        val candidate = visa("v11", setOf("FR"), "multiple", "2027-12-01")
         val r = add(candidate, existing)
         assertFalse(r.canProceed)
         assertTrue("codes=${codes(r)}", codes(r).contains("doc.cap.visaTotal"))
@@ -417,7 +418,8 @@ class GuardTest {
         val existing = (1..10).map {
             residence("r$it", setOf("CA"), "2027-0${if (it < 10) it + 1 else 1}-01")
         }
-        val candidate = residence("r11", setOf("CA"), "2027-12-01")
+        // A fresh country (FR) frees no slot via supersession, so the total cap still blocks (P3-5).
+        val candidate = residence("r11", setOf("FR"), "2027-12-01")
         val r = add(candidate, existing)
         assertFalse(r.canProceed)
         assertTrue("codes=${codes(r)}", codes(r).contains("doc.cap.residenceTotal"))
@@ -1142,5 +1144,73 @@ class GuardTest {
         val end = GuardEngine.evaluate(GuardAction.EndTrip("t0"), ctx(trips = listOf(open)))
         assertTrue(rm.canProceed && rm.findings.isEmpty())
         assertTrue(end.canProceed && end.findings.isEmpty())
+    }
+
+    // ------------------------------------------------------------------
+    // Batch G (P3-5..P3-11)
+    // ------------------------------------------------------------------
+
+    private val tenVisas = listOf(
+        visa("v1", setOf("FR")), visa("v2", setOf("FR")), visa("v3", setOf("DE")),
+        visa("v4", setOf("DE")), visa("v5", setOf("CA")), visa("v6", setOf("FR")),
+        visa("v7", setOf("DE")), visa("v8", setOf("CA")), visa("v9", setOf("FR")),
+        visa("v10", setOf("DE")),
+    )
+
+    @Test fun capAllowsEleventhOverlappingVisaWhenItSupersedesOne() {
+        // P3-5: at the 10-valid-visa cap, an 11th visa that supersedes an existing one is allowed
+        // (net stays 10), so the total cap must not block it.
+        val r = add(visa("v11", setOf("FR")), existing = tenVisas)
+        assertFalse(r.blocks.any { it.code == "doc.cap.visaTotal" })
+        assertTrue(r.warnings.any { it.code == "doc.single.perCountry" })
+    }
+
+    @Test fun capStillBlocksEleventhNonOverlappingVisa() {
+        // P3-5 (contrast): an 11th visa in a country with no existing visa frees no slot → blocked.
+        val w = world(countries = mapOf(
+            "FR" to Country("FR", "France"), "DE" to Country("DE", "Germany"),
+            "CA" to Country("CA", "Canada"), "IT" to Country("IT", "Italy"),
+        ))
+        val r = GuardEngine.evaluate(GuardAction.AddDocument(visa("v11", setOf("IT"))), ctx(docs = tenVisas, w = w))
+        assertTrue(r.blocks.any { it.code == "doc.cap.visaTotal" })
+    }
+
+    @Test fun multiCountryWarningNotReaskedWhenCountriesUnchanged() {
+        // P3-6: editing the expiry of an existing multi-country visa (countries unchanged) must not
+        // re-trigger the "are you sure" confirm; changing the countries still does.
+        val original = visa("v", setOf("FR", "DE"))
+        assertFalse(codes(update(visa("v", setOf("FR", "DE"), expiry = "2030-01-01"), original)).contains("doc.visa.multiCountry"))
+        assertTrue(codes(update(visa("v", setOf("FR", "DE", "CA")), original)).contains("doc.visa.multiCountry"))
+    }
+
+    @Test fun passportExpiringOnTripStartDayIsFlagged() {
+        // P3-8: a passport whose expiry equals the trip start day is flagged (during-trip), not silent.
+        val p = passport("p", "FR", expiry = today.plusDays(30).toString())
+        val t = trip("t", stop("s1", "CA", today.plusDays(30), today.plusDays(40), "p"))
+        val r = GuardEngine.evaluate(GuardAction.AddTrip(t), ctx(docs = listOf(p), primaryId = "p"))
+        assertTrue(codes(r).contains("trip.passport.expiresDuringTrip"))
+    }
+
+    @Test fun setPrimaryUnknownIdIsBlocked() {
+        // P3-10: a ghost id is blocked rather than silently stored.
+        val r = GuardEngine.evaluate(GuardAction.SetPrimary("ghost"), ctx(docs = listOf(passport("p", "FR"))))
+        assertTrue(codes(r).contains("doc.primary.unknown"))
+        assertFalse(r.canProceed)
+    }
+
+    @Test fun backdatedSupersessionDoesNotResurrectAnExpiredDoc() {
+        // P3-11: a backdated validFrom must not turn an already-expired doc into a supersession.
+        val old = visa("old", setOf("FR"), expiry = today.minusDays(30).toString())
+        val candidate = visa("new", setOf("FR"), validFrom = today.minusDays(60).toString())
+        val r = add(candidate, existing = listOf(old))
+        assertFalse(r.mutations.any { it is GuardMutation.SupersedeDocument && it.oldId == "old" })
+    }
+
+    @Test fun supersessionStillAppliesToAValidOverlappingDoc() {
+        // P3-11 (control): the clamp must not stop a still-valid overlapping doc from being superseded.
+        val old = visa("old", setOf("FR"), expiry = "2030-01-01")
+        val candidate = visa("new", setOf("FR"), validFrom = today.minusDays(60).toString())
+        val r = add(candidate, existing = listOf(old))
+        assertTrue(r.mutations.any { it is GuardMutation.SupersedeDocument && it.oldId == "old" })
     }
 }
