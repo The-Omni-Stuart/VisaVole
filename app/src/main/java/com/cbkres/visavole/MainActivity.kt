@@ -68,6 +68,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.SaverScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -180,6 +182,17 @@ private fun ErrorScreen(message: String, onRetry: () -> Unit) {
     }
 }
 
+// P3-49: Float/Offset states aren't directly saveable, so persist their underlying values.
+private val MapZoomSaver = object : Saver<MutableFloatState, Float> {
+    override fun SaverScope.save(value: MutableFloatState): Float = value.floatValue
+    override fun restore(value: Float): MutableFloatState = mutableFloatStateOf(value)
+}
+
+private val MapCenterSaver = object : Saver<MutableState<Offset>, List<Float>> {
+    override fun SaverScope.save(value: MutableState<Offset>): List<Float> = listOf(value.value.x, value.value.y)
+    override fun restore(value: List<Float>): MutableState<Offset> = mutableStateOf(Offset(value[0], value[1]))
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
@@ -203,8 +216,10 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
     }
     val mapShapes = remember(s.geometry) { buildShapes(s.geometry) }
     val mapFocus = remember(s.geometry) { buildFocus(s.geometry) }
-    val mapZoom = remember { mutableFloatStateOf(1f) }
-    val mapCenter = remember(s.geometry) { mutableStateOf(defaultCenter(s.geometry)) }
+    // P3-49: map framing (zoom + centre) survives process death — plain `remember` reset it to
+    // the default view on every cold start.
+    val mapZoom = rememberSaveable(saver = MapZoomSaver) { mutableFloatStateOf(1f) }
+    val mapCenter = rememberSaveable(saver = MapCenterSaver) { mutableStateOf(defaultCenter(s.geometry)) }
     // rememberLazyListState() is rememberSaveable(saver = LazyListState.Saver) under the hood,
     // so the scroll position survives both the tab switch and process death — the same guarantee
     // the Phase-C saveable pass gave tab/selected/query/expandedTrips (P2-15).
