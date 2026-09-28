@@ -401,10 +401,21 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
      *  refuses to run, because writing would overwrite the user's only copy of the data. */
     @Volatile private var stateFileBlocked = false
 
+    // P3-56: mtime of the state file as of our last write (or the read at startup). If it advances
+    // on its own before the next persist(), something else (e.g. a pushed A/B fixture) modified the
+    // file while we were running, and persist() would silently clobber that change.
+    @Volatile private var lastPersistMs: Long = 0L
+
     private fun persist() {
         if (stateFileBlocked) {
             Log.e(TAG, "Refusing to persist: unreadable state file $file still present (overwriting it would lose the user's data)")
             return
+        }
+        // P3-56: flag the A/B fixture race — the file changed on disk since we last wrote it, so we
+        // are about to overwrite a change made by something else (e.g. an adb push of a state file).
+        val currentMtime = file.lastModified()
+        if (currentMtime > lastPersistMs) {
+            Log.w(TAG, "State file $file modified since our last write (mtime $currentMtime > $lastPersistMs); overwriting with in-memory state")
         }
         try {
             // Write to a sibling temp file and rename over the target: the rename is atomic, so a
@@ -416,6 +427,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
                 tmp.copyTo(file, overwrite = true)
                 tmp.delete()
             }
+            lastPersistMs = file.lastModified()
         } catch (e: Exception) {
             Log.e(TAG, "Could not persist state to $file", e)
         }
@@ -425,6 +437,9 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         val f = file
         try {
             if (!f.exists()) return
+            // P3-56: baseline the mtime we read so the first persist() doesn't false-positive on a
+            // pre-existing (older) file.
+            lastPersistMs = f.lastModified()
             val state = StateCodec.decode(f.readText())
             primaryDocId = state.primaryDocId
             docs = state.docs.toMutableList()
