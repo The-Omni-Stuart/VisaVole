@@ -35,6 +35,11 @@ sealed class GuardMutation {
      * [DocStatus]), so it follows the replacement's edits and revives if the replacement is deleted.
      */
     data class SupersedeDocument(val oldId: String, val newId: String) : GuardMutation()
+    /**
+     * Clear the supersession pointer on [docId]: the replacement document changed (countries/kind)
+     * so it no longer overlaps this one, and the doc revives.
+     */
+    data class UnsupersedeDocument(val docId: String) : GuardMutation()
     /** End trip [tripId], clamping its last departure to [onDate]. */
     data class EndTrip(val tripId: String, val onDate: LocalDate) : GuardMutation()
 }
@@ -141,6 +146,33 @@ object GuardEngine {
             inUseEntriesRule(action, candidate, ctx),
             capRules(candidate, ctx),
             singlePerCountryRule(candidate, ctx),
+            staleSupersessionRule(action, candidate, ctx),
+        )
+    }
+
+    /**
+     * `doc.supersession.stale` (P2-5) — the candidate's identity changed (countries/kind) so it no
+     * longer overlaps a document it previously superseded; that document is revived by clearing the
+     * stale pointer. Without this, an update to the replacement would leave the old doc archived
+     * forever ("Replaced by …") even though the two no longer conflict.
+     */
+    private fun staleSupersessionRule(action: GuardAction, candidate: Document, ctx: GuardContext): GuardResult? {
+        if (action !is GuardAction.UpdateDocument) return null
+        val stale = ctx.docs.filter { d ->
+            d.supersededBy == candidate.id &&
+                (d.docCategory(ctx.world) != candidate.docCategory(ctx.world) ||
+                    d.coveredCountries(ctx.world).none { it in candidate.coveredCountries(ctx.world) })
+        }
+        if (stale.isEmpty()) return null
+        return GuardResult(
+            findings = stale.map {
+                GuardFinding(
+                    "doc.supersession.stale", GuardSeverity.WARN, "Replaced document revived",
+                    "This document no longer overlaps your ${it.label}, so it is no longer superseded " +
+                        "and becomes valid again.",
+                )
+            },
+            mutations = stale.map { GuardMutation.UnsupersedeDocument(it.id) },
         )
     }
 
@@ -182,12 +214,19 @@ object GuardEngine {
         ))
     }
 
-    /** `doc.inUse.identity` — an in-use document's structural identity would change. */
+    /**
+     * `doc.inUse.identity` — an in-use document's structural identity (or its residence class)
+     * would change. The residence class is not part of [Document.identityKey] (it is harmless for
+     * an unused document) but it IS guarded here: it gates residence-minimum benefits, so changing
+     * it under a trip silently changes that trip's access/stay math (P2-10).
+     */
     private fun inUseIdentityRule(action: GuardAction, candidate: Document, ctx: GuardContext): GuardResult? {
         if (action !is GuardAction.UpdateDocument) return null
         if (candidate.id !in ctx.referencedDocIds) return null
-        if (candidate.identityKey() == action.original.identityKey()) return null
-        val facets = identityFacets(action.original, candidate)
+        val classChanged = candidate.residenceClass != action.original.residenceClass
+        if (candidate.identityKey() == action.original.identityKey() && !classChanged) return null
+        var facets = identityFacets(action.original, candidate)
+        if (classChanged && candidate.identityKey() == action.original.identityKey()) facets += "residence class"
         return GuardResult(listOf(
             GuardFinding(
                 "doc.inUse.identity", GuardSeverity.BLOCK, "In use by a trip",
@@ -256,8 +295,17 @@ object GuardEngine {
                         "Trip to $country starts ${stop.arrival}, before this document became valid ($validFrom).",
                     )
                 }
+                // An expiry landing before a FUTURE stay starts is not caught by the whole-stay
+                // check below: an open-ended stop (no departure) ends at `today`, so the window
+                // between today and the arrival would slip through (P2-9).
+                if (e != null && e.isBefore(stop.arrival)) {
+                    findings += GuardFinding(
+                        "doc.inUse.validity", GuardSeverity.BLOCK, "In use by a trip",
+                        "This document expires on $e, before the trip to $country starts on ${stop.arrival}.",
+                    )
+                }
                 val end = stop.departure ?: ctx.today
-                if (e != null && end.isAfter(e)) {
+                if (e != null && !e.isBefore(stop.arrival) && end.isAfter(e)) {
                     findings += GuardFinding(
                         "doc.inUse.validity", GuardSeverity.BLOCK, "In use by a trip",
                         "This document would no longer cover the whole stay of trip to $country (stay ends $end; " +
@@ -280,7 +328,22 @@ object GuardEngine {
         // Only a reduction or a made-finite count matters: increases and unchanged counts are allowed.
         if (n == null || (o != null && n >= o)) return null
         val u = TripModel.entryStatusFor(candidate, ctx.trips, ctx.world, ctx.today)?.used ?: 0
-        if (u < 1) return null
+        if (u < 1) {
+            // Not used yet — but planned FUTURE trips referencing the document will consume
+            // entries too (P2-8). Symmetric to D3a, which already protects future stays from
+            // date edits: warn when the planned usage would exceed the new total.
+            val planned = plannedEntriesFor(candidate.id, ctx.trips, ctx.today)
+            if (planned == 0 || planned <= n) return null
+            return GuardResult(listOf(
+                GuardFinding(
+                    "doc.inUse.entriesPlanned", GuardSeverity.WARN, "Planned trips may run out of entries",
+                    "You have ${if (planned == 1) "1 planned trip" else "$planned planned trips"} referencing this " +
+                        "document in the future, but the entry count is reduced to $n (from " +
+                        "${entryTypeLabel(original).let { if (it.isEmpty()) "unlimited" else it }}). Those trips " +
+                        "may not have enough entries left.",
+                ),
+            ))
+        }
         val message = if (u > n) {
             "Trips have already consumed $u ${candidate.label} entries, but the document now has only $n."
         } else {
@@ -290,6 +353,26 @@ object GuardEngine {
         return GuardResult(listOf(
             GuardFinding("doc.inUse.entries", GuardSeverity.BLOCK, "In use by a trip", message),
         ))
+    }
+
+    /**
+     * Entries the document's FUTURE stops will consume: one per stay segment starting after [today]
+     * (consecutive stops that don't leave a gap share one entry). Used by [inUseEntriesRule] to
+     * protect planned trips from entry-count reductions.
+     */
+    private fun plannedEntriesFor(docId: String, trips: List<Trip>, today: LocalDate): Int {
+        var total = 0
+        for (t in trips) {
+            val future = t.stops
+                .filter { it.documentId == docId && it.arrival.isAfter(today) }
+                .sortedBy { it.arrival }
+            var stayEnd: LocalDate? = null
+            for (s in future) {
+                if (stayEnd == null || s.arrival.isAfter(stayEnd)) total++
+                stayEnd = s.departure ?: s.arrival
+            }
+        }
+        return total
     }
 
     private fun entryTypeLabel(doc: Document): String = doc.entryType() ?: "unlimited"

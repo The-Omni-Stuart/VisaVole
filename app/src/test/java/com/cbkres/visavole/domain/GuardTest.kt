@@ -584,6 +584,174 @@ class GuardTest {
     }
 
     // ------------------------------------------------------------------
+    // doc.supersession.stale (P2-5) + post-apply state (P2-11)
+    // ------------------------------------------------------------------
+
+    @Test fun supersededDocIsExpiredAfterMutationApplied() {
+        // P2-11: assert the DocStatus AFTER the mutation is applied, not just the emitted mutation
+        // (the level at which P1-1 slipped through).
+        val v1 = visa("v1", setOf("CA"), "multiple", "2027-06-30")
+        val v2 = visa("v2", setOf("CA"), "multiple", "2028-01-01", "2026-09-01")
+        val r = add(v2, listOf(v1))
+        assertEquals(listOf(GuardMutation.SupersedeDocument("v1", "v2")), r.mutations)
+        val superseded = v1.copy(supersededBy = "v2")
+        val applied = listOf(superseded, v2)
+        val s1 = DocStatus.of(superseded, applied, emptyList(), world(), today)
+        assertTrue(s1.expired)
+        assertEquals(ExpiryReason.SUPERSEDED, s1.reason)
+        assertFalse(DocStatus.of(v2, applied, emptyList(), world(), today).expired)
+    }
+
+    @Test fun supersessionWithoutValidFromArchivesOldDocImmediately() {
+        // Pinned at the DocStatus level, post-apply (P2-11); user decision 2026-09-27: a
+        // replacement without a validFrom archives the old doc IMMEDIATELY (red "Replaced by …"),
+        // on the evaluation day itself and every day after — no shifting amber limbo.
+        val v1 = visa("v1", setOf("CA"), "multiple", "2027-06-30")
+        val v2 = visa("v2", setOf("CA"), "multiple", "2028-01-01")
+        val superseded = v1.copy(supersededBy = "v2")
+        val applied = listOf(superseded, v2)
+        for (day in listOf(today, today.plusDays(1), today.plusDays(30))) {
+            val s = DocStatus.of(superseded, applied, emptyList(), world(), day)
+            assertTrue("day=$day", s.expired)
+            assertEquals(ExpiryReason.SUPERSEDED, s.reason)
+        }
+    }
+
+    @Test fun updatingReplacementAwayFromOverlapRevivesOldDoc() {
+        // P2-5: v2 superseded v1 (both CA). Editing v2's countries so they no longer overlap
+        // emits an Unsupersede mutation; once applied, v1 is valid again.
+        val v1 = visa("v1", setOf("CA"), "multiple", "2027-06-30").copy(supersededBy = "v2")
+        val v2 = visa("v2", setOf("CA"), "multiple", "2028-01-01", "2026-09-01")
+        val candidate = v2.copy(kind = DocKind.Custom(setOf("FR"), null, "visa", null, "multiple"))
+        val r = GuardEngine.evaluate(GuardAction.UpdateDocument(candidate, v2), ctx(docs = listOf(v1, v2)))
+        assertTrue("codes=${codes(r)}", r.canProceed)
+        assertEquals(listOf(GuardMutation.UnsupersedeDocument("v1")), r.mutations)
+        val revived = v1.copy(supersededBy = null)
+        val applied = listOf(revived, v2)
+        val s = DocStatus.of(revived, applied, emptyList(), world(), today)
+        assertFalse(s.expired)
+    }
+
+    @Test fun updatingReplacementStillOverlappingDoesNotUnsupersede() {
+        val v1 = visa("v1", setOf("CA"), "multiple", "2027-06-30").copy(supersededBy = "v2")
+        val v2 = visa("v2", setOf("CA"), "multiple", "2028-01-01", "2026-09-01")
+        val candidate = v2.copy(label = "Renamed")
+        val r = GuardEngine.evaluate(GuardAction.UpdateDocument(candidate, v2), ctx(docs = listOf(v1, v2)))
+        assertTrue("codes=${codes(r)}", r.canProceed)
+        assertTrue(r.mutations.none { it is GuardMutation.UnsupersedeDocument })
+    }
+
+    // ------------------------------------------------------------------
+    // doc.duplicate with residenceClass (P2-7)
+    // ------------------------------------------------------------------
+
+    @Test fun sameHoldingDifferentResidenceClassIsNotDuplicate() {
+        // P2-7: the class is part of the signature — an in-place class upgrade with unchanged
+        // dates is an edit, not a "Document already exists" block.
+        val h1 = Document("h1", "CA residence", DocKind.Holding("ca-pr"), "2030-01-01", null, ResidenceClass.TEMPORARY)
+        val h2 = Document("h2", "CA residence", DocKind.Holding("ca-pr"), "2030-01-01", null, ResidenceClass.PERMANENT)
+        val r = add(h2, listOf(h1))
+        assertTrue("codes=${codes(r)}", r.canProceed)
+        assertFalse(codes(r).contains("doc.duplicate"))
+    }
+
+    @Test fun sameHoldingSameResidenceClassStillDuplicate() {
+        val h1 = Document("h1", "CA residence", DocKind.Holding("ca-pr"), "2030-01-01", null, ResidenceClass.TEMPORARY)
+        val h2 = Document("h2", "CA residence", DocKind.Holding("ca-pr"), "2030-01-01", null, ResidenceClass.TEMPORARY)
+        val r = add(h2, listOf(h1))
+        assertFalse(r.canProceed)
+        assertTrue(codes(r).contains("doc.duplicate"))
+    }
+
+    // ------------------------------------------------------------------
+    // doc.inUse.entries planned usage (P2-8)
+    // ------------------------------------------------------------------
+
+    @Test fun reducingEntriesBelowPlannedFutureUsageWarns() {
+        // P2-8: no entries consumed yet, but planned future stays reference the document —
+        // reducing below the planned usage is a WARN (symmetric to D3a's future-stay protection).
+        // Two separate future stays (a gap between them) consume two entries.
+        val v1 = visa("v1", setOf("CA"), "multiple", "2028-01-01")
+        val t = trip(
+            "t1",
+            stop("s1", "CA", today.plusDays(30), today.plusDays(40), docId = "v1"),
+            stop("s2", "CA", today.plusDays(50), today.plusDays(60), docId = "v1"),
+        )
+        val candidate = v1.copy(kind = DocKind.Custom(setOf("CA"), null, "visa", null, "single"))
+        val r = update(candidate, v1, trips = listOf(t))
+        assertTrue("codes=${codes(r)}", r.canProceed)
+        val f = r.findings.firstOrNull { it.code == "doc.inUse.entriesPlanned" }
+        assertNotNull(f)
+        assertEquals(GuardSeverity.WARN, f!!.severity)
+    }
+
+    @Test fun reducingEntriesToExactlyPlannedFutureUsageIsQuiet() {
+        // One planned stay + single entry: planned usage (1) does not exceed the new total (1).
+        val v1 = visa("v1", setOf("CA"), "multiple", "2028-01-01")
+        val t = trip("t1", stop("s1", "CA", today.plusDays(30), today.plusDays(40), docId = "v1"))
+        val candidate = v1.copy(kind = DocKind.Custom(setOf("CA"), null, "visa", null, "single"))
+        val r = update(candidate, v1, trips = listOf(t))
+        assertTrue("codes=${codes(r)}", r.canProceed)
+        assertFalse(codes(r).contains("doc.inUse.entriesPlanned"))
+    }
+
+    @Test fun reducingEntriesWithEnoughTotalForPlannedTripsIsQuiet() {
+        val v1 = visa("v1", setOf("CA"), "multiple", "2028-01-01")
+        val t = trip("t1", stop("s1", "CA", today.plusDays(30), today.plusDays(40), docId = "v1"))
+        val candidate = v1.copy(kind = DocKind.Custom(setOf("CA"), null, "visa", null, "double"))
+        val r = update(candidate, v1, trips = listOf(t))
+        assertTrue("codes=${codes(r)}", r.canProceed)
+        assertFalse(codes(r).contains("doc.inUse.entriesPlanned"))
+    }
+
+    // ------------------------------------------------------------------
+    // doc.inUse.validity expiry before a future open-ended stay (P2-9)
+    // ------------------------------------------------------------------
+
+    @Test fun expiryBeforeFutureOpenEndedStayIsBlocked() {
+        // P2-9: open-ended future stop (no departure) — an expiry landing between today and the
+        // arrival must be blocked (previously the check ended at `today` and slipped through).
+        val v1 = visa("v1", setOf("CA"), "multiple", "2028-01-01")
+        val t = trip("t1", stop("s1", "CA", today.plusDays(30), null, docId = "v1"))
+        val candidate = v1.copy(expiry = today.plusDays(10).toString())
+        val r = update(candidate, v1, trips = listOf(t))
+        assertFalse(r.canProceed)
+        assertTrue(codes(r).contains("doc.inUse.validity"))
+    }
+
+    @Test fun expiryCoveringFutureOpenEndedStayIsAllowed() {
+        val v1 = visa("v1", setOf("CA"), "multiple", "2028-01-01")
+        val t = trip("t1", stop("s1", "CA", today.plusDays(30), null, docId = "v1"))
+        val r = update(v1.copy(label = "Renamed"), v1, trips = listOf(t))
+        assertTrue("codes=${codes(r)}", r.canProceed)
+        assertFalse(codes(r).contains("doc.inUse.validity"))
+    }
+
+    // ------------------------------------------------------------------
+    // doc.inUse.identity residence class (P2-10)
+    // ------------------------------------------------------------------
+
+    @Test fun changingInUseResidenceClassIsBlocked() {
+        // P2-10: the class is not part of identityKey, but it gates residence-minimum benefits,
+        // so changing it under a trip is blocked like an identity change.
+        val r1 = residence("r1", setOf("CA"), "2028-01-01").copy(residenceClass = ResidenceClass.TEMPORARY)
+        val t = trip("t1", stop("s1", "CA", today.plusDays(30), today.plusDays(40), docId = "r1"))
+        val candidate = r1.copy(residenceClass = ResidenceClass.PERMANENT)
+        val r = update(candidate, r1, trips = listOf(t))
+        assertFalse(r.canProceed)
+        val f = r.findings.firstOrNull { it.code == "doc.inUse.identity" }
+        assertNotNull(f)
+        assertTrue("msg=${f!!.message}", f.message.contains("residence class"))
+    }
+
+    @Test fun changingUnusedResidenceClassIsAllowed() {
+        val r1 = residence("r1", setOf("CA"), "2028-01-01").copy(residenceClass = ResidenceClass.TEMPORARY)
+        val candidate = r1.copy(residenceClass = ResidenceClass.PERMANENT)
+        val r = update(candidate, r1)
+        assertTrue("codes=${codes(r)}", r.canProceed)
+    }
+
+    // ------------------------------------------------------------------
     // doc.passport.unknownCountry
     // ------------------------------------------------------------------
 

@@ -155,7 +155,10 @@ object AccessModel {
                 val benefitLevel = if (isResidence) VISA_FREE else COVERED
                 for (b in world.benefits[k.holdingId].orEmpty()) {
                     if (!AccessLevel.isEntryBenefit(b.type)) continue // skip transit-only rows
-                    if (!entryTypeSatisfied(b.entryTypes, k.entryType)) continue
+                    // doc.entryType() (not the raw kind field): it returns null for residence docs,
+                    // so a legacy/edited residence carrying a stored entryType can never slip
+                    // through entry-restricted grants (P2-31).
+                    if (!entryTypeSatisfied(b.entryTypes, doc.entryType())) continue
                     if (!residenceMinSatisfied(doc, world, b)) continue
                     merge(map, b.destination, Access(benefitLevel, b.days, "${h.name} (${b.type})", true))
                 }
@@ -174,7 +177,15 @@ object AccessModel {
                     storedBloc.level == "visa-free" -> storedBloc
                     else -> world.travelBlocFor(k.countries) ?: storedBloc
                 }
-                travelBloc?.let { targets += it.members }
+                // The bloc's members are added only where they don't over-grant (P2-32): a bloc
+                // covering ALL the doc's explicit countries unlocks its full membership (the normal
+                // case, e.g. a CZ residence → all of Schengen); a bloc that covers only SOME of them
+                // (the travelBlocFor "any member" fallback) contributes only the intersection, so a
+                // DE+IE visa cannot silently earn Schengen-wide access through DE.
+                travelBloc?.let { bloc ->
+                    val coversAll = k.countries.all { it in bloc.members }
+                    targets += if (coversAll) bloc.members else k.countries.filter { it in bloc.members }
+                }
                 val isResidence = k.kind == "residence"
                 val residenceCountry = k.countries.firstOrNull()
                 val rc = if (isResidence) doc.residenceClassFor(world) else null
@@ -192,7 +203,7 @@ object AccessModel {
                     val perkLevel = if (isResidence) VISA_FREE else COVERED
                     for (b in world.benefits[hid].orEmpty()) {
                         if (!AccessLevel.isEntryBenefit(b.type)) continue
-                        if (!entryTypeSatisfied(b.entryTypes, k.entryType)) continue
+                        if (!entryTypeSatisfied(b.entryTypes, doc.entryType())) continue
                         if (!residenceMinSatisfied(doc, world, b)) continue
                         merge(map, b.destination, Access(perkLevel, b.days, "${h.name} (${b.type})", true))
                     }

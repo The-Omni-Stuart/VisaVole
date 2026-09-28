@@ -257,13 +257,15 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         return !result.canProceed
     }
 
-    /** Applies the guard's accompanying mutations (superseding a replaced document, ending a trip). */
+    /** Applies the guard's accompanying mutations (superseding/reviving documents, ending a trip). */
     private fun applyMutations(mutations: List<GuardMutation>) {
         if (mutations.isEmpty()) return
         for (m in mutations) {
             when (m) {
                 is GuardMutation.SupersedeDocument ->
                     docs = docs.map { if (it.id == m.oldId) it.copy(supersededBy = m.newId) else it }.toMutableList()
+                is GuardMutation.UnsupersedeDocument ->
+                    docs = docs.map { if (it.id == m.docId) it.copy(supersededBy = null) else it }.toMutableList()
                 is GuardMutation.EndTrip ->
                     trips = trips.map { t -> if (t.id == m.tripId) TripModel.closeTrip(t, m.onDate) else t }.toMutableList()
             }
@@ -277,12 +279,18 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         addDocument(passportDocument(iso2, world?.countries?.get(iso2)?.name, expiry))
 
     /** Adds or updates [doc] through the guard backstop. Returns the blocking findings when the
-     *  guard rejects the mutation (empty on success), so callers can surface why nothing happened. */
+     *  guard rejects the mutation (empty on success), so callers can surface why nothing happened.
+     *  The first block is ALSO snack'd here (P2-6): the dialogs close unconditionally after submit,
+     *  so without this the backstop's rejection — the only one that can disagree with the dialog's
+     *  own evaluation — would vanish with the filled form and zero feedback. */
     fun addDocument(doc: Document): List<GuardFinding> {
         val original = docs.firstOrNull { it.id == doc.id }
         val action = if (original != null) GuardAction.UpdateDocument(doc, original) else GuardAction.AddDocument(doc)
         val result = guardCtx()?.let { GuardEngine.evaluate(action, it) }
-        if (result != null && !result.canProceed) return result.blocks
+        if (result != null && !result.canProceed) {
+            snack(result.blocks.first().message)
+            return result.blocks
+        }
         if (result != null) applyMutations(result.mutations)
         if (primaryDocId == null && doc.kind is DocKind.Passport) primaryDocId = doc.id
         updateDocs(docs.filterNot { it.id == doc.id } + doc)

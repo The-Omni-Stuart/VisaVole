@@ -65,25 +65,31 @@ fun Document.entryType(): String? = when (val k = kind) {
  * Identity used to detect duplicate documents. Two documents are a true duplicate when they share
  * this signature. A passport is keyed by nationality + validity window, so the same country with
  * different valid-from/expiry dates is a distinct (allowed) passport; a holding by its holding id +
- * validity window; a custom doc by its unlocked countries/bloc/kind + validity window.
+ * validity window; a custom doc by its unlocked countries/bloc/kind + validity window. The
+ * residence class is part of the signature for residence documents: it changes which
+ * residence-minimum-gated benefits apply, so an in-place class upgrade with unchanged dates is an
+ * edit, not a duplicate.
  */
 fun Document.duplicateSignature(): String = when (val k = kind) {
     is DocKind.Passport ->
         "P|${k.iso2}|${validFrom.orEmpty()}|${expiry.orEmpty()}"
     is DocKind.Holding ->
-        "H|${k.holdingId}|${k.entryType.orEmpty()}|${validFrom.orEmpty()}|${expiry.orEmpty()}"
+        "H|${k.holdingId}|${k.entryType.orEmpty()}|${residenceClass?.id.orEmpty()}|${validFrom.orEmpty()}|${expiry.orEmpty()}"
     is DocKind.Custom ->
         "C|${k.countries.sorted().joinToString(",")}|${k.blocId.orEmpty()}|${k.kind}|" +
-            "${k.holdingId.orEmpty()}|${k.entryType.orEmpty()}|${validFrom.orEmpty()}|${expiry.orEmpty()}"
+            "${k.holdingId.orEmpty()}|${k.entryType.orEmpty()}|${residenceClass?.id.orEmpty()}|${validFrom.orEmpty()}|${expiry.orEmpty()}"
 }
 
 /**
  * The document's structural identity — what makes it "the same document in the world": its type and
  * the country / bloc / holding it belongs to. Deliberately excludes its attributes (number, dates,
- * entry type, residence class), which are harmless to change. Two documents whose keys differ are a
- * different document (e.g. a UK passport vs a French one, a visa vs a residence). Used to stop a
- * document that a trip still references from being re-identified, which would silently change what
- * the trip was entered with and how its stay allowance is calculated.
+ * entry type, residence class), which are harmless to change for a document NOT referenced by a
+ * trip; for an in-use document the guard also blocks residence-class changes, because those alter
+ * residence-minimum-gated benefits and the trip's access/stay math (see `doc.inUse.identity`). Two
+ * documents whose keys differ are a different document (e.g. a UK passport vs a French one, a visa
+ * vs a residence). Used to stop a document that a trip still references from being re-identified,
+ * which would silently change what the trip was entered with and how its stay allowance is
+ * calculated.
  */
 fun Document.identityKey(): String = when (val k = kind) {
     is DocKind.Passport -> "P|${k.iso2}"

@@ -60,10 +60,11 @@ data class DocStatus(
             }
             doc.supersededBy?.let { id ->
                 docs.firstOrNull { it.id == id }?.let { replacement ->
-                    // A replacement without a `validFrom` supersedes from today — the supersession
-                    // still happens (the old doc lapses at the end of today); otherwise a document
-                    // added without a validity date would silently keep both docs "valid".
-                    candidates += (parse(replacement.validFrom) ?: today) to ExpiryReason.SUPERSEDED
+                    // A replacement without a `validFrom` supersedes IMMEDIATELY (user decision
+                    // 2026-09-27): the old doc is archived on the spot (red "Replaced by …")
+                    // instead of sitting in a shifting "replaced from today" amber state. Anchor
+                    // the missing date to yesterday so the standard "before today" test trips.
+                    candidates += (parse(replacement.validFrom) ?: today.minusDays(1)) to ExpiryReason.SUPERSEDED
                 }
             }
             val validFrom = parse(doc.validFrom)

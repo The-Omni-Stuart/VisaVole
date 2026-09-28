@@ -204,15 +204,15 @@ class DocStatusTest {
         assertEquals(ExpiryReason.DATE, s.reason)
     }
 
-    @Test fun replacementWithoutValidFromSupersedesFromToday() {
+    @Test fun replacementWithoutValidFromArchivesImmediately() {
         // The validity field is optional in the add dialog, so a replacement usually has no
-        // validFrom — the supersession must still happen, from today (P1-1).
+        // validFrom — the supersession still happens, and (user decision 2026-09-27) archives the
+        // old doc IMMEDIATELY rather than leaving it in a "replaced from today" limbo (P1-1).
         val v1 = visa("v1", setOf("CA"), expiry = "2028-01-01", supersededBy = "v2")
         val v2 = visa("v2", setOf("CA"), expiry = "2029-01-01")
         val s = DocStatus.of(v1, listOf(v1, v2), emptyList(), world(), today)
-        assertFalse(s.expired) // an expiry of today is still valid
+        assertTrue(s.expired)
         assertEquals(ExpiryReason.SUPERSEDED, s.reason)
-        assertEquals(today, s.effectiveExpiry)
     }
 
     // ------------------------------------------------------------------
