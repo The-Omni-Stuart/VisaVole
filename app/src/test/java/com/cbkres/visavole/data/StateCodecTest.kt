@@ -220,10 +220,28 @@ class StateCodecTest {
     fun nullHoldingIdIsSkipped() {
         val json = """
             {"schemaVersion":3,"primaryDocId":null,
-             "docs":[{"id":"doc-1","label":"H","kind":"holding","holdingId":null,"entryType":null}],
-             "trips":[]}
+              "docs":[{"id":"doc-1","label":"H","kind":"holding","holdingId":null,"entryType":null}],
+              "trips":[]}
         """.trimIndent()
         assertTrue(StateCodec.decode(json).docs.isEmpty())
+    }
+
+    @Test
+    fun docWithUnparseableDateIsSkipped() {
+        // A non-null date that doesn't parse would otherwise decode as unconstrained — an immortal
+        // doc, or one valid immediately — because every downstream consumer wraps LocalDate.parse
+        // in runCatching. Skip such docs instead of minting them with garbage dates (P3-27).
+        val json = """
+            {"schemaVersion":3,"primaryDocId":null,
+             "docs":[
+               {"id":"doc-bad-exp","label":"A","kind":"passport","iso2":"CZ","expiry":"not-a-date"},
+               {"id":"doc-bad-from","label":"B","kind":"passport","iso2":"CZ","expiry":"2031-05-01","validFrom":"soon"},
+               {"id":"doc-good","label":"C","kind":"passport","iso2":"CZ","expiry":"2031-05-01","validFrom":"2021-05-01"}
+             ],"trips":[]}
+        """.trimIndent()
+        val state = StateCodec.decode(json)
+        assertEquals(1, state.docs.size)
+        assertEquals("doc-good", state.docs.single().id)
     }
 
     @Test

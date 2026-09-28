@@ -93,4 +93,19 @@ class JdbcRepositoryTest {
             assertEquals(setOf("double", "multiple"), b.entryTypes)
         }
     }
+
+    @Test
+    fun parseIso2ArrayIsLenientAndShared() {
+        // P3-31: the Android (org.json) and JVM (string-split) repositories used to parse members
+        // differently — a malformed string crashed Android but loaded leniently on the JVM, so the
+        // divergence was untestable. They now share this one lenient parser, which never throws.
+        assertEquals(listOf("AT", "BE"), parseIso2Array("[\"AT\", \"BE\"]"))
+        assertEquals(emptyList<String>(), parseIso2Array(null))
+        assertEquals(emptyList<String>(), parseIso2Array("   "))
+        assertEquals(emptyList<String>(), parseIso2Array("[]"))
+        // Best-effort on malformed input: no brackets, trailing comma — degrade, don't throw.
+        assertEquals(listOf("AT", "BE"), parseIso2Array("AT, BE,"))
+        // Literal "null" elements (org.json's getString on a JSON null) are skipped, not kept.
+        assertEquals(listOf("AT"), parseIso2Array("[\"AT\", \"null\"]"))
+    }
 }

@@ -54,7 +54,7 @@ object JdbcRepository {
         c.createStatement().use { st ->
             st.executeQuery("SELECT id, name, level, members FROM mobility_regimes").use { rs ->
                 while (rs.next()) {
-                    out.add(Regime(rs.getString("id"), rs.getString("name"), rs.getString("level"), iso2Array(rs.getString("members"))))
+                    out.add(Regime(rs.getString("id"), rs.getString("name"), rs.getString("level"), parseIso2Array(rs.getString("members"))))
                 }
             }
         }
@@ -124,12 +124,12 @@ object JdbcRepository {
                     out.add(
                         StayRule(
                             zoneName = str("zone_name") ?: str("zone") ?: "",
-                            countries = iso2Array(str("countries")).toSet(),
+                            countries = parseIso2Array(str("countries")).toSet(),
                             windowType = str("window_type") ?: "",
                             windowDays = intv("window_days"),
                             windowPeriodDays = intv("window_period_days"),
                             multipleEntry = (intv("multiple_entry") ?: 0) != 0,
-                            nationalities = iso2Array(str("nationalities")).toSet(),
+                            nationalities = parseIso2Array(str("nationalities")).toSet(),
                             note = str("note"),
                             id = str("id") ?: "",
                             zoneId = str("zone"),
@@ -143,14 +143,6 @@ object JdbcRepository {
             }
         }
         return out
-    }
-
-    /** Parse a JSON array of ISO2 strings like `["AT", "BE"]` without a JSON library. */
-    private fun iso2Array(json: String?): List<String> {
-        if (json == null) return emptyList()
-        val inner = json.trim().removePrefix("[").removeSuffix("]")
-        if (inner.isBlank()) return emptyList()
-        return inner.split(",").map { it.trim().trim('"') }.filter { it.isNotEmpty() }
     }
 
     /** Parse a comma list of entry types like `double,multiple`; null/blank = no restriction. */

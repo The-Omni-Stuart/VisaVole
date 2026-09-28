@@ -1,7 +1,5 @@
 package com.cbkres.visavole.data
 
-import org.json.JSONArray
-
 /**
  * Loads the bundled [VisaDb] into an in-memory [WorldData].
  *
@@ -53,12 +51,9 @@ class VisaRepository(private val db: VisaDb) {
         val out = mutableListOf<Regime>()
         c.rawQuery("SELECT id, name, level, members FROM mobility_regimes", null).use { cur ->
             while (cur.moveToNext()) {
-                val members = mutableListOf<String>()
-                cur.getString(3)?.let { json ->
-                    val arr = JSONArray(json)
-                    for (i in 0 until arr.length()) members.add(arr.getString(i))
-                }
-                out.add(Regime(cur.getString(0), cur.getString(1), cur.getString(2), members))
+                // P3-31: shared lenient parser (see parseIso2Array) — identical to the JVM mirror,
+                // so a malformed members string degrades instead of crashing the startup load.
+                out.add(Regime(cur.getString(0), cur.getString(1), cur.getString(2), parseIso2Array(cur.getString(3))))
             }
         }
         return out
@@ -146,11 +141,7 @@ class VisaRepository(private val db: VisaDb) {
         return out
     }
 
-    private fun jsonSet(json: String?): Set<String> {
-        if (json == null) return emptySet()
-        val arr = JSONArray(json)
-        return (0 until arr.length()).map { arr.getString(it) }.toSet()
-    }
+    private fun jsonSet(json: String?): Set<String> = parseIso2Array(json).toSet()
 
     /** Parse a comma list of entry types like `double,multiple`; null/blank = no restriction. */
     private fun parseEntryTypes(csv: String?): Set<String> {

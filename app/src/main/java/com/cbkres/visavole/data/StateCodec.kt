@@ -172,8 +172,17 @@ object StateCodec {
         }
         val expiry = o.strOrNull("expiry")
         val validFrom = o.strOrNull("validFrom")
+        // P3-27: a non-null date that doesn't parse would otherwise decode as "unconstrained" —
+        // an immortal doc, or one valid immediately — because every downstream consumer wraps
+        // LocalDate.parse in runCatching. Skip the doc instead of minting one with garbage dates.
+        if (!isDateOrNull(expiry) || !isDateOrNull(validFrom)) return null
         val residenceClass = ResidenceClass.fromId(o.strOrNull("residenceClass"))
         val supersededBy = o.strOrNull("supersededBy")
         return Document(id, label, kind, expiry, validFrom, residenceClass, supersededBy)
     }
+
+    /** True when [s] is null (unset) or a parseable ISO date — a non-null, unparseable date is
+     *  corrupt input (P3-27). */
+    private fun isDateOrNull(s: String?): Boolean =
+        s == null || runCatching { LocalDate.parse(s) }.isSuccess
 }

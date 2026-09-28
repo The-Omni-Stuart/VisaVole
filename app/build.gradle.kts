@@ -210,6 +210,40 @@ tasks.register("updateVisaDb") {
     }
 }
 
+// P3-32: the runtime DB-refresh trigger is the SHA-256 sidecar; without it VisaDb falls back to a
+// version+length fingerprint that misses a same-size data refresh. Fail the build if the sidecar
+// is missing or out of sync with the asset, so that fallback is never reached.
+tasks.register("verifyVisaDb") {
+    group = "visadb"
+    description = "Fail if the bundled visa_data.db has no SHA-256 sidecar, or the sidecar doesn't match the asset."
+    val assetFile = File(projectDir, "src/main/assets/visa_data.db")
+    val shaFile = File(projectDir, "src/main/assets/visa_data.db.sha256")
+    inputs.file(assetFile)
+    inputs.file(shaFile)
+    doLast {
+        if (!assetFile.exists()) error("visa_data.db is missing from assets")
+        if (!shaFile.exists()) {
+            error("visa_data.db.sha256 sidecar is missing — it is the DB refresh trigger (P3-32)")
+        }
+        val digest = MessageDigest.getInstance("SHA-256")
+        assetFile.inputStream().use { input ->
+            val buffer = ByteArray(8192)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        val actual = digest.digest().joinToString("") { "%02x".format(it) }
+        val expected = shaFile.readText().trim()
+        if (actual != expected) {
+            error("visa_data.db.sha256 sidecar ($expected) does not match the asset (actual $actual)")
+        }
+    }
+}
+
+tasks.named("preBuild") { dependsOn("verifyVisaDb") }
+
 // updateVisaDb is OPT-IN: it fetches from the network and can overwrite the committed
 // asset, so it is deliberately NOT wired into preBuild/Test — builds and tests run
 // hermetically against the committed visa_data.db. Refresh manually with:
