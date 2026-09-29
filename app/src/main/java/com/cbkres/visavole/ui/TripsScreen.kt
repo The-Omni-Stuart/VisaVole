@@ -119,6 +119,12 @@ fun TripsScreen(
     // instead of leaving a dead key behind.
     val effectiveFocusKey = focusedKey?.takeIf { key -> zoneAllowances.any { it.key == key } }
     val primary = TripModel.primaryAllowance(zoneAllowances, effectiveFocusKey)
+    // P3-43: the passport maps + valid home set are identical across every trip card, so compute
+    // them once per publish here instead of as a `remember(docs)` inside each card (which wasted
+    // N-1 of the N lookups on every recomposition).
+    val passportCounts = remember(ready.docs) { passportCountsByIso(ready.docs) }
+    val passportNumbers = remember(ready.docs) { passportNumbers(ready.docs) }
+    val validHomes = remember(ready.docs, ready.world, today) { AccessModel.validHomeCountries(ready.docs, ready.world, today) }
 
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         ScreenHeader("Trips", "Record your trips and track visa allowance balances.")
@@ -193,19 +199,19 @@ fun TripsScreen(
                     if (sections.upcoming.isNotEmpty()) {
                         item(key = "header-upcoming") { SectionLabel("Upcoming") }
                         items(sections.upcoming, key = { it.id }) { trip ->
-                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip }, flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second ?: 0)
+                            TripCard(trip, ready.world, ready.docs, ready.allowances, passportCounts, passportNumbers, validHomes, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip }, flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second ?: 0)
                         }
                     }
                     if (sections.current.isNotEmpty()) {
                         item(key = "header-current") { SectionLabel("Current") }
                         items(sections.current, key = { it.id }) { trip ->
-                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = { endingTrip = trip }, onDelete = { deletingTrip = trip }, flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second ?: 0)
+                            TripCard(trip, ready.world, ready.docs, ready.allowances, passportCounts, passportNumbers, validHomes, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = { endingTrip = trip }, onDelete = { deletingTrip = trip }, flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second ?: 0)
                         }
                     }
                     if (sections.previous.isNotEmpty()) {
                         item(key = "header-previous") { SectionLabel("Previous") }
                         items(sections.previous, key = { it.id }) { trip ->
-                            TripCard(trip, ready.world, ready.docs, ready.allowances, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip }, flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second ?: 0)
+                            TripCard(trip, ready.world, ready.docs, ready.allowances, passportCounts, passportNumbers, validHomes, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip }, flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second ?: 0)
                         }
                     }
                 }
@@ -266,12 +272,38 @@ private fun tripTitle(trip: Trip, world: WorldData): String {
     }
 }
 
+/** One expanded stop's derived display values, computed once per trip row (P3-43). */
+private data class StopRow(
+    val countryName: String,
+    val zoneLabel: String,
+    val docLabel: String?,
+)
+
+/** Everything a TripCard derives per trip, computed once per publish (P3-43) so a card's row
+ *  doesn't re-derive on every scroll-frame recomposition (amplified by P1-14). */
+private data class TripCardRow(
+    val sortedStops: List<TripStop>,
+    val stops: List<StopRow>,
+    val title: String,
+    val stopCountLabel: String?,
+    val docLabels: String,
+    val zones: List<String>,
+    val relatedAllowance: AllowanceSnapshot?,
+    val allowanceHint: String?,
+)
+
 @Composable
 private fun TripCard(
     trip: Trip,
     world: WorldData,
     docs: List<Document>,
     allowances: List<AllowanceSnapshot>,
+    // Hoisted once per publish at the screen level and shared by every card (P3-43): identical
+    // across all trip cards, so computing them per card (the old `remember(docs)`s) wasted N-1 of
+    // the N lookups on every recomposition.
+    passportCounts: Map<String, Int>,
+    passportNumbers: Map<String, Int>,
+    validHomes: Set<String>,
     today: LocalDate,
     expanded: Boolean,
     onExpand: () -> Unit,
@@ -280,33 +312,41 @@ private fun TripCard(
     onDelete: () -> Unit,
     flashTrigger: Int = 0,
 ) {
-    val sortedStops = TripModel.sortedStops(trip.stops)
-    val title = tripTitle(trip, world)
-    val stopCountLabel = if (sortedStops.size > 1) "${sortedStops.size} stops" else null
-    val passportCounts = remember(docs) { passportCountsByIso(docs) }
-    val passportNumbers = remember(docs) { passportNumbers(docs) }
-    // Stay windows resolve against the passports that are not expired (P2-30).
-    val validHomes = remember(docs, world, today) { AccessModel.validHomeCountries(docs, world, today) }
-    val docLabels = sortedStops.mapNotNull { it.documentId }.distinct().joinToString(", ") { id ->
-        docs.firstOrNull { it.id == id }?.displayLabel(passportCounts, passportNumbers) ?: id
-    }
-    val zones = sortedStops
-        .map { stop ->
+    // P3-43: derive the whole row once per (trip, world, docs, allowances, today) instead of on
+    // every recomposition. These inputs are stable across scroll-frame recompositions (P1-14), so
+    // the row is built once per publish and then read as plain values.
+    val row = remember(trip, world, docs, allowances, today) {
+        val sortedStops = TripModel.sortedStops(trip.stops)
+        val stops = sortedStops.map { stop ->
             val countryName = world.countries[stop.countryIso2]?.name ?: stop.countryIso2
-            zoneLabel(world.stayRuleFor(stop.countryIso2, validHomes, today), countryName)
+            StopRow(
+                countryName = countryName,
+                // Stay windows resolve against the passports that are not expired (P2-30).
+                zoneLabel = zoneLabel(world.stayRuleFor(stop.countryIso2, validHomes, today), countryName),
+                docLabel = stop.documentId?.let { id -> docs.firstOrNull { it.id == id }?.displayLabel(passportCounts, passportNumbers) ?: id },
+            )
         }
-        .distinct()
-    val relatedAllowance = allowances.firstOrNull { it.currentTripId == trip.id && !it.key.startsWith("doc:") }
-        ?: allowances.firstOrNull { it.currentTripId == trip.id }
-        ?: allowances.firstOrNull { it.relevantTripIds.contains(trip.id) && !it.key.startsWith("doc:") }
-        ?: allowances.firstOrNull { it.relevantTripIds.contains(trip.id) }
-    val allowanceHint = when {
-        relatedAllowance?.overstayDays != null && relatedAllowance.overstayDays > 0 -> if (relatedAllowance.overstayDays == 1) "1 day over" else "${relatedAllowance.overstayDays} days over"
-        relatedAllowance?.remainingDays != null -> if (relatedAllowance.remainingDays == 1) "1 day left" else "${relatedAllowance.remainingDays} days left"
-        relatedAllowance?.entryRemaining != null -> "${relatedAllowance.entryRemaining} ${if (relatedAllowance.entryRemaining == 1) "entry" else "entries"} left"
-        else -> null
+        val relatedAllowance = allowances.firstOrNull { it.currentTripId == trip.id && !it.key.startsWith("doc:") }
+            ?: allowances.firstOrNull { it.currentTripId == trip.id }
+            ?: allowances.firstOrNull { it.relevantTripIds.contains(trip.id) && !it.key.startsWith("doc:") }
+            ?: allowances.firstOrNull { it.relevantTripIds.contains(trip.id) }
+        TripCardRow(
+            sortedStops = sortedStops,
+            stops = stops,
+            title = tripTitle(trip, world),
+            stopCountLabel = if (sortedStops.size > 1) "${sortedStops.size} stops" else null,
+            docLabels = stops.mapNotNull { it.docLabel }.distinct().joinToString(", "),
+            zones = stops.map { it.zoneLabel }.distinct(),
+            relatedAllowance = relatedAllowance,
+            allowanceHint = when {
+                relatedAllowance?.overstayDays != null && relatedAllowance.overstayDays > 0 -> if (relatedAllowance.overstayDays == 1) "1 day over" else "${relatedAllowance.overstayDays} days over"
+                relatedAllowance?.remainingDays != null -> if (relatedAllowance.remainingDays == 1) "1 day left" else "${relatedAllowance.remainingDays} days left"
+                relatedAllowance?.entryRemaining != null -> "${relatedAllowance.entryRemaining} ${if (relatedAllowance.entryRemaining == 1) "entry" else "entries"} left"
+                else -> null
+            },
+        )
     }
-    val allowanceHintColor = relatedAllowance?.let { ringColor(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant
+    val allowanceHintColor = row.relatedAllowance?.let { ringColor(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant
     VisaListCard(
         onClick = onExpand,
         flashTrigger = flashTrigger,
@@ -326,7 +366,7 @@ private fun TripCard(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             StatusPill(trip.statusAt(today).label, MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text(row.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Text(
                 text = if (expanded) "−" else "+",
                 style = MaterialTheme.typography.titleMedium,
@@ -338,7 +378,7 @@ private fun TripCard(
                 append(trip.firstArrival)
                 append(" → ")
                 append(trip.finalDeparture ?: "ongoing")
-                stopCountLabel?.let {
+                row.stopCountLabel?.let {
                     append(" · ")
                     append(it)
                 }
@@ -349,9 +389,9 @@ private fun TripCard(
         // Top-aligned: expanded zone lists can wrap to several lines, and the hint pill should
         // stay on the first line instead of floating at the middle of the block.
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (zones.isNotEmpty()) {
+            if (row.zones.isNotEmpty()) {
                 Text(
-                    zones.joinToString(", "),
+                    row.zones.joinToString(", "),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = if (expanded) Int.MAX_VALUE else 1,
@@ -359,7 +399,7 @@ private fun TripCard(
                     modifier = Modifier.weight(1f),
                 )
             }
-            allowanceHint?.let {
+            row.allowanceHint?.let {
                 StatusPill(it, allowanceHintColor)
             }
         }
@@ -370,15 +410,14 @@ private fun TripCard(
         ) {
             Column {
                 Spacer(Modifier.height(12.dp))
-                sortedStops.forEachIndexed { index, stop ->
-                    val countryName = world.countries[stop.countryIso2]?.name ?: stop.countryIso2
-                    val docLabel = stop.documentId?.let { id -> docs.firstOrNull { it.id == id }?.displayLabel(passportCounts, passportNumbers) ?: id }
+                row.sortedStops.forEachIndexed { index, stop ->
+                    val sr = row.stops[index]
                     Column(Modifier.padding(vertical = 6.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("${index + 1}.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                            Text(countryName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            Text(sr.countryName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                             Text(
-                                zoneLabel(world.stayRuleFor(stop.countryIso2, validHomes, today), countryName),
+                                sr.zoneLabel,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -386,7 +425,7 @@ private fun TripCard(
                             )
                         }
                         Text(
-                            "${stop.arrival} → ${stop.departure ?: "open"}${docLabel?.let { " · $it" } ?: " · No document"}",
+                            "${stop.arrival} → ${stop.departure ?: "open"}${sr.docLabel?.let { " · $it" } ?: " · No document"}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -401,8 +440,8 @@ private fun TripCard(
             if (trip.note != null) {
                 Text(trip.note!!, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (docLabels.isNotEmpty()) {
-                Text(docLabels, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (row.docLabels.isNotEmpty()) {
+                Text(row.docLabels, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
