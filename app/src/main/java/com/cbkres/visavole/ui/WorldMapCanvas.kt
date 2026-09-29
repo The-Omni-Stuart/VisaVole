@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.contentDescription
@@ -362,6 +363,7 @@ internal fun WorldMapCanvas(
                         var zoomVelocity = 0f
                         var lastPinchTime = downTime
                         var pinchReanchor: Offset? = null
+                        var lastPinchIds: Set<PointerId>? = null
                         var lastLocked = true
                         while (true) {
                             val ev = awaitPointerEvent()
@@ -377,7 +379,13 @@ internal fun WorldMapCanvas(
                                     val c = Offset((p0.x + p1.x) / 2f, (p0.y + p1.y) / 2f)
                                     val dist = distBetween(p0, p1)
                                     val now = SystemClock.uptimeMillis()
-                                    if (prevPointCount < 2) {
+                                    // P3-21: the pair is the two lowest-id pressed pointers, so if that set
+                                    // changes (a finger lifts or a new one lands while 2+ are down) the
+                                    // centroid/distance now come from a different pair — treating them as a
+                                    // delta from the previous pair's values would jump the map. Re-anchor
+                                    // instead, exactly like the fresh-pinch and 2→1 paths.
+                                    val ids = act.map { it.id }.toSet()
+                                    if (prevPointCount < 2 || ids != lastPinchIds) {
                                         last = c
                                         lastDist = dist
                                         lastPinchTime = now
@@ -395,6 +403,7 @@ internal fun WorldMapCanvas(
                                         val instant = kotlin.math.ln(dist / lastDist) / dt
                                         zoomVelocity = zoomVelocity * 0.7f + instant * 0.3f
                                     }
+                                    lastPinchIds = ids
                                     lastDist = dist
                                     last = c
                                     lastPinchTime = now
@@ -406,6 +415,7 @@ internal fun WorldMapCanvas(
                                 act.size == 1 -> {
                                     val p = act[0].position
                                     val now = SystemClock.uptimeMillis()
+                                    lastPinchIds = null
                                     if (prevPointCount >= 2) {
                                         // Re-anchor the surviving finger so the pinch centroid is not
                                         // interpreted as an extra one-finger pan on release. Keep
