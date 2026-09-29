@@ -97,6 +97,7 @@ fun TripsScreen(
     scrollState: LazyListState,
     expandedTrips: List<String>,
     onToggleExpanded: (String) -> Unit,
+    onTripDeleted: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -242,7 +243,7 @@ fun TripsScreen(
             text = { Text("Delete this trip and its stops? Allowance usage will be recalculated.") },
             confirmButton = {
                 Button(
-                    onClick = { vm.removeTrip(trip.id); deletingTrip = null },
+                    onClick = { vm.removeTrip(trip.id); onTripDeleted(trip.id); deletingTrip = null },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 ) { Text("Delete") }
             },

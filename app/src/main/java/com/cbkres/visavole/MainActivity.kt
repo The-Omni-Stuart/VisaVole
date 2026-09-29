@@ -315,6 +315,8 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
                     scrollState = tripsScroll,
                     expandedTrips = expandedTrips,
                     onToggleExpanded = { id -> if (id in expandedTrips) expandedTrips.remove(id) else expandedTrips.add(id) },
+                    // P3-20: a deleted trip's id would otherwise linger in the saveable list forever.
+                    onTripDeleted = { id -> expandedTrips.remove(id) },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
