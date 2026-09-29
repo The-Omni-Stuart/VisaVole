@@ -666,6 +666,9 @@ object TripModel {
             effectiveExpiry = expiry,
             currentTripId = if (entry?.state == EntryState.IN_USE) entry.sourceTripId else null,
             relevantTripIds = entry?.sourceTripId?.let { listOf(it) } ?: emptyList(),
+            // Set even when the entry has lapsed mid-stay (state EXPIRED), so an expired doc you're
+            // still staying on is recognised as "in use" by the ring's pulse.
+            inUseTripId = entry?.activeTripId,
         )
     }
 
@@ -713,7 +716,10 @@ object TripModel {
             active != null -> EntryState.IN_USE
             else -> EntryState.AVAILABLE
         }
-        return EntryStatus(total, used, total?.minus(used), state, effective, lastUsedOn, sourceTripId)
+        return EntryStatus(
+            total, used, total?.minus(used), state, effective, lastUsedOn, sourceTripId,
+            activeTripId = active?.tripId,
+        )
     }
 
     /**

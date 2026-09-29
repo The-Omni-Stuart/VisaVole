@@ -501,11 +501,15 @@ fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = 
     val docKind = a.kind == AllowanceKind.ENTRY_COUNT || a.kind == AllowanceKind.DOCUMENT_VALIDITY
     // An overstayed allowance shows a negative count + "OVERSTAY!" so it reads as unmistakably bad.
     val overstay = a.overstayDays > 0
+    // An expired document still driving an in-progress trip flashes too: you're staying on a lapsed
+    // doc, which is an active illegal situation, not just a quiet "expired" note.
+    val expiredInUse = a.status == AllowanceStatus.DANGER && a.inUseTripId != null
     // The ring pulses between bright red and the dim (empty) track, on a loop, so an illegal stay
-    // can't be mistaken for a healthy — or merely empty — ring.
+    // (or an in-use expired doc) can't be mistaken for a healthy — or merely empty — ring.
+    val pulsing = overstay || expiredInUse
     val pulse = remember { Animatable(1f) }
-    LaunchedEffect(overstay) {
-        if (!overstay) {
+    LaunchedEffect(pulsing) {
+        if (!pulsing) {
             pulse.snapTo(1f)
             return@LaunchedEffect
         }
@@ -532,10 +536,10 @@ fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = 
         Canvas(Modifier.fillMaxSize()) {
             val stroke = (size / 11f).toPx()
             drawCircle(color = color.copy(alpha = 0.15f), style = Stroke(stroke))
-            // Overstay: a full ring whose alpha pulses (see `pulse`) between bright red and the
-            // dim track. Otherwise the normal remaining-fraction arc.
-            val sweep = if (overstay) 360f else 360f * fraction
-            val arcColor = if (overstay) color.copy(alpha = pulse.value) else color
+            // Pulsing (overstay or in-use-expired): a full ring whose alpha pulses (see `pulse`)
+            // between bright red and the dim track. Otherwise the normal remaining-fraction arc.
+            val sweep = if (pulsing) 360f else 360f * fraction
+            val arcColor = if (pulsing) color.copy(alpha = pulse.value) else color
             drawArc(
                 color = arcColor,
                 startAngle = -90f,

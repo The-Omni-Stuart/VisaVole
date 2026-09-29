@@ -92,6 +92,10 @@ data class AllowanceSnapshot(
     val effectiveExpiry: LocalDate? = null,
     val currentTripId: String? = null,
     val relevantTripIds: List<String> = emptyList(),
+    /** The trip still running on this document, even when it has lapsed mid-stay. Drives the
+     *  "expired doc that is still in use" pulse on the ring (distinct from [currentTripId], which
+     *  is only set while the entry is in a healthy IN_USE state). */
+    val inUseTripId: String? = null,
 )
 
 enum class EntryState {
@@ -109,6 +113,10 @@ data class EntryStatus(
     val effectiveExpiry: LocalDate?,
     val lastUsedOn: LocalDate? = null,
     val sourceTripId: String? = null,
+    /** The trip whose entry is currently in progress (null when the stay is over). Unlike
+     *  [sourceTripId], this is set even when the doc has lapsed mid-stay — which is exactly the
+     *  "expired but still in use" case the overstay-style pulse wants to flag. */
+    val activeTripId: String? = null,
 )
 
 enum class WarningSeverity {
