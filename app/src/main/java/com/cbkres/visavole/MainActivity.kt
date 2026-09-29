@@ -418,6 +418,9 @@ private fun MapTab(
         SearchBar(
             query = query,
             onQuery = onQuery,
+            // P3-16: the IME "Search" action picks the first match (previously it only hid the
+            // keyboard, leaving the dropdown open with nothing selected).
+            onSearch = { matches.firstOrNull()?.let { pick(it.iso2) } ?: keyboardController?.hide() },
             onFocusChanged = { searchFocused = it },
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -536,15 +539,16 @@ private fun MapTab(
 private fun SearchBar(
     query: String,
     onQuery: (String) -> Unit,
+    onSearch: () -> Unit,
     onFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val keyboardController = LocalSoftwareKeyboardController.current
-
     OutlinedTextField(
         value = query,
         onValueChange = onQuery,
-        placeholder = { Text("Search country…") },
+        // P3-17: a real label (not just a placeholder) so TalkBack reliably announces the field's
+        // purpose — material3 wires the label to the editable node's accessible name.
+        label = { Text("Search country") },
         leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
         trailingIcon = {
             if (query.isNotEmpty()) {
@@ -553,7 +557,7 @@ private fun SearchBar(
         },
         singleLine = true,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { keyboardController?.hide() }),
+        keyboardActions = KeyboardActions(onSearch = { onSearch() }),
         shape = MaterialTheme.shapes.large,
         colors = OutlinedTextFieldDefaults.colors(
             focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
