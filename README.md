@@ -69,10 +69,15 @@ The generator expects the project’s local shapefile data and Python geometry d
 ## Data & geometry credits
 
 - **Visa rules** — bundled from [VisaDB](https://github.com/The-Omni-Stuart/VisaDB)
-  (CC BY-SA 4.0), refreshed via `./gradlew :app:updateVisaDb`.
+  (GPLv3, like this app), refreshed via `./gradlew :app:updateVisaDb`. VisaDB's own
+  [NOTICE](https://github.com/The-Omni-Stuart/VisaDB/blob/main/NOTICE.md) carries the
+  upstream attribution (xpressmike/visa-matrix, passport-index, mledoze/countries).
 - **Map geometry** — country polygons derived from [Natural Earth](https://www.naturalearthdata.com/)
   public-domain admin-0 shapes (see `tools/data/`), projected to the Robinson
   projection by `tools/gen_robinson2.py`.
+- **Breakaway-region clips** (Abkhazia, South Ossetia, Transnistria) — from the Natural
+  Earth `disputed_areas` dataset (FIPS `B35`/`B37`/`B36`, in `tools/data/*.geojson`), so
+  the map draws them as de facto states.
 
 ## License
 
