@@ -431,8 +431,8 @@ private fun ExpiryStatusPill(
         entry?.total != null && entry.remaining != null && entry.remaining > 0 ->
             Triple("${entry.remaining} ${if (entry.remaining == 1) "entry" else "entries"} left", if (entry.remaining == 1) Severity.WARN else Severity.OK, false)
         days == null -> Triple("No expiry", Severity.OK, false)
-        days <= 7 -> Triple("Expiring soon ($days days)", Severity.WARN, false)
-        else -> Triple("Valid for $days days", Severity.OK, false)
+        days <= 7 -> Triple("Expiring soon ($days ${if (days == 1L) "day" else "days"})", Severity.WARN, false)
+        else -> Triple("Valid for $days ${if (days == 1L) "day" else "days"}", Severity.OK, false)
     }
     // Long pills (e.g. "Replaced by <label>") must wrap instead of squeezing the card's weighted
     // text column; the cap keeps the title column readable for the longest labels.
@@ -481,7 +481,7 @@ private fun DocCard(
             ) {
                 Icon(
                     Icons.Filled.Close,
-                    contentDescription = if (canRemove) "Remove" else "In use by a trip",
+                    contentDescription = if (canRemove) "Delete" else "In use by a trip",
                     tint = if (canRemove) surface else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
