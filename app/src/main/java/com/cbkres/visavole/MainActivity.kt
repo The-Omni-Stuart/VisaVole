@@ -265,6 +265,13 @@ private fun MainScaffold(
     LaunchedEffect(vm) {
         vm.snacks.collect { snackbarHostState.showSnackbar(it) }
     }
+    // P2-47: the system Back button used to just exit the app. Close the topmost layer instead:
+    // Settings overlay -> an open country card (Map) -> a non-home tab (jump home). The
+    // search-focus BackHandler lives in MapTab and, being registered after these, takes priority
+    // over the card when both apply (clear the field first, then the card on the next press).
+    BackHandler(enabled = showSettings) { showSettings = false }
+    BackHandler(enabled = !showSettings && tab == 0 && selected != null) { selected = null }
+    BackHandler(enabled = !showSettings && tab != 0) { tab = 0 }
     // P3-40: the map shapes + per-country focus are pre-built on the VM's IO thread at load time
     // (see AccessViewModel.launchLoad) and shipped on AppState.Ready, so the one-time ~121k-point
     // Path construction no longer runs on the main thread at first composition.
