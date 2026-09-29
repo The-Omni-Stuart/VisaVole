@@ -93,6 +93,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cbkres.visavole.domain.AccessLevel
 import com.cbkres.visavole.domain.AccessModel
+import com.cbkres.visavole.domain.DocAccess
 import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.AppState
 import com.cbkres.visavole.ui.CountryDetailCard
@@ -116,6 +117,8 @@ import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.geometry.Offset
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -511,27 +514,33 @@ private fun MapTab(
         ) {
             if (selected != null) {
                 val selectedAccess = s.access[selected]
-                // The springs above recompose this screen every frame while the card slides, so
-                // the per-selection domain lookups are remembered rather than recomputed inline.
                 // Stay windows resolve against the passports that are not expired (P2-30).
                 val validHomes = remember(s.docs, s.world, s.today) { AccessModel.validHomeCountries(s.docs, s.world, s.today) }
-                val stayRule = remember(selected, s.homeCountries, s.access, s.world, validHomes) {
-                    when {
-                        selected in s.homeCountries -> null
-                        s.access[selected]?.level == AccessLevel.RESIDENCE -> null // you live here — no short-stay limit
-                        else -> s.world.stayRuleFor(selected, validHomes, s.today)
+                // The per-selection breakdown + stay rule are the heavy per-zone access-model
+                // lookups. Running them synchronously in composition froze the map (and the
+                // centre-on-country tween) for ~1s on tap (P2-46). They now compute off the main
+                // thread — the card slides in immediately with its cheap name/level and the
+                // breakdown rows + exact stay label fill in a moment later.
+                var breakdown by remember(selected) { mutableStateOf<List<DocAccess>?>(null) }
+                var daysLabel by remember(selected) { mutableStateOf<String?>(null) }
+                LaunchedEffect(selected, s.homeCountries, s.access, s.world, s.docs, s.trips, validHomes) {
+                    if (selected == null) return@LaunchedEffect
+                    val (b, dl) = withContext(Dispatchers.Default) {
+                        val stayRule = when {
+                            selected in s.homeCountries -> null
+                            s.access[selected]?.level == AccessLevel.RESIDENCE -> null // you live here — no short-stay limit
+                            else -> s.world.stayRuleFor(selected, validHomes, s.today)
+                        }
+                        AccessModel.breakdownFor(selected, s.docs, s.world, trips = s.trips) to
+                            AccessModel.stayLabelFor(selectedAccess, stayRule)
                     }
-                }
-                val breakdown = remember(selected, s.docs, s.world, s.trips) {
-                    AccessModel.breakdownFor(selected, s.docs, s.world, trips = s.trips)
-                }
-                val daysLabel = remember(selectedAccess, stayRule) {
-                    AccessModel.stayLabelFor(selectedAccess, stayRule)
+                    breakdown = b
+                    daysLabel = dl
                 }
                 CountryDetailCard(
                     countryName = selName!!,
                     access = selectedAccess,
-                    breakdown = breakdown,
+                    breakdown = breakdown.orEmpty(),
                     onDismiss = { pick(null) },
                     modifier = Modifier.graphicsLayer { translationY = cardDrop.toPx() },
                     isHome = selected in s.homeCountries,
