@@ -205,25 +205,35 @@ fun DocumentsScreen(
             // The tab-top allowance display (the same one the Trips tab uses), fed from the
             // documents that actually have an expiry to watch: every visa, plus passports /
             // residence permits with under 24 months left.
-            val docAllowances = ready.allowances.filter { a ->
-                val doc = ready.docs.firstOrNull { it.id == a.key.removePrefix("doc:") } ?: return@filter false
-                when {
-                    doc.kind is DocKind.Passport -> (a.remainingDays ?: Int.MAX_VALUE) < EXPIRY_WATCH_DAYS
-                    doc.docCategory(ready.world) == "visa" -> a.remainingDays != null
-                    else -> (a.remainingDays ?: Int.MAX_VALUE) < EXPIRY_WATCH_DAYS
+            // P3-44: remember the per-publish filters — docAllowances is O(allowances × docs) and
+            // these used to re-run on every recomposition, i.e. every scroll frame via P1-14.
+            val docAllowances = remember(ready.allowances, ready.docs, ready.world) {
+                ready.allowances.filter { a ->
+                    val doc = ready.docs.firstOrNull { it.id == a.key.removePrefix("doc:") } ?: return@filter false
+                    when {
+                        doc.kind is DocKind.Passport -> (a.remainingDays ?: Int.MAX_VALUE) < EXPIRY_WATCH_DAYS
+                        doc.docCategory(ready.world) == "visa" -> a.remainingDays != null
+                        else -> (a.remainingDays ?: Int.MAX_VALUE) < EXPIRY_WATCH_DAYS
+                    }
                 }
             }
             // Effective focus: honor the tapped card only while that allowance still exists, so a
             // focused doc that is deleted or lapses falls back to the primary display instead of
             // leaving a dead key behind.
-            val effectiveFocusAllowance = focusedAllowance?.takeIf { key -> docAllowances.any { it.key == key } }
-            val docPrimary = TripModel.primaryAllowance(docAllowances, effectiveFocusAllowance)
+            val effectiveFocusAllowance = remember(docAllowances, focusedAllowance) {
+                focusedAllowance?.takeIf { key -> docAllowances.any { it.key == key } }
+            }
+            val docPrimary = remember(docAllowances, effectiveFocusAllowance) {
+                TripModel.primaryAllowance(docAllowances, effectiveFocusAllowance)
+            }
             // How many VALID (non-expired) passports the user holds of each nationality. The primary
             // star only makes sense when two or more valid passports of the same country compete.
-            val validPassportIsoCounts = active
-                .filter { it.kind is DocKind.Passport }
-                .groupingBy { (it.kind as DocKind.Passport).iso2 }
-                .eachCount()
+            val validPassportIsoCounts = remember(active) {
+                active
+                    .filter { it.kind is DocKind.Passport }
+                    .groupingBy { (it.kind as DocKind.Passport).iso2 }
+                    .eachCount()
+            }
             // A stable "(N)" number for every passport: its 1-based position within its nationality,
             // in insertion order (the order documents were added). Numbering all passports — valid and
             // expired alike — keeps each one identifiable (e.g. still "(2)") even after it lapses, at

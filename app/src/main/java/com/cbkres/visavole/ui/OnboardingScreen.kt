@@ -51,9 +51,13 @@ fun OnboardingScreen(
     var validFromMillis by rememberSaveable { mutableStateOf<Long?>(null) }
     var addError by remember { mutableStateOf<String?>(null) }
     val q = query.trim().lowercase()
-    val list = countries.entries
-        .filter { q.isEmpty() || it.value.name.lowercase().contains(q) || it.key.lowercase() == q }
-        .sortedBy { it.value.name }
+    // P3-44: remember the 203-entry filter+sort so it only re-runs when the query or the country
+    // set changes, not on every recomposition (every scroll frame via P1-14).
+    val list = remember(countries, q) {
+        countries.entries
+            .filter { q.isEmpty() || it.value.name.lowercase().contains(q) || it.key.lowercase() == q }
+            .sortedBy { it.value.name }
+    }
 
     Surface(
         color = MaterialTheme.colorScheme.background,

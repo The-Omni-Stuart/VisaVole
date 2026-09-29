@@ -112,13 +112,18 @@ fun TripsScreen(
     var deletingTrip by remember { mutableStateOf<Trip?>(null) }
     var endingTrip by remember { mutableStateOf<Trip?>(null) }
     // The Trips tab only surfaces zone (stay-window) allowances; per-document entry rings
-    // live on the Documents tab, next to the document itself.
-    val zoneAllowances = ready.allowances.filter { !it.key.startsWith("doc:") }
+    // live on the Documents tab, next to the document itself. P3-44: remember the per-publish
+    // filters so they don't re-run on every scroll-frame recomposition (P1-14).
+    val zoneAllowances = remember(ready.allowances) { ready.allowances.filter { !it.key.startsWith("doc:") } }
     // Effective focus: honor the tapped card only while that allowance still exists, so a
     // focused zone that disappears (deleted trip, lapsed doc) falls back to the primary display
     // instead of leaving a dead key behind.
-    val effectiveFocusKey = focusedKey?.takeIf { key -> zoneAllowances.any { it.key == key } }
-    val primary = TripModel.primaryAllowance(zoneAllowances, effectiveFocusKey)
+    val effectiveFocusKey = remember(zoneAllowances, focusedKey) {
+        focusedKey?.takeIf { key -> zoneAllowances.any { it.key == key } }
+    }
+    val primary = remember(zoneAllowances, effectiveFocusKey) {
+        TripModel.primaryAllowance(zoneAllowances, effectiveFocusKey)
+    }
     // P3-43: the passport maps + valid home set are identical across every trip card, so compute
     // them once per publish here instead of as a `remember(docs)` inside each card (which wasted
     // N-1 of the N lookups on every recomposition).
