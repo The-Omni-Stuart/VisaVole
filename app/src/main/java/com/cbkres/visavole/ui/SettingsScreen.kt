@@ -3,6 +3,7 @@ package com.cbkres.visavole.ui
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.widget.Toast
 import android.graphics.Canvas
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -282,14 +283,14 @@ private fun AppIcon() {
 }
 
 private fun openUrl(context: Context, url: String) {
-    runCatching {
-        context.startActivity(
-            Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-                // text/html keeps the link unambiguous: it opens straight in a browser instead of
-                // surfacing an app chooser. (No CustomTabs dependency — three infrequent links
-                // don't justify a warm-start browser lib for this app.)
-                type = "text/html"
-            },
-        )
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+        // text/html keeps the link unambiguous: it opens straight in a browser instead of
+        // surfacing an app chooser. (No CustomTabs dependency — three infrequently-tapped links
+        // don't justify a warm-start browser lib for this app.)
+        type = "text/html"
+    }
+    runCatching { context.startActivity(intent) }.onFailure {
+        // P3-24: a device without a browser would otherwise be a silent no-op.
+        Toast.makeText(context, "Couldn't open this link — no browser available?", Toast.LENGTH_SHORT).show()
     }
 }
