@@ -19,6 +19,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.core.view.WindowInsetsControllerCompat
@@ -103,6 +104,7 @@ import com.cbkres.visavole.ui.SettingsScreen
 import com.cbkres.visavole.ui.TripsScreen
 import com.cbkres.visavole.ui.VisaSnackbarHost
 import com.cbkres.visavole.ui.theme.Visa_VoleTheme
+import com.cbkres.visavole.ui.theme.ThemePrefs
 import com.cbkres.visavole.ui.WorldMapCanvas
 import com.cbkres.visavole.ui.HOME
 import com.cbkres.visavole.ui.colorFor
@@ -126,15 +128,47 @@ class MainActivity : ComponentActivity() {
             isAppearanceLightNavigationBars = !darkTheme
         }
         setContent {
-            Visa_VoleTheme {
-                VisaVoleApp()
+            val appContext = this
+            var themeMode by remember { mutableStateOf(ThemePrefs.getMode(appContext)) }
+            var dynamicColor by remember { mutableStateOf(ThemePrefs.getDynamic(appContext)) }
+            val darkTheme = when (themeMode) {
+                ThemePrefs.Mode.SYSTEM -> isSystemInDarkTheme()
+                ThemePrefs.Mode.LIGHT -> false
+                ThemePrefs.Mode.DARK -> true
+            }
+            // Keep the status/nav-bar icon tint in sync with the *effective* theme, so forcing
+            // light on a dark-mode system (or vice versa) doesn't leave invisible icons.
+            LaunchedEffect(darkTheme) {
+                WindowInsetsControllerCompat(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = !darkTheme
+                    isAppearanceLightNavigationBars = !darkTheme
+                }
+            }
+            Visa_VoleTheme(darkTheme = darkTheme, dynamicColor = dynamicColor) {
+                VisaVoleApp(
+                    themeMode = themeMode,
+                    dynamicColor = dynamicColor,
+                    onThemeModeChanged = { m ->
+                        themeMode = m
+                        ThemePrefs.setMode(appContext, m)
+                    },
+                    onDynamicColorChanged = { d ->
+                        dynamicColor = d
+                        ThemePrefs.setDynamic(appContext, d)
+                    },
+                )
             }
         }
     }
 }
 
 @Composable
-fun VisaVoleApp() {
+fun VisaVoleApp(
+    themeMode: ThemePrefs.Mode,
+    dynamicColor: Boolean,
+    onThemeModeChanged: (ThemePrefs.Mode) -> Unit,
+    onDynamicColorChanged: (Boolean) -> Unit,
+) {
     val app = LocalContext.current.applicationContext as Application
     val vm: AccessViewModel = viewModel(
         factory = ViewModelProvider.AndroidViewModelFactory.getInstance(app),
@@ -147,7 +181,14 @@ fun VisaVoleApp() {
             if (s.homeCountries.isEmpty()) {
                 OnboardingScreen(countries = s.world.countries, today = s.today, onAddPassport = { iso, vfrom, expiry -> vm.addOnboardingPassport(iso, vfrom, expiry) })
             } else {
-                MainScaffold(vm, s)
+                MainScaffold(
+                    vm,
+                    s,
+                    themeMode = themeMode,
+                    dynamicColor = dynamicColor,
+                    onThemeModeChanged = onThemeModeChanged,
+                    onDynamicColorChanged = onDynamicColorChanged,
+                )
             }
         }
     }
@@ -198,7 +239,14 @@ private val MapCenterSaver = object : Saver<MutableState<Offset>, List<Float>> {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
+private fun MainScaffold(
+    vm: AccessViewModel,
+    s: AppState.Ready,
+    themeMode: ThemePrefs.Mode,
+    dynamicColor: Boolean,
+    onThemeModeChanged: (ThemePrefs.Mode) -> Unit,
+    onDynamicColorChanged: (Boolean) -> Unit,
+) {
     // rememberSaveable: tab/selection/query/expansion survive process death, and (being
     // hoisted above the tab switch) also survive moving between tabs, which disposes screens.
     var tab by rememberSaveable { mutableIntStateOf(0) }
@@ -324,6 +372,10 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
                 SettingsScreen(
                     vm,
                     s,
+                    themeMode = themeMode,
+                    dynamicColor = dynamicColor,
+                    onThemeModeChanged = onThemeModeChanged,
+                    onDynamicColorChanged = onDynamicColorChanged,
                     modifier = Modifier.fillMaxSize(),
                 )
             }

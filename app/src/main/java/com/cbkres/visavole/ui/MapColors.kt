@@ -5,6 +5,10 @@ import com.cbkres.visavole.domain.AccessLevel
 
 // Ocean + unknown-land base.
 val OCEAN = Color(0xFF0B1F2A)
+// Light-theme ocean (used when the effective theme is light, so the map doesn't stay a dark
+// island under a light app). The bright country fills and the navy [LAND_STROKE] borders both
+// still read on this lighter water.
+val OCEAN_LIGHT = Color(0xFFDCE7EF)
 // Borders: a solid navy line (matches the sea) so the bright fills read as separate
 // countries. Drawn in a second pass on top of every fill so shared borders stay crisp.
 val LAND_STROKE = Color(0xFF0B1F2A)

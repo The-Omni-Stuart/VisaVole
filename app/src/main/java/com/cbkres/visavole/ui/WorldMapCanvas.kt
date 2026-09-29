@@ -293,9 +293,14 @@ internal fun WorldMapCanvas(
     // has changed (e.g. the country-card slide animating controlsBottomPadding): a fresh lambda
     // per recomposition forces a full redraw of every fill and stroke, while the keyed captures
     // here (zoom/centre/selection/geometry) change exactly when a redraw is needed.
-    val mapDraw: DrawScope.() -> Unit = remember(geometry, drawShapes, selected, canvasSize, zoom, centerWorld) {
+    // P3-23: the ocean follows the effective theme (it was a fixed dark navy, so it stayed a dark
+    // island under a light app). The bright country fills and navy borders read on both.
+    val surf = MaterialTheme.colorScheme.surface
+    val isDarkSurf = (0.299f * surf.red + 0.587f * surf.green + 0.114f * surf.blue) < 0.5f
+    val ocean = if (isDarkSurf) OCEAN else OCEAN_LIGHT
+    val mapDraw: DrawScope.() -> Unit = remember(geometry, drawShapes, selected, canvasSize, zoom, centerWorld, ocean) {
         {
-            drawRect(OCEAN)
+            drawRect(ocean)
             val ds = if (canvasSize.width > 0f) canvasSize else size
             val sc = baseScaleFor(geometry, ds.width, ds.height) * zoom
             // Screen point for a world point: (canvasCenter) + (world - centerWorld) * sc.

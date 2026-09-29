@@ -28,6 +28,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import com.cbkres.visavole.data.BackupManager
 import com.cbkres.visavole.data.PersistedState
+import com.cbkres.visavole.ui.theme.ThemePrefs
 
 private const val SOURCE_URL = "https://github.com/The-Omni-Stuart/VisaVole"
 private const val ISSUES_URL = "https://github.com/The-Omni-Stuart/VisaVole/issues"
@@ -65,6 +67,10 @@ private const val LICENSE_URL = "https://github.com/The-Omni-Stuart/VisaVole/blo
 fun SettingsScreen(
     vm: AccessViewModel,
     ready: AppState.Ready,
+    themeMode: ThemePrefs.Mode,
+    dynamicColor: Boolean,
+    onThemeModeChanged: (ThemePrefs.Mode) -> Unit,
+    onDynamicColorChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -106,6 +112,46 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(Modifier.height(40.dp))
+            Text("Display", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(12.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                listOf(
+                    ThemePrefs.Mode.SYSTEM to "Auto",
+                    ThemePrefs.Mode.LIGHT to "Light",
+                    ThemePrefs.Mode.DARK to "Dark",
+                ).forEach { (mode, label) ->
+                    val selected = themeMode == mode
+                    OutlinedButton(
+                        onClick = { onThemeModeChanged(mode) },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = if (selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        ),
+                    ) {
+                        Text(label)
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    "Dynamic color",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = dynamicColor, onCheckedChange = onDynamicColorChanged)
+            }
             Spacer(Modifier.height(48.dp))
 
             OutlinedButton(onClick = { openUrl(context, SOURCE_URL) }, modifier = Modifier.fillMaxWidth()) {
