@@ -11,6 +11,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -649,14 +650,16 @@ internal fun AllowanceCard(a: AllowanceSnapshot, focused: Boolean, onClick: () -
 }
 
 /**
- * Scrolls [index] to the middle of the viewport: the first hop aligns the item with the list's
- * top edge (which also forces it to lay out), the second settles it to the vertical middle using
- * the item's measured height.
+ * Scrolls [index] to the middle of the viewport: the first hop brings the item into view (which
+ * also forces it to lay out), then a single *relative* scroll nudges it to the vertical middle.
+ * A relative scroll clamps at the content ends, so the first/last item settles at the nearest
+ * reachable position (it can no longer be pinned to an edge ~160 px off-centre).
  */
 suspend fun LazyListState.animateItemToCenter(index: Int, viewportHeightPx: Int) {
     animateScrollToItem(index)
     withFrameNanos { }
     val item = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return
-    val offset = ((viewportHeightPx - item.size) / 2f).toInt().coerceAtLeast(0)
-    if (offset > 0) animateScrollToItem(index, scrollOffset = offset)
+    val targetTop = (viewportHeightPx - item.size) / 2f
+    val delta = targetTop - item.offset
+    if (delta != 0f) scroll(MutatePriority.UserInput) { scrollBy(delta) }
 }
