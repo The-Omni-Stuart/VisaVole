@@ -12,10 +12,12 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -253,26 +255,36 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
         },
         snackbarHost = { VisaSnackbarHost(snackbarHostState) },
         bottomBar = {
-            // Persistent too — switching tabs while Settings is open just closes it.
-            NavigationBar {
-                NavigationBarItem(
-                    selected = tab == 0,
-                    onClick = { showSettings = false; tab = 0 },
-                    icon = { Icon(Icons.Filled.Place, contentDescription = null) },
-                    label = { Text("Map") },
-                )
-                NavigationBarItem(
-                    selected = tab == 1,
-                    onClick = { showSettings = false; tab = 1 },
-                    icon = { Icon(Icons.Filled.Face, contentDescription = null) },
-                    label = { Text("Documents") },
-                )
-                NavigationBarItem(
-                    selected = tab == 2,
-                    onClick = { showSettings = false; tab = 2 },
-                    icon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
-                    label = { Text("Trips") },
-                )
+            // Settings is a full-screen overlay, so the persistent nav bar hides while it's open.
+            // expand/collapse is a *size* animation (not just an offset), so the Scaffold's content
+            // padding tracks the bar's height frame-by-frame — the content area grows in sync and
+            // returning to a tab doesn't pop. With no tabs visible, the top-bar back arrow is the
+            // Settings exit ("tap a tab to leave" no longer applies).
+            AnimatedVisibility(
+                visible = !showSettings,
+                enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
+                exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut(),
+            ) {
+                NavigationBar {
+                    NavigationBarItem(
+                        selected = tab == 0,
+                        onClick = { tab = 0 },
+                        icon = { Icon(Icons.Filled.Place, contentDescription = null) },
+                        label = { Text("Map") },
+                    )
+                    NavigationBarItem(
+                        selected = tab == 1,
+                        onClick = { tab = 1 },
+                        icon = { Icon(Icons.Filled.Face, contentDescription = null) },
+                        label = { Text("Documents") },
+                    )
+                    NavigationBarItem(
+                        selected = tab == 2,
+                        onClick = { tab = 2 },
+                        icon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
+                        label = { Text("Trips") },
+                    )
+                }
             }
         },
     ) { pad ->
