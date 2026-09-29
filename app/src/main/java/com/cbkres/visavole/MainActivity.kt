@@ -484,7 +484,17 @@ private fun MapTab(
                     .fillMaxWidth()
                     .onSizeChanged { legendH = Dp(it.height / density.density) },
             ) {
-                LegendRow(s.access.values.groupBy { it.level }.mapValues { it.value.size }, s.homeCountries.size)
+                // Home countries are their own "Your country" swatch, so exclude them from the
+                // per-level buckets — otherwise a home country (level FREEDOM) is double-counted
+                // in both (P3-15). Null levels (no documented rule) are kept so the slate swatch
+                // has a real count.
+                LegendRow(
+                    s.access.entries
+                        .filter { it.key !in s.homeCountries }
+                        .groupBy { it.value.level }
+                        .mapValues { it.value.size },
+                    s.homeCountries.size,
+                )
             }
         }
         AnimatedVisibility(
@@ -558,7 +568,7 @@ private fun SearchBar(
 }
 
 @Composable
-private fun LegendRow(counts: Map<AccessLevel, Int>, homeCount: Int = 1) {
+private fun LegendRow(counts: Map<AccessLevel?, Int>, homeCount: Int = 1) {
     val levels = listOf(
         AccessLevel.FREEDOM, AccessLevel.RESIDENCE, AccessLevel.VISA_FREE, AccessLevel.COVERED,
         AccessLevel.ETA, AccessLevel.E_VISA, AccessLevel.VISA_REQUIRED, AccessLevel.REFUSED,
@@ -603,6 +613,23 @@ private fun LegendRow(counts: Map<AccessLevel, Int>, homeCount: Int = 1) {
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
+            }
+            // Slate swatch: countries with no documented rule render slate on the map but had no
+            // legend entry (P3-15).
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(14.dp)
+                        .background(colorFor(null)),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text("No documented rule", style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    "${counts[null] ?: 0}",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
         }
         }
