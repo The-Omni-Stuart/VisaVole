@@ -163,41 +163,47 @@ fun TripsScreen(
                 contentPadding = PaddingValues(top = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                item(key = "allowances") {
-                    AllowanceSection(
-                        allowances = zoneAllowances,
-                        primary = primary,
-                        focusedKey = effectiveFocusKey,
-                        onFocus = { focusedKey = if (focusedKey == it) null else it },
-                        onRingClick = { snap ->
-                            // Jump the list to the zone's trip (the in-trip one first) and centre it.
-                            val trip = (snap.currentTripId ?: snap.relevantTripIds.firstOrNull())
-                                ?.let { id -> ready.trips.firstOrNull { t -> t.id == id } }
-                            if (trip != null) {
-                                if (trip.id !in expandedTrips) onToggleExpanded(trip.id)
-                                val target = tripIndex[trip.id]
-                                if (target != null) {
-                                    // Fire the flash only once the centring scroll has settled, so it
-                                    // lands on the trip wherever it sits in the list — not while the
-                                    // card is still off-screen mid-scroll.
-                                    scope.launch {
-                                        tripsListState.animateItemToCenter(target, listViewportPx)
-                                        val n = (flashTrip?.takeIf { it.first == trip.id }?.second ?: 0) + 1
-                                        flashTrip = trip.id to n
-                                        // Clear the trigger once the ripple has had time to play (~600 ms:
-                                        // a 300 ms held press then a 300 ms release fade): a card
-                                        // re-entering the composition with the trigger still set would
-                                        // replay the flash.
-                                        delay(900)
-                                        if (flashTrip == (trip.id to n)) flashTrip = null
+                // With no trips there are no zone allowances either, so the allowances item would
+                // only add a second stacked placeholder ("No allowances to track yet") on top of
+                // "No trips yet" — suppress it until a trip exists (P3-14).
+                val hasTrips = sections.upcoming.isNotEmpty() || sections.current.isNotEmpty() || sections.previous.isNotEmpty()
+                if (hasTrips) {
+                    item(key = "allowances") {
+                        AllowanceSection(
+                            allowances = zoneAllowances,
+                            primary = primary,
+                            focusedKey = effectiveFocusKey,
+                            onFocus = { focusedKey = if (focusedKey == it) null else it },
+                            onRingClick = { snap ->
+                                // Jump the list to the zone's trip (the in-trip one first) and centre it.
+                                val trip = (snap.currentTripId ?: snap.relevantTripIds.firstOrNull())
+                                    ?.let { id -> ready.trips.firstOrNull { t -> t.id == id } }
+                                if (trip != null) {
+                                    if (trip.id !in expandedTrips) onToggleExpanded(trip.id)
+                                    val target = tripIndex[trip.id]
+                                    if (target != null) {
+                                        // Fire the flash only once the centring scroll has settled, so it
+                                        // lands on the trip wherever it sits in the list — not while the
+                                        // card is still off-screen mid-scroll.
+                                        scope.launch {
+                                            tripsListState.animateItemToCenter(target, listViewportPx)
+                                            val n = (flashTrip?.takeIf { it.first == trip.id }?.second ?: 0) + 1
+                                            flashTrip = trip.id to n
+                                            // Clear the trigger once the ripple has had time to play (~600 ms:
+                                            // a 300 ms held press then a 300 ms release fade): a card
+                                            // re-entering the composition with the trigger still set would
+                                            // replay the flash.
+                                            delay(900)
+                                            if (flashTrip == (trip.id to n)) flashTrip = null
+                                        }
                                     }
                                 }
-                            }
-                        },
-                    )
-                    Spacer(Modifier.height(4.dp))
+                            },
+                        )
+                        Spacer(Modifier.height(4.dp))
+                    }
                 }
-                if (sections.upcoming.isEmpty() && sections.current.isEmpty() && sections.previous.isEmpty()) {
+                if (!hasTrips) {
                     item(key = "empty") { EmptyState("No trips yet. Add your first trip to start tracking allowances.") }
                 } else {
                     if (sections.upcoming.isNotEmpty()) {
