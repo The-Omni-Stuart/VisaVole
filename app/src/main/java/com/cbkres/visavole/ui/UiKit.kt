@@ -257,7 +257,6 @@ fun CountryRow(
 fun VisaListCard(
     onClick: (() -> Unit)? = null,
     actions: @Composable () -> Unit = {},
-    trailing: (@Composable () -> Unit)? = null,
     flashTrigger: Int = 0,
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
@@ -287,10 +286,6 @@ fun VisaListCard(
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     content()
-                }
-                if (trailing != null) {
-                    Spacer(Modifier.width(8.dp))
-                    trailing()
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(start = 8.dp)) {
                     actions()
@@ -533,7 +528,7 @@ fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = 
     // Both faces are laid out into an identical fixed-height box, so the crossfade's own size never
     // changes. A variable-size crossfade snaps a few pixels the instant the shorter face swaps in —
     // the constant box keeps the centre text parked on the ring's centre line through the fade.
-    val faceHeight = if (size < 96.dp) 48.dp else 58.dp
+    val faceHeight = 58.dp
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val stroke = (size / 11f).toPx()
@@ -558,7 +553,7 @@ fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = 
                     Text(
                         c,
                         // Word faces ("In use", "Expired") run one step smaller than a bare number.
-                        style = if (wordFace || size < 96.dp) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
+                        style = if (wordFace) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = color,
                     )
