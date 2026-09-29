@@ -1,6 +1,8 @@
 package com.cbkres.visavole.ui
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.LocalIndication
@@ -446,7 +448,7 @@ internal fun entriesRemainingPhrase(remaining: Int?): String = when (remaining) 
  * visa gets the same coloured treatment as a residence's "Valid for N days".
  */
 internal fun allowanceSummary(a: AllowanceSnapshot): String = when {
-    a.overstayDays > 0 -> if (a.overstayDays == 1) "1 day over" else "${a.overstayDays} days over"
+    a.overstayDays > 0 -> "-${a.overstayDays} Days OVERSTAYING!"
     a.status == AllowanceStatus.DANGER && a.kind != AllowanceKind.ROLLING && a.kind != AllowanceKind.PER_ENTRY ->
         "Expired on ${a.effectiveExpiry ?: "unknown"}"
     a.kind == AllowanceKind.ENTRY_COUNT -> buildList {
@@ -497,8 +499,23 @@ fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = 
         }
     }
     val docKind = a.kind == AllowanceKind.ENTRY_COUNT || a.kind == AllowanceKind.DOCUMENT_VALIDITY
+    // An overstayed allowance shows a negative count + "OVERSTAY!" so it reads as unmistakably bad.
+    val overstay = a.overstayDays > 0
+    // The ring pulses between bright red and the dim (empty) track, on a loop, so an illegal stay
+    // can't be mistaken for a healthy — or merely empty — ring.
+    val pulse = remember { Animatable(1f) }
+    LaunchedEffect(overstay) {
+        if (!overstay) {
+            pulse.snapTo(1f)
+            return@LaunchedEffect
+        }
+        while (true) {
+            pulse.animateTo(0.15f, tween(700, easing = FastOutSlowInEasing))
+            pulse.animateTo(1f, tween(700, easing = FastOutSlowInEasing))
+        }
+    }
     val (center, centerLabel) = when {
-        a.overstayDays > 0 -> a.overstayDays.toString() to "days over"
+        overstay -> "-${a.overstayDays}" to "OVERSTAY!"
         docKind && a.status == AllowanceStatus.DANGER -> "Expired" to "on ${a.effectiveExpiry ?: "unknown"}"
         a.kind == AllowanceKind.ENTRY_COUNT && a.currentTripId != null -> "In use" to entriesRemainingPhrase(a.entryRemaining)
         a.kind == AllowanceKind.ENTRY_COUNT -> (a.entryRemaining ?: 0).toString() to "entries left"
@@ -515,10 +532,14 @@ fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = 
         Canvas(Modifier.fillMaxSize()) {
             val stroke = (size / 11f).toPx()
             drawCircle(color = color.copy(alpha = 0.15f), style = Stroke(stroke))
+            // Overstay: a full ring whose alpha pulses (see `pulse`) between bright red and the
+            // dim track. Otherwise the normal remaining-fraction arc.
+            val sweep = if (overstay) 360f else 360f * fraction
+            val arcColor = if (overstay) color.copy(alpha = pulse.value) else color
             drawArc(
-                color = color,
+                color = arcColor,
                 startAngle = -90f,
-                sweepAngle = 360f * fraction,
+                sweepAngle = sweep,
                 useCenter = false,
                 style = Stroke(stroke),
             )
@@ -535,7 +556,13 @@ fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = 
                         fontWeight = FontWeight.Bold,
                         color = color,
                     )
-                    Text(l, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        l,
+                        style = MaterialTheme.typography.labelSmall,
+                        // "OVERSTAY!" is bold + the ring's red; other labels stay muted.
+                        color = if (overstay) color else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (overstay) FontWeight.Bold else FontWeight.Normal,
+                    )
                 }
             }
         }

@@ -344,7 +344,7 @@ private fun TripCard(
             zones = stops.map { it.zoneLabel }.distinct(),
             relatedAllowance = relatedAllowance,
             allowanceHint = when {
-                relatedAllowance?.overstayDays != null && relatedAllowance.overstayDays > 0 -> if (relatedAllowance.overstayDays == 1) "1 day over" else "${relatedAllowance.overstayDays} days over"
+                relatedAllowance?.overstayDays != null && relatedAllowance.overstayDays > 0 -> "-${relatedAllowance.overstayDays} Days OVERSTAYING!"
                 relatedAllowance?.remainingDays != null -> if (relatedAllowance.remainingDays == 1) "1 day left" else "${relatedAllowance.remainingDays} days left"
                 relatedAllowance?.entryRemaining != null -> "${relatedAllowance.entryRemaining} ${if (relatedAllowance.entryRemaining == 1) "entry" else "entries"} left"
                 else -> null
