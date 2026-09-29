@@ -138,6 +138,19 @@ class StateCodecTest {
     }
 
     @Test
+    fun missingTripIdsAreGenerated() {
+        val json = """
+            {"schemaVersion":3,"primaryDocId":null,"docs":[],
+             "trips":[{"id":"","note":null,
+                       "stops":[{"id":"s1","country":"DE","arrival":"2026-10-01","departure":null,"documentId":null}]}]}
+        """.trimIndent()
+        val state = StateCodec.decode(json)
+        val trip = state.trips.single()
+        assertNotNull(trip.id)
+        assertTrue(trip.id.isNotBlank())
+    }
+
+    @Test
     fun malformedStopsAreSkippedButUsableOnesSurvive() {
         val json = """
             {"schemaVersion":3,"primaryDocId":null,"docs":[],
