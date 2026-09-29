@@ -546,6 +546,7 @@ object GuardEngine {
         return listOfNotNull(
             structureRule(candidate, ctx),
             gapRule(candidate, ctx),
+            stopOverlapRule(candidate),
             overlapRule(candidate, others, ctx),
             projectionRule(candidate, others, ctx),
             ongoingCapRule(candidate, ctx),
@@ -573,6 +574,13 @@ object GuardEngine {
     /** `trip.gap` — adapter over [TripModel.gapWarningsFor]. */
     private fun gapRule(candidate: Trip, ctx: GuardContext): GuardResult? {
         val warnings = TripModel.gapWarningsFor(candidate, ctx.today)
+        if (warnings.isEmpty()) return null
+        return GuardResult(warnings.map { w -> GuardFinding(w.code, GuardSeverity.WARN, w.title, w.message) })
+    }
+
+    /** `trip.stopOverlap` — adapter over [TripModel.stopOverlapWarningsFor] (stops inside one trip). */
+    private fun stopOverlapRule(candidate: Trip): GuardResult? {
+        val warnings = TripModel.stopOverlapWarningsFor(candidate)
         if (warnings.isEmpty()) return null
         return GuardResult(warnings.map { w -> GuardFinding(w.code, GuardSeverity.WARN, w.title, w.message) })
     }

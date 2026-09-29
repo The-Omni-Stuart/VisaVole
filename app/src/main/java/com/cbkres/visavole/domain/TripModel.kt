@@ -354,6 +354,34 @@ object TripModel {
     }
 
     /**
+     * Consecutive stops in one trip that overlap — the next stop's arrival is strictly before the
+     * previous stop's departure, so the traveller would be in two places at once. Mirrors the
+     * trip-level [overlapWarningsFor] for stops *within* a single trip (which that function does not
+     * cover). A back-to-back handover (next arrival == previous departure) is fine, not an overlap.
+     */
+    fun stopOverlapWarningsFor(trip: Trip): List<TripWarning> {
+        val ordered = sortedStops(trip.stops)
+        val out = mutableListOf<TripWarning>()
+        for (i in 0 until ordered.lastIndex) {
+            val departure = ordered[i].departure ?: continue
+            val nextArrival = ordered[i + 1].arrival
+            if (nextArrival.isBefore(departure)) {
+                val overlapDays = ChronoUnit.DAYS.between(nextArrival, departure).toInt()
+                out.add(
+                    TripWarning(
+                        "trip.stopOverlap",
+                        WarningSeverity.WARNING,
+                        "Overlapping stops",
+                        "Stop ${i + 2} starts ${daysLabel(overlapDays.coerceAtLeast(1))} before stop ${i + 1} ends — " +
+                            "you can only be in one place at a time. Move stop ${i + 2} later, or end stop ${i + 1} earlier.",
+                    ),
+                )
+            }
+        }
+        return out
+    }
+
+    /**
      * Split [stops] at the gap before sorted position [index] (see [firstGapIndex]): the left half
      * keeps the stops before the gap, clamping a missing departure to [closeDate] so the trip stays
      * valid on its own; the right half is the remaining stops. Both halves are sorted by arrival.

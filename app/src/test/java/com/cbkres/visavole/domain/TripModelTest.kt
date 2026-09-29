@@ -445,6 +445,40 @@ class TripModelTest {
     }
 
     @Test
+    fun stopOverlapWarnsWhenNextArrivalIsBeforePreviousDeparture() {
+        val t = trip(
+            "t",
+            stop("s1", "DE", today, today.plusDays(5)),
+            stop("s2", "FR", today.plusDays(2), today.plusDays(8)),
+        )
+        val warnings = TripModel.stopOverlapWarningsFor(t)
+        assertEquals(1, warnings.size)
+        assertEquals("trip.stopOverlap", warnings.first().code)
+        assertEquals(WarningSeverity.WARNING, warnings.first().severity)
+        assertTrue(warnings.first().message.contains("Stop 2"))
+    }
+
+    @Test
+    fun stopOverlapIsQuietForBackToBackStops() {
+        val t = trip(
+            "t",
+            stop("s1", "DE", today, today.plusDays(5)),
+            stop("s2", "FR", today.plusDays(5), null),
+        )
+        assertTrue(TripModel.stopOverlapWarningsFor(t).isEmpty())
+    }
+
+    @Test
+    fun stopOverlapSkipsAnOpenPreviousStop() {
+        val t = trip(
+            "t",
+            stop("s1", "DE", today, null),
+            stop("s2", "FR", today.plusDays(2), null),
+        )
+        assertTrue(TripModel.stopOverlapWarningsFor(t).isEmpty())
+    }
+
+    @Test
     fun shortStaySuppressionAppliesOnlyToFreedomAndResidence() {
         assertTrue(TripModel.isShortStaySuppressed(Access(AccessLevel.FREEDOM, null, "freedom")))
         assertTrue(TripModel.isShortStaySuppressed(Access(AccessLevel.RESIDENCE, null, "residence")))
