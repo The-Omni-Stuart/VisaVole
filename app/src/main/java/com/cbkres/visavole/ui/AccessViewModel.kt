@@ -105,9 +105,23 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     private var trips: MutableList<Trip> = mutableListOf()
     private var primaryDocId: String? = null
     private var reloadGeneration = 0
+    // P3-48: persisted state is read off the main thread, once, before the first world load.
+    @Volatile private var stateRead = false
+    // P3-48: ordered queue of encoded state strings. Declared before init so the writer launched
+    // below can reference it (Kotlin runs property initializers + init blocks in source order, and
+    // viewModelScope's Main.immediate runs the launch synchronously during construction). Drained
+    // in FIFO order on the IO dispatcher so rapid mutations hit disk in the order they happened
+    // (each write is the full state, so the last one wins) and the UI thread never does disk I/O.
+    private val persistQueue = Channel<String>(Channel.UNLIMITED)
 
     init {
-        readPersisted()
+        // P3-48: ordered persistence writer — drains persistQueue in FIFO order on the IO dispatcher,
+        // so the UI thread never does the disk write (and rapid mutations apply in order).
+        viewModelScope.launch {
+            for (text in persistQueue) {
+                withContext(Dispatchers.IO) { writeFile(text) }
+            }
+        }
         launchLoad()
     }
 
@@ -118,8 +132,15 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     private fun launchLoad() {
         viewModelScope.launch {
             try {
-                val initialHomes = AccessModel.homeCountries(docs)
                 withContext(Dispatchers.IO) {
+                    // P3-48: read the persisted state off the main thread, once, before deriving the
+                    // home countries from the loaded docs. retryLoad skips it — by then the in-memory
+                    // state (and the async writes it triggered) is already authoritative.
+                    if (!stateRead) {
+                        readPersisted()
+                        stateRead = true
+                    }
+                    val initialHomes = AccessModel.homeCountries(docs)
                     world = repository.loadWorld(initialHomes)
                     // P3-40: pre-build the map shapes + per-country focus here (IO thread) rather than
                     // on the main thread at first composition — the one-time ~121k-point Path
@@ -426,6 +447,19 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
             Log.e(TAG, "Refusing to persist: unreadable state file $file still present (overwriting it would lose the user's data)")
             return
         }
+        // P3-48: encode on the main thread (cheap, KBs) and hand the text to the ordered IO writer,
+        // so the disk write no longer runs on the UI thread on the exact frame of the tap.
+        val text = runCatching {
+            StateCodec.encode(PersistedState(primaryDocId, docs.toList(), trips.toList()))
+        }.getOrElse { e ->
+            Log.e(TAG, "Could not encode state for $file", e)
+            return
+        }
+        persistQueue.trySend(text)
+    }
+
+    /** Ordered IO writer (P3-48): tmp-write + atomic rename for one encoded state. */
+    private fun writeFile(text: String) {
         // P3-56: flag the A/B fixture race — the file changed on disk since we last wrote it, so we
         // are about to overwrite a change made by something else (e.g. an adb push of a state file).
         val currentMtime = file.lastModified()
@@ -435,7 +469,6 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         try {
             // Write to a sibling temp file and rename over the target: the rename is atomic, so a
             // process death mid-write leaves the previous file intact instead of truncated JSON.
-            val text = StateCodec.encode(PersistedState(primaryDocId, docs.toList(), trips.toList()))
             val tmp = File(file.parentFile, "${file.name}.tmp")
             tmp.writeText(text)
             if (!tmp.renameTo(file)) {
