@@ -105,7 +105,8 @@ fun CountryDetailCard(
                 )
                 Spacer(Modifier.height(8.dp))
                 val breakdownScroll = rememberScrollState()
-                val maxVisibleBreakdownRows = 4
+                // P3: show up to 5 one-line rows before the breakdown becomes scrollable (was 4).
+                val maxVisibleBreakdownRows = 5
                 val breakdownRowHeight = 32.dp
                 val breakdownSpacing = 8.dp
                 val breakdownMaxHeight = breakdownRowHeight * maxVisibleBreakdownRows +
