@@ -126,6 +126,34 @@ object GuardEngine {
         )
     }
 
+    /**
+     * P2-4: invariants the UI always maintains but a restored or foreign backup might not. The
+     * guard supersedes on add, so a UI-created state never has two valid visa/residence documents
+     * for the same country; a non-empty result means the backup was hand-edited or came from an
+     * incompatible version. Returns one line per violating pair (passports are exempt — they are
+     * not subject to the one-document-per-country rule).
+     */
+    fun restoreViolations(ctx: GuardContext): List<String> {
+        val docs = ctx.docs
+        val out = mutableListOf<String>()
+        for (i in docs.indices) {
+            val a = docs[i]
+            val aCat = a.docCategory(ctx.world) ?: continue
+            if (!heldAndValid(a, ctx)) continue
+            for (j in i + 1 until docs.size) {
+                val b = docs[j]
+                if (b.docCategory(ctx.world) != aCat) continue
+                if (!heldAndValid(b, ctx)) continue
+                val overlap = a.coveredCountries(ctx.world).intersect(b.coveredCountries(ctx.world))
+                if (overlap.isNotEmpty()) {
+                    val names = overlap.map(ctx::countryName).sorted()
+                    out.add("multiple valid $aCat documents cover ${names.joinToString(", ")}")
+                }
+            }
+        }
+        return out
+    }
+
     // ------------------------------------------------------------------
     // Document rules
     // ------------------------------------------------------------------

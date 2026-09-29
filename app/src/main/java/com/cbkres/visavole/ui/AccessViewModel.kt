@@ -421,6 +421,22 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Replace the live state with [state] (after the user confirms), then re-persist and republish. */
     fun applyRestore(state: PersistedState) {
+        // P2-4: a restore bypasses the guard's supersession-on-add, so a hand-edited or foreign
+        // backup could carry a state the UI can never create (two valid documents for one country).
+        // Validate before swapping it in; on violation keep the current state so a bad backup can't
+        // clobber the user's data.
+        val cur = guardCtx()
+        val violations = if (cur != null) {
+            GuardEngine.restoreViolations(
+                GuardContext.of(state.docs, state.trips, cur.world, state.primaryDocId, cur.today),
+            )
+        } else {
+            emptyList()
+        }
+        if (violations.isNotEmpty()) {
+            snack("Backup not restored — it holds ${violations.first()}.")
+            return
+        }
         docs = state.docs.toMutableList()
         trips = state.trips.toMutableList()
         primaryDocId = state.primaryDocId

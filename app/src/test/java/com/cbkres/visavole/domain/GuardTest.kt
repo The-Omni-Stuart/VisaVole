@@ -1241,4 +1241,35 @@ class GuardTest {
         val r = add(candidate, existing = listOf(old))
         assertTrue(r.mutations.any { it is GuardMutation.SupersedeDocument && it.oldId == "old" })
     }
+
+    // ------------------------------------------------------------------
+    // P2-4: restore invariants (states the UI can never create)
+    // ------------------------------------------------------------------
+
+    @Test fun restoreFlagsTwoValidVisasForOneCountry() {
+        val a = visa("a", setOf("FR"), expiry = "2028-01-01")
+        val b = visa("b", setOf("FR"), expiry = "2029-01-01")
+        val violations = GuardEngine.restoreViolations(ctx(docs = listOf(a, b)))
+        assertEquals(1, violations.size)
+        assertTrue("got=${violations.first()}", violations.first().contains("France"))
+    }
+
+    @Test fun restoreIsQuietWhenTheOlderIsSuperseded() {
+        val a = visa("a", setOf("FR"), expiry = "2028-01-01")
+        val b = visa("b", setOf("FR"), expiry = "2029-01-01").copy(supersededBy = "a")
+        assertTrue(GuardEngine.restoreViolations(ctx(docs = listOf(a, b))).isEmpty())
+    }
+
+    @Test fun restoreIsQuietForDifferentCountries() {
+        val a = visa("a", setOf("FR"), expiry = "2028-01-01")
+        val b = visa("b", setOf("DE"), expiry = "2029-01-01")
+        assertTrue(GuardEngine.restoreViolations(ctx(docs = listOf(a, b))).isEmpty())
+    }
+
+    @Test fun restoreIsQuietForTwoPassports() {
+        // Passports are exempt from the one-document-per-country rule.
+        val p1 = passport("p1", "FR", expiry = "2028-01-01")
+        val p2 = passport("p2", "FR", expiry = "2029-01-01")
+        assertTrue(GuardEngine.restoreViolations(ctx(docs = listOf(p1, p2))).isEmpty())
+    }
 }
