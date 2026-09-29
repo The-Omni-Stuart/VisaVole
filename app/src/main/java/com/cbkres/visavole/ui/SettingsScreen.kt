@@ -69,6 +69,10 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     var pendingRestore by remember { mutableStateOf<PersistedState?>(null) }
+    // P3: same edge-fade scroll cue as the Documents/Trips lists. Kept scrollable (not dropped)
+    // so a short screen still scrolls; now that the nav bar is hidden while Settings is open the
+    // content fits on tall screens, so the haze stays 0 there and only appears if it overflows.
+    val settingsScroll = rememberScrollState()
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json"),
@@ -78,15 +82,21 @@ fun SettingsScreen(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> if (uri != null) vm.prepareRestore(uri) { pendingRestore = it } }
 
-    Column(
+    HazeBox(
+        settingsScroll,
+        MaterialTheme.colorScheme.background,
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp)
-            .padding(top = 8.dp, bottom = 48.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
+            .background(MaterialTheme.colorScheme.background),
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(settingsScroll)
+                .padding(horizontal = 24.dp)
+                .padding(top = 8.dp, bottom = 48.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
             AppIcon()
             Spacer(Modifier.height(20.dp))
             Text("Visa Vole", style = MaterialTheme.typography.titleLarge)
@@ -157,6 +167,7 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
     }
 
     val pending = pendingRestore
