@@ -174,9 +174,10 @@ fun TripsScreen(
                                         tripsListState.animateItemToCenter(target, listViewportPx)
                                         val n = (flashTrip?.takeIf { it.first == trip.id }?.second ?: 0) + 1
                                         flashTrip = trip.id to n
-                                        // Clear the trigger once the ripple has had time to play (150 ms
-                                        // delay + 600 ms animation): a card re-entering the composition
-                                        // with the trigger still set would replay the flash.
+                                        // Clear the trigger once the ripple has had time to play (~600 ms:
+                                        // a 300 ms held press then a 300 ms release fade): a card
+                                        // re-entering the composition with the trigger still set would
+                                        // replay the flash.
                                         delay(900)
                                         if (flashTrip == (trip.id to n)) flashTrip = null
                                     }

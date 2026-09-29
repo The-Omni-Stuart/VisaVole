@@ -1,12 +1,14 @@
 package com.cbkres.visavole.ui
 
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
@@ -56,9 +58,11 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -234,47 +238,16 @@ fun CountryRow(
 }
 
 /**
- * A one-shot ripple in the card-tap ripple's look, fired programmatically: whenever [trigger]
- * changes to a new non-zero value, a circle expands from the centre while fading out. Clipped to
- * [shape] so it never spills past the card's rounded corners; [startDelay] lets a list scroll
- * settle first so the flash lands on the arriving card. The caller must give this node a size —
- * inside a Box use [androidx.compose.foundation.layout.BoxScope.matchParentSize], because in a
- * lazy-list item a bare [Modifier.fillMaxSize] resolves to zero height.
- */
-@Composable
-internal fun RippleFlash(trigger: Int, shape: Shape, startDelay: Int = 0, modifier: Modifier = Modifier) {
-    val progress = remember { Animatable(0f) }
-    LaunchedEffect(trigger) {
-        if (trigger == 0) return@LaunchedEffect
-        if (startDelay > 0) delay(startDelay.toLong())
-        progress.snapTo(0f)
-        progress.animateTo(1f, animationSpec = tween(600, easing = FastOutSlowInEasing))
-    }
-    val alpha = (1f - progress.value) * 0.2f
-    // While idle the progress sits at 0 and the circle would be a full-alpha zero-radius dot —
-    // skip the draw pass entirely until an animation has actually started.
-    if (progress.value > 0f && alpha > 0.004f) {
-        // The theme read is composable, so it happens outside the Canvas draw lambda.
-        val flashColor = MaterialTheme.colorScheme.onSurface
-        // 0.75 of the longer side beats half the diagonal for any aspect ratio, so at full
-        // progress the circle always covers the whole card.
-        Box(modifier.fillMaxSize().clip(shape)) {
-            Canvas(Modifier.fillMaxSize()) {
-                drawCircle(
-                    color = flashColor.copy(alpha = alpha),
-                    radius = maxOf(size.width, size.height) * 0.75f * progress.value,
-                )
-            }
-        }
-    }
-}
-
-/**
  * The shared list-card frame, derived from the trip card: an [ElevatedCard] with 16.dp padding,
  * a weighted content column (rows spaced by 8.dp) and a trailing vertical column of icon actions.
  * Screens supply their own content rows and action icons; the padding/spacing/shape live here.
- * [flashTrigger] plays a one-shot [RippleFlash] over the card whenever it changes to a new
- * non-zero value — the "look here" flash for a card the list just scrolled to.
+ *
+ * [flashTrigger] replays the SAME ripple the card body shows on a real tap whenever it changes to
+ * a new non-zero value — the "look here" flash for a card the list just scrolled to. It drives the
+ * theme's [LocalIndication] (the exact bounded ripple the body's [clickable] uses) from a dedicated
+ * [flashSource] by emitting a press at the card's centre, so the ring-tap flash and the card-tap
+ * ripple look identical. There is no extra start delay: the trigger already fires only once the
+ * centring scroll has settled, so the ripple begins with (near-)zero latency on the trigger.
  */
 @Composable
 fun VisaListCard(
@@ -287,10 +260,22 @@ fun VisaListCard(
 ) {
     // Clip the press ripple to the card's rounded shape so a tap doesn't flash a square.
     val shape = CardDefaults.elevatedShape
+    // Dedicated source so the programmatic flash doesn't fight the body tap's own interaction.
+    val flashSource = remember { MutableInteractionSource() }
+    var flashCenter by remember { mutableStateOf(Offset.Zero) }
+    LaunchedEffect(flashTrigger) {
+        if (flashTrigger == 0) return@LaunchedEffect
+        val press = PressInteraction.Press(flashCenter)
+        flashSource.emit(press)
+        delay(300)
+        flashSource.emit(PressInteraction.Release(press))
+    }
     val cardModifier = Modifier
         .fillMaxWidth()
+        .onSizeChanged { flashCenter = Offset(it.width / 2f, it.height / 2f) }
         .clip(shape)
         .then(onClick?.let { Modifier.clickable(onClick = it) } ?: Modifier)
+        .indication(flashSource, LocalIndication.current)
     ElevatedCard(shape = shape, modifier = cardModifier) {
         Box {
             // Top-aligned: the action buttons stack is often taller than the text, and centring
@@ -307,11 +292,6 @@ fun VisaListCard(
                     actions()
                 }
             }
-            // Starts 150 ms after the screen has fired the trigger — which it does only once the
-            // ring-tap centring scroll has settled, so the ripple plays on the landed card.
-            // matchParentSize, not fillMaxSize: inside a LazyColumn item the height constraint is
-            // unbounded, so a fillMaxSize overlay would collapse to zero height and never draw.
-            RippleFlash(flashTrigger, shape, startDelay = 150, modifier = Modifier.matchParentSize())
         }
     }
 }
