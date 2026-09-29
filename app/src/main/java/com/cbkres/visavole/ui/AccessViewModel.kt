@@ -280,8 +280,10 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Onboarding's "add your first passport": the same guarded add path as the documents tab.
      *  Returns the blocking findings when the guard rejects the add (empty on success). */
-    fun addOnboardingPassport(iso2: String, expiry: String? = null): List<GuardFinding> =
-        addDocument(passportDocument(iso2, world?.countries?.get(iso2)?.name, expiry))
+    // P3-55: takes validFrom as well as expiry so onboarding can record a full (or no) validity
+    // period, symmetric with the add-doc dialog.
+    fun addOnboardingPassport(iso2: String, validFrom: String? = null, expiry: String? = null): List<GuardFinding> =
+        addDocument(passportDocument(iso2, world?.countries?.get(iso2)?.name, expiry, validFrom))
 
     /** Adds or updates [doc] through the guard backstop. Returns the blocking findings when the
      *  guard rejects the mutation (empty on success), so callers can surface why nothing happened.

@@ -142,7 +142,7 @@ fun VisaVoleApp() {
         is AppState.Failed -> ErrorScreen(s.message) { vm.retryLoad() }
         is AppState.Ready -> {
             if (s.homeCountries.isEmpty()) {
-                OnboardingScreen(countries = s.world.countries, today = s.today, onAddPassport = { iso, expiry -> vm.addOnboardingPassport(iso, expiry) })
+                OnboardingScreen(countries = s.world.countries, today = s.today, onAddPassport = { iso, vfrom, expiry -> vm.addOnboardingPassport(iso, vfrom, expiry) })
             } else {
                 MainScaffold(vm, s)
             }

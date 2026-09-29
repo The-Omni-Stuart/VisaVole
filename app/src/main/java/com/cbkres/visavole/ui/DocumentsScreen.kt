@@ -631,6 +631,11 @@ fun AddDocumentDialog(
     var residenceClass by remember { mutableStateOf(initial?.residenceClass ?: ResidenceClass.TEMPORARY) } // residence only
     var expiryDate by remember { mutableStateOf(initial?.expiry?.toUtcMillis()) }
     var validFromDate by remember { mutableStateOf(initial?.validFrom?.toUtcMillis()) }
+    // P3-55: a validity period is both-or-neither. When a save is attempted with exactly one date
+    // set, show a fix dialog and re-open the requested picker in the field.
+    var showValidityPairDialog by remember { mutableStateOf(false) }
+    var validityReopenToken by remember { mutableStateOf(0) }
+    var validityReopenPicker by remember { mutableStateOf(1) } // 1=valid-from, 2=expiry
     // Guard-driven dialog state: [blocked] is the blocking finding shown to the user,
     // [blockedDuplicate] the existing document an "Edit existing" button can jump to,
     // [pendingMutationDoc]/[pendingMutationWarn] the pending action + its accompanying mutation
@@ -883,6 +888,8 @@ fun AddDocumentDialog(
                     validFromDate = validFromDate,
                     expiryDate = expiryDate,
                     todayMillis = todayMillis,
+                    reopenToken = validityReopenToken,
+                    reopenPicker = validityReopenPicker,
                     onValidFrom = { validFromDate = it },
                     onExpiry = { expiryDate = it },
                 )
@@ -890,13 +897,42 @@ fun AddDocumentDialog(
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                     OutlinedButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(Modifier.width(12.dp))
-                    Button(onClick = { saveDoc(build(), false) }, enabled = valid) {
+                    Button(onClick = {
+                        if ((validFromDate == null) xor (expiryDate == null)) {
+                            // P3-55: exactly one date set — can't save a half validity period.
+                            validityReopenPicker = if (validFromDate == null) 1 else 2
+                            showValidityPairDialog = true
+                        } else {
+                            saveDoc(build(), false)
+                        }
+                    }, enabled = valid) {
                         Text(if (initial == null) "Add" else "Save")
                     }
                 }
             }
             }
         }
+
+    if (showValidityPairDialog) {
+        AlertDialog(
+            onDismissRequest = { showValidityPairDialog = false },
+            title = { Text("Validity period") },
+            text = { Text("A validity period needs both a start and an end date. Set the missing one, or clear both.") },
+            confirmButton = {
+                Button(onClick = {
+                    validityReopenToken++
+                    showValidityPairDialog = false
+                }) { Text("Set both dates") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    validFromDate = null
+                    expiryDate = null
+                    showValidityPairDialog = false
+                }) { Text("Clear both") }
+            },
+        )
+    }
 
     multiCountryDoc?.let { doc ->
         MultiCountryConfirmDialog(
@@ -944,6 +980,8 @@ private fun ValidityPeriodField(
     validFromDate: Long?,
     expiryDate: Long?,
     todayMillis: Long,
+    reopenToken: Int = 0,
+    reopenPicker: Int = 1,
     onValidFrom: (Long?) -> Unit,
     onExpiry: (Long?) -> Unit,
 ) {
@@ -954,6 +992,14 @@ private fun ValidityPeriodField(
     }
     var showValidFromPicker by remember { mutableStateOf(false) }
     var showValidToPicker by remember { mutableStateOf(false) }
+    // P3-55: when the parent bumps [reopenToken], open the requested picker so a half-set validity
+    // can be completed without hunting for the field again.
+    LaunchedEffect(reopenToken) {
+        if (reopenToken != 0) {
+            showValidFromPicker = reopenPicker == 1
+            showValidToPicker = reopenPicker != 1
+        }
+    }
     // Bound the pickers to a coherent validity period: the start may not come after the end,
     // and a document being (re)dated may not already be expired.
     val today = todayMillis.toUtcIsoDate().let(LocalDate::parse)
