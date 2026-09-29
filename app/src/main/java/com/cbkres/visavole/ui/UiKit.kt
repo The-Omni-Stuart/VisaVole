@@ -197,7 +197,7 @@ fun ScreenHeader(title: String, subtitle: String, modifier: Modifier = Modifier)
  *  trailing lambda: `AddButtonRow("Add trip") { showAdd = true }`. */
 @Composable
 fun AddButtonRow(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Row(modifier.fillMaxWidth()) {
+    Row(modifier.fillMaxWidth().padding(bottom = 12.dp)) {
         Spacer(Modifier.weight(1f))
         Button(onClick = onClick) {
             Icon(Icons.Filled.Add, contentDescription = null)

@@ -134,7 +134,6 @@ fun TripsScreen(
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         ScreenHeader("Trips", "Record your trips and track visa allowance balances.")
         AddButtonRow("Add trip") { showAdd = true }
-        Spacer(Modifier.height(12.dp))
         val sections = ready.tripSections
         // Every trip card's position in the LazyColumn below, keyed by trip id: the allowances item
         // sits at 0, then each non-empty section adds a header before its cards. A ring tap centres

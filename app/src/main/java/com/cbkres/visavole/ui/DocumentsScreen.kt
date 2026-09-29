@@ -175,7 +175,6 @@ fun DocumentsScreen(
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         ScreenHeader("Documents", "Add the passport and papers you hold — the map updates to match.")
         AddButtonRow("Add document") { showAdd = true }
-        Spacer(Modifier.height(8.dp))
         if (ready.docs.isEmpty()) {
             EmptyState("No documents yet. Start with a passport or a residence permit.")
         } else {
