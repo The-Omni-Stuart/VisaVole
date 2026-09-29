@@ -113,7 +113,7 @@ private fun docValidityText(doc: Document): String? = when {
  * the title), then the mobility bloc, then the entry type (tinted) or the residence class. Null
  * when the document carries no structural detail (a plain passport).
  */
-private fun docDetailsAnnotated(doc: Document, world: WorldData, base: Color): AnnotatedString? {
+private fun docDetailsAnnotated(doc: Document, world: WorldData, base: Color, isDark: Boolean): AnnotatedString? {
     val k = doc.kind
     val regime = (k as? DocKind.Custom)?.blocId?.let { id -> world.regimes.firstOrNull { r -> r.id == id }?.name }
     val holdingName = when (k) {
@@ -137,7 +137,7 @@ private fun docDetailsAnnotated(doc: Document, world: WorldData, base: Color): A
             "double" -> "double" to Severity.WARN
             else -> "multiple" to Severity.OK
         }
-        part("${label} entry", severityColor(severity))
+        part("${label} entry", severityColor(severity, isDark))
     } ?: run {
         part(doc.residenceClassFor(world)?.label)
     }
@@ -264,7 +264,7 @@ fun DocumentsScreen(
                                 val doc = ready.docs.firstOrNull { d -> d.id == a.key.removePrefix("doc:") }
                                 if (doc != null) {
                                     // The same badge the card wears: type pill + country name.
-                                    val (label, tone) = docTypeBadge(doc, ready.world)
+                                    val (label, tone) = docTypeBadge(doc, ready.world, LocalEffectiveDarkTheme.current)
                                     StatusPill(label, tone)
                                     Text(
                                         docTitle(doc, ready.world),
@@ -435,7 +435,7 @@ private fun ExpiryStatusPill(
     }
     // Long pills (e.g. "Replaced by <label>") must wrap instead of squeezing the card's weighted
     // text column; the cap keeps the title column readable for the longest labels.
-    StatusPill(text, severityColor(severity), bold = bold, maxWidth = 120.dp)
+    StatusPill(text, severityColor(severity, LocalEffectiveDarkTheme.current), bold = bold, maxWidth = 120.dp)
 }
 
 @Composable
@@ -456,7 +456,7 @@ private fun DocCard(
 ) {
     val isPassport = doc.kind is DocKind.Passport
     val surface = MaterialTheme.colorScheme.onSurface
-    val (typeLabel, typeTone) = docTypeBadge(doc, world)
+    val (typeLabel, typeTone) = docTypeBadge(doc, world, LocalEffectiveDarkTheme.current)
     VisaListCard(
         flashTrigger = flashTrigger,
         actions = {
@@ -513,7 +513,7 @@ private fun DocCard(
         // Top-aligned so the pill sits on the first line when the details text wraps.
         if (status != null) {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                val details = docDetailsAnnotated(doc, world, MaterialTheme.colorScheme.onSurfaceVariant)
+                val details = docDetailsAnnotated(doc, world, MaterialTheme.colorScheme.onSurfaceVariant, LocalEffectiveDarkTheme.current)
                 if (details != null) {
                     Text(
                         details,
@@ -1083,11 +1083,12 @@ private fun MultiCountryConfirmDialog(
             TextButton(onClick = onDismiss) { Text("Back") }
         },
         text = {
+            val warn = severityColor(Severity.WARN, LocalEffectiveDarkTheme.current)
             Text(
                 buildAnnotatedString {
                     append("You have multiple countries selected for this visa: ")
                     names.forEachIndexed { index, iso ->
-                        withStyle(SpanStyle(color = severityColor(Severity.WARN), fontWeight = FontWeight.SemiBold)) {
+                        withStyle(SpanStyle(color = warn, fontWeight = FontWeight.SemiBold)) {
                             append(countries[iso]?.name ?: iso)
                         }
                         if (index != names.lastIndex) append(", ")

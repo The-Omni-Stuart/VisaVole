@@ -357,7 +357,7 @@ private fun TripCard(
             },
         )
     }
-    val allowanceHintColor = row.relatedAllowance?.let { ringColor(it) } ?: MaterialTheme.colorScheme.onSurfaceVariant
+    val allowanceHintColor = row.relatedAllowance?.let { ringColor(it, LocalEffectiveDarkTheme.current) } ?: MaterialTheme.colorScheme.onSurfaceVariant
     VisaListCard(
         onClick = onExpand,
         flashTrigger = flashTrigger,
@@ -1114,6 +1114,7 @@ private fun SaveWarningsDialog(
                         style = MaterialTheme.typography.bodySmall,
                         color = severityColor(
                             if (f.severity == GuardSeverity.BLOCK || f.code in SAVABLE_DANGER_CODES) Severity.BAD else Severity.WARN,
+                            LocalEffectiveDarkTheme.current,
                         ),
                         modifier = Modifier.padding(vertical = 3.dp),
                     )

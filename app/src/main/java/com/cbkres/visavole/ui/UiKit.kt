@@ -107,13 +107,13 @@ internal fun String.toUtcMillis(): Long? = runCatching { LocalDate.parse(this).t
  * uses for what that document unlocks — the home-country blue, the covered-visa magenta, or the
  * residence teal.
  */
-internal fun docTypeBadge(doc: Document, world: WorldData): Pair<String, Color> =
+internal fun docTypeBadge(doc: Document, world: WorldData, isDark: Boolean): Pair<String, Color> =
     when (doc.kind) {
-        is DocKind.Passport -> "Passport" to HOME
+        is DocKind.Passport -> "Passport" to (if (isDark) HOME_DARK else HOME)
         else -> if (doc.docCategory(world) == "residence") {
-            "Residence" to statusTone(AccessLevel.RESIDENCE)
+            "Residence" to statusTone(AccessLevel.RESIDENCE, isDark)
         } else {
-            "Visa" to statusTone(AccessLevel.COVERED)
+            "Visa" to statusTone(AccessLevel.COVERED, isDark)
         }
     }
 
@@ -411,7 +411,7 @@ internal fun allowanceFraction(a: AllowanceSnapshot): Float = when {
  * terminal states red, "watch it" states amber, healthy green. Zone allowances (no document
  * behind them) keep the remaining-fraction gradient instead of a document state.
  */
-internal fun ringColor(a: AllowanceSnapshot): Color {
+internal fun ringColor(a: AllowanceSnapshot, isDark: Boolean): Color {
     if (a.status == AllowanceStatus.UNKNOWN) return NO_DATA // neutral slate — allowance unknown (one NO-DATA entry, see MapColors)
     val severity = when {
         a.overstayDays > 0 || a.status == AllowanceStatus.DANGER || a.status == AllowanceStatus.EXHAUSTED -> Severity.BAD
@@ -431,7 +431,7 @@ internal fun ringColor(a: AllowanceSnapshot): Color {
             }
         }
     }
-    return severityColor(severity)
+    return severityColor(severity, isDark)
 }
 
 /** "no entries left" / "1 entry remaining" / "n entries remaining" — the ring's in-use sub-line. */
@@ -482,7 +482,7 @@ private const val RING_ROTATE_MAX_DAYS = 90
  */
 @Composable
 fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = Modifier) {
-    val color = ringColor(a)
+    val color = ringColor(a, LocalEffectiveDarkTheme.current)
     val fraction = allowanceFraction(a)
     val rotatable = a.kind == AllowanceKind.ENTRY_COUNT &&
         a.status != AllowanceStatus.DANGER &&
@@ -629,7 +629,7 @@ internal fun AllowanceSection(
                     }
                 }
                 it.subtitle?.let { s -> Text(s, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                Text(allowanceSummary(it), style = MaterialTheme.typography.labelMedium, color = ringColor(it))
+                Text(allowanceSummary(it), style = MaterialTheme.typography.labelMedium, color = ringColor(it, LocalEffectiveDarkTheme.current))
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -659,7 +659,7 @@ internal fun AllowanceCard(a: AllowanceSnapshot, focused: Boolean, onClick: () -
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(a.title, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(allowanceSummary(a), style = MaterialTheme.typography.labelSmall, color = ringColor(a))
+            Text(allowanceSummary(a), style = MaterialTheme.typography.labelSmall, color = ringColor(a, LocalEffectiveDarkTheme.current))
         }
     }
 }
