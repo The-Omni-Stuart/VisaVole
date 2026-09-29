@@ -458,9 +458,15 @@ object TripModel {
             else -> minOf(rawRemaining, ChronoUnit.DAYS.between(asOf, cap).toInt())
         }
         val remaining = capped?.coerceAtLeast(0)
+        // P3: an illegal stay comes from the window (used > windowDays) or the document cap
+        // landing in the past; capped = min(rawRemaining, daysToCap) subsumes both, so the
+        // overstayed count is -capped's magnitude (which equals the window overstay when the
+        // window is the binding constraint). Every "N days over" surface — ring centre, summary
+        // line, switcher card, trip chip — already shows this via the overstayDays branch, so a
+        // cap-driven DANGER no longer falls through to "0 days left".
+        val overstayDays = maxOf(overstay, (capped?.let { -it } ?: 0).coerceAtLeast(0))
         val status = when {
-            overstay > 0 -> AllowanceStatus.DANGER
-            capped != null && capped < 0 -> AllowanceStatus.DANGER
+            overstayDays > 0 -> AllowanceStatus.DANGER
             remaining != null && remaining <= WARNING_THRESHOLD_DAYS -> AllowanceStatus.WARNING
             rule.windowDays == null -> AllowanceStatus.UNKNOWN
             else -> AllowanceStatus.OK
@@ -483,7 +489,7 @@ object TripModel {
             remainingDays = remaining,
             totalDays = windowDays,
             windowPeriodDays = rule.windowPeriodDays,
-            overstayDays = overstay,
+            overstayDays = overstayDays,
             currentTripId = usage.activeTripIds.maxByOrNull { usage.activeTripDays[it] ?: 0 },
             relevantTripIds = usage.tripIds.toList(),
         )

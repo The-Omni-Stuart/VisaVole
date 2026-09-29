@@ -216,6 +216,9 @@ class TripModelTest {
         assertEquals(AllowanceStatus.DANGER, a.status)
         assertEquals(0, a.remainingDays)
         assertEquals(90, a.usedDays)
+        // P3: a cap-driven DANGER (doc lapsed while the stay is on) must report the overstayed
+        // count (-capped) too, so every "N days over" surface shows 3 instead of "0 days left".
+        assertEquals(3, a.overstayDays)
     }
 
     @Test
