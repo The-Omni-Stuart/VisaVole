@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
@@ -74,10 +75,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -327,6 +330,17 @@ private fun MapTab(
     modifier: Modifier = Modifier,
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
+    // P3-59: the search field must blur when the map is tapped or Back is pressed, otherwise it
+    // keeps its focus/selection forever. This Compose build only exposes clearFocus on the
+    // FocusManager (there is no public Modifier.clearFocus / FocusRequester), so grab the manager
+    // from LocalFocusManager and clear directly. searchFocused (via onFocusChanged) gates the Back
+    // handler + the map-tap blur so we only clear while the field actually holds focus.
+    val focusManager = LocalFocusManager.current
+    var searchFocused by remember { mutableStateOf(false) }
+    BackHandler(enabled = searchFocused) {
+        keyboardController?.hide()
+        focusManager.clearFocus()
+    }
     // The dropdown fades out over 120ms after the query is cleared; matches must keep the last
     // non-blank query during that exit, otherwise the content flips to "No matching countries"
     // mid-fade right after the user picks a country.
@@ -345,6 +359,7 @@ private fun MapTab(
     val pick: (String?) -> Unit = remember {
         { iso: String? ->
             keyboardController?.hide()
+            if (searchFocused) focusManager.clearFocus()
             onQuery("")
             onSelect(iso)
         }
@@ -390,6 +405,7 @@ private fun MapTab(
         SearchBar(
             query = query,
             onQuery = onQuery,
+            onFocusChanged = { searchFocused = it },
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
@@ -497,6 +513,7 @@ private fun MapTab(
 private fun SearchBar(
     query: String,
     onQuery: (String) -> Unit,
+    onFocusChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -521,6 +538,7 @@ private fun SearchBar(
         ),
         modifier = modifier
             .fillMaxWidth()
+            .onFocusChanged { onFocusChanged(it.isFocused) }
             .padding(horizontal = 12.dp)
             .padding(top = 8.dp, bottom = 4.dp),
     )
