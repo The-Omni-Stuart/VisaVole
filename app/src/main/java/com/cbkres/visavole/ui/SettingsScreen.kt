@@ -202,7 +202,11 @@ fun SettingsScreen(
                     "GPLv3",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { openUrl(context, LICENSE_URL) },
+                    // P2-23: the bare labelSmall word was a ~40×20dp target; pad it to a ≥48dp hit
+                    // area (padding before clickable so the padding counts toward the target).
+                    modifier = Modifier
+                        .padding(vertical = 16.dp, horizontal = 4.dp)
+                        .clickable { openUrl(context, LICENSE_URL) },
                 )
             }
             Spacer(Modifier.height(16.dp))

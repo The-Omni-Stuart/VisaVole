@@ -42,7 +42,10 @@ private val LEVEL_PALETTES: Map<AccessLevel, LevelPalette> = mapOf(
     AccessLevel.REFUSED to LevelPalette(Color(0xFFFB1604), Color(0xFFFB1604)),       // red — no entry
 )
 
-private val NO_DATA_PALETTE = LevelPalette(Color(0xFF334155), Color(0xFF334155))    // slate — no data
+// The single neutral slate for "no data / unknown" on status surfaces (allowance rings, no-data
+// country fills, and their label tones) — one value so the ring and the map can't drift apart.
+val NO_DATA = Color(0xFF64748B)
+private val NO_DATA_PALETTE = LevelPalette(NO_DATA, NO_DATA)                           // slate — no data
 
 private fun paletteFor(level: AccessLevel?): LevelPalette =
     level?.let { LEVEL_PALETTES[it] } ?: NO_DATA_PALETTE

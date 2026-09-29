@@ -340,9 +340,16 @@ internal fun WorldMapCanvas(
     }
 
     Box(modifier.clipToBounds()) {
+        // P2-19: the Canvas is the app's primary surface (all per-country colour) but had no
+        // semantics, so TalkBack skipped it entirely. Give it a description — and, when a country
+        // is selected, announce it.
+        val mapDescription = selected?.let { iso -> geometry.countries[iso]?.name }
+            ?.let { "World map. $it selected." }
+            ?: "World map, visa access by country."
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
+                .semantics { contentDescription = mapDescription }
                 .onSizeChanged { canvasSize = Size(it.width.toFloat(), it.height.toFloat()) }
                 .pointerInput(geometry) {
                     var flingJob: Job? = null

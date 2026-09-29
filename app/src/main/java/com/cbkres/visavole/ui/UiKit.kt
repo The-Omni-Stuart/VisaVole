@@ -65,6 +65,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -410,7 +412,7 @@ internal fun allowanceFraction(a: AllowanceSnapshot): Float = when {
  * behind them) keep the remaining-fraction gradient instead of a document state.
  */
 internal fun ringColor(a: AllowanceSnapshot): Color {
-    if (a.status == AllowanceStatus.UNKNOWN) return Color(0xFF64748B) // neutral slate — allowance unknown
+    if (a.status == AllowanceStatus.UNKNOWN) return NO_DATA // neutral slate — allowance unknown (one NO-DATA entry, see MapColors)
     val severity = when {
         a.overstayDays > 0 || a.status == AllowanceStatus.DANGER || a.status == AllowanceStatus.EXHAUSTED -> Severity.BAD
         a.kind == AllowanceKind.ENTRY_COUNT -> when {
@@ -518,6 +520,9 @@ fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = 
     }
     val (center, centerLabel) = when {
         overstay -> "-${a.overstayDays}" to "OVERSTAY!"
+        // A window-less (UNKNOWN) allowance has no remaining count — show "no data", not a bogus
+        // "0 days left" (P2-20).
+        a.status == AllowanceStatus.UNKNOWN -> "—" to "no data"
         docKind && a.status == AllowanceStatus.DANGER -> "Expired" to "on ${a.effectiveExpiry ?: "unknown"}"
         a.kind == AllowanceKind.ENTRY_COUNT && a.currentTripId != null -> "In use" to entriesRemainingPhrase(a.entryRemaining)
         a.kind == AllowanceKind.ENTRY_COUNT -> (a.entryRemaining ?: 0).toString() to "entries left"
@@ -526,11 +531,21 @@ fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = 
     }
     val daysCenter = a.remainingDays?.let { it.toString() to "days to expiry" }
     val showDaysFace = rotatable && daysFace
-    // Both faces are laid out into an identical fixed-height box, so the crossfade's own size never
-    // changes. A variable-size crossfade snaps a few pixels the instant the shorter face swaps in —
-    // the constant box keeps the centre text parked on the ring's centre line through the fade.
+    // The centre box is a *minimum* height, not a fixed one: at normal text sizes both faces sit in
+    // an identical 58dp box (so the crossfade's own size never changes and the text stays parked on
+    // the ring's centre line), but at large accessibility font scales the box grows to fit the
+    // scaled text instead of clipping it (P2-18).
     val faceHeight = 58.dp
-    Box(modifier.size(size), contentAlignment = Alignment.Center) {
+    // P2-22: the donut is a Canvas plus two Text nodes; merge them into a single accessible node
+    // so TalkBack announces the allowance's state in one stop instead of the number and label as
+    // separate, meaningless fragments.
+    val ringDescription = "Allowance: ${allowanceSummary(a)}"
+    Box(
+        modifier = modifier
+            .size(size)
+            .semantics(mergeDescendants = true) { contentDescription = ringDescription },
+        contentAlignment = Alignment.Center,
+    ) {
         Canvas(Modifier.fillMaxSize()) {
             val stroke = (size / 11f).toPx()
             drawCircle(color = color.copy(alpha = 0.15f), style = Stroke(stroke))
@@ -549,7 +564,7 @@ fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = 
         Crossfade(targetState = showDaysFace, animationSpec = tween(300)) { face ->
             val (c, l) = if (face) daysCenter ?: (center to centerLabel) else center to centerLabel
             val wordFace = c == "In use" || c == "Expired"
-            Box(Modifier.height(faceHeight), contentAlignment = Alignment.Center) {
+            Box(Modifier.heightIn(min = faceHeight), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         c,
