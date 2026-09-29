@@ -283,14 +283,13 @@ private fun AppIcon() {
 }
 
 private fun openUrl(context: Context, url: String) {
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-        // text/html keeps the link unambiguous: it opens straight in a browser instead of
-        // surfacing an app chooser. (No CustomTabs dependency — three infrequently-tapped links
-        // don't justify a warm-start browser lib for this app.)
-        type = "text/html"
-    }
-    runCatching { context.startActivity(intent) }.onFailure {
-        // P3-24: a device without a browser would otherwise be a silent no-op.
+    runCatching {
+        // A bare ACTION_VIEW with NO mime type is the correct way to open a web URL: the https
+        // scheme routes it to a browser. (P3-24 first added type="text/html", but on a real device
+        // that made the intent match text/html handlers — a notes app — instead of the browser.)
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    }.onFailure {
+        // A device without a browser would otherwise be a silent no-op.
         Toast.makeText(context, "Couldn't open this link — no browser available?", Toast.LENGTH_SHORT).show()
     }
 }
