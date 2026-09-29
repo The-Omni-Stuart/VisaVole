@@ -282,5 +282,14 @@ private fun AppIcon() {
 }
 
 private fun openUrl(context: Context, url: String) {
-    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+    runCatching {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                // text/html keeps the link unambiguous: it opens straight in a browser instead of
+                // surfacing an app chooser. (No CustomTabs dependency — three infrequent links
+                // don't justify a warm-start browser lib for this app.)
+                type = "text/html"
+            },
+        )
+    }
 }
