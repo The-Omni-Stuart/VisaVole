@@ -108,8 +108,6 @@ import com.cbkres.visavole.ui.HOME
 import com.cbkres.visavole.ui.colorFor
 import com.cbkres.visavole.ui.Focus
 import com.cbkres.visavole.ui.IsoShape
-import com.cbkres.visavole.ui.buildFocus
-import com.cbkres.visavole.ui.buildShapes
 import com.cbkres.visavole.ui.defaultCenter
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.MutableFloatState
@@ -219,8 +217,11 @@ private fun MainScaffold(vm: AccessViewModel, s: AppState.Ready) {
     LaunchedEffect(vm) {
         vm.snacks.collect { snackbarHostState.showSnackbar(it) }
     }
-    val mapShapes = remember(s.geometry) { buildShapes(s.geometry) }
-    val mapFocus = remember(s.geometry) { buildFocus(s.geometry) }
+    // P3-40: the map shapes + per-country focus are pre-built on the VM's IO thread at load time
+    // (see AccessViewModel.launchLoad) and shipped on AppState.Ready, so the one-time ~121k-point
+    // Path construction no longer runs on the main thread at first composition.
+    val mapShapes = s.shapes
+    val mapFocus = s.focus
     // P3-49: map framing (zoom + centre) survives process death — plain `remember` reset it to
     // the default view on every cold start.
     val mapZoom = rememberSaveable(saver = MapZoomSaver) { mutableFloatStateOf(1f) }

@@ -56,6 +56,10 @@ sealed interface AppState {
         val access: Map<String, Access>,
         val world: WorldData,
         val geometry: WorldMapData,
+        /** Pre-built on the IO thread at load time (P3-40) so the one-time ~121k-point `Path`
+         *  construction doesn't run on the main thread at first composition. */
+        val shapes: List<IsoShape> = emptyList(),
+        val focus: Map<String, Focus> = emptyMap(),
         val trips: List<Trip> = emptyList(),
         val tripSections: TripSections = TripSections(emptyList(), emptyList(), emptyList()),
         val allowances: List<AllowanceSnapshot> = emptyList(),
@@ -82,6 +86,9 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     private val backup = BackupManager(context)
     @Volatile private var world: WorldData? = null
     private val geometry: WorldMapData by lazy { WorldGeometry.load(context) }
+    // Built once on the IO thread at load time and shipped via AppState.Ready (P3-40).
+    @Volatile private var shapes: List<IsoShape>? = null
+    @Volatile private var focus: Map<String, Focus>? = null
 
     private val _state = MutableStateFlow<AppState>(AppState.Loading)
     val state: StateFlow<AppState> = _state.asStateFlow()
@@ -114,7 +121,11 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
                 val initialHomes = AccessModel.homeCountries(docs)
                 withContext(Dispatchers.IO) {
                     world = repository.loadWorld(initialHomes)
-                    geometry
+                    // P3-40: pre-build the map shapes + per-country focus here (IO thread) rather than
+                    // on the main thread at first composition — the one-time ~121k-point Path
+                    // construction would otherwise add to first-frame latency on top of the load.
+                    shapes = buildShapes(geometry)
+                    focus = buildFocus(geometry)
                 }
                 // ensurePrimaryPassport/normalizeResidenceClasses mutate docs + persist; they run
                 // here on the main thread, keeping every state mutation single-threaded.
@@ -193,6 +204,8 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
             access = access,
             world = w,
             geometry = geometry,
+            shapes = shapes.orEmpty(),
+            focus = focus.orEmpty(),
             trips = trips.toList(),
             tripSections = calc.sections,
             allowances = calc.allowances,

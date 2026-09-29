@@ -110,7 +110,9 @@ private const val ENABLE_VIEWPORT_CULLING = true
  */
 private val FOCUS_MARGIN_OVERRIDE: Map<String, Float> = mapOf("GB" to 0.03f)
 
-internal data class IsoShape(
+// Public (not internal) so AccessViewModel can pre-build these on the IO thread and ship them
+// via the public AppState.Ready (P3-40); they are pure geometry data.
+data class IsoShape(
     val iso: String,
     val rings: List<FloatArray>,
     val path: Path,
@@ -125,7 +127,8 @@ private data class DrawShape(
     val fill: Color,
 )
 
-internal data class BBox(
+// Public (see IsoShape) — carried by IsoShape/Focus on the public AppState.Ready.
+data class BBox(
     val minX: Float,
     val minY: Float,
     val maxX: Float,
@@ -143,8 +146,9 @@ internal data class BBox(
         x >= minX && x <= maxX && y >= minY && y <= maxY
 }
 
-/** The world point to centre on, plus the bbox used to choose the zoom level for it. */
-internal data class Focus(val point: Offset, val bbox: BBox)
+/** The world point to centre on, plus the bbox used to choose the zoom level for it.
+ *  Public (see IsoShape) — carried on the public AppState.Ready. */
+data class Focus(val point: Offset, val bbox: BBox)
 
 internal fun buildShapes(geometry: WorldMapData): List<IsoShape> =
     geometry.countries.map { (iso, shape) ->
