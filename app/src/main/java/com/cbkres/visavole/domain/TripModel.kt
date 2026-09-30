@@ -321,6 +321,39 @@ object TripModel {
 
     fun sortedStops(stops: List<TripStop>): List<TripStop> = stops.sortedBy { it.arrival }
 
+    /**
+     * The distinct stay-zone allowances a trip touches — one per zone, so several stops in the same
+     * zone (e.g. two Schengen stops) yield a single face. A zone is "touched" when the trip has a
+     * stop in it ([AllowanceSnapshot.relevantTripIds]). Ordered most-useful-first for the trip card's
+     * multi-zone allowance pill: the current destination (the zone this trip is most-in-progress in,
+     * when ongoing) first, then overstayed zones (most-over first), then the rest by fewest remaining
+     * days/entries. A single-zone trip simply gets its one zone back, unchanged.
+     */
+    fun zoneAllowancesFor(trip: Trip, allowances: List<AllowanceSnapshot>): List<AllowanceSnapshot> {
+        val zones = allowances.filter { !it.key.startsWith("doc:") && it.relevantTripIds.contains(trip.id) }
+        if (zones.size <= 1) return zones
+        return zones.sortedWith(Comparator { a, b ->
+            val aCurrent = a.currentTripId == trip.id
+            val bCurrent = b.currentTripId == trip.id
+            if (aCurrent != bCurrent) return@Comparator if (aCurrent) -1 else 1
+            if (a.overstayDays != b.overstayDays) return@Comparator b.overstayDays - a.overstayDays
+            compareRemaining(a, b)
+        })
+    }
+
+    private fun compareRemaining(a: AllowanceSnapshot, b: AllowanceSnapshot): Int {
+        val ra = remainingOf(a)
+        val rb = remainingOf(b)
+        return when {
+            ra == null && rb == null -> 0
+            ra == null -> 1
+            rb == null -> -1
+            else -> ra.compareTo(rb)
+        }
+    }
+
+    private fun remainingOf(a: AllowanceSnapshot): Int? = a.remainingDays ?: a.entryRemaining
+
     fun firstGapIndex(stops: List<TripStop>): Int? {
         val ordered = sortedStops(stops)
         for (i in 0 until ordered.lastIndex) {
@@ -510,6 +543,7 @@ object TripModel {
         return AllowanceSnapshot(
             key = key,
             title = title,
+            shortTitle = if (rule.countries.size == 1) rule.countries.first() else null,
             subtitle = rule.windowSummary(),
             kind = kind,
             status = status,

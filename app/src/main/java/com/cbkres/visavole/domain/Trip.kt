@@ -96,6 +96,10 @@ data class AllowanceSnapshot(
      *  "expired doc that is still in use" pulse on the ring (distinct from [currentTripId], which
      *  is only set while the entry is in a healthy IN_USE state). */
     val inUseTripId: String? = null,
+    /** Short display form for compact surfaces: the ISO-2 code when the zone is a single country
+     *  (so a pill reads "US", not "United States"), or null for a named multi-country zone, where
+     *  the caller falls back to [title] (e.g. "Schengen Area"). */
+    val shortTitle: String? = null,
 )
 
 enum class EntryState {

@@ -1,6 +1,7 @@
 package com.cbkres.visavole.ui
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -56,10 +57,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -288,6 +292,7 @@ private data class StopRow(
     val countryName: String,
     val zoneLabel: String,
     val docLabel: String?,
+    val zoneAllowance: AllowanceSnapshot?,
 )
 
 /** Everything a TripCard derives per trip, computed once per publish (P3-43) so a card's row
@@ -301,6 +306,7 @@ private data class TripCardRow(
     val zones: List<String>,
     val relatedAllowance: AllowanceSnapshot?,
     val allowanceHint: String?,
+    val zoneAllowances: List<AllowanceSnapshot>,
 )
 
 @Composable
@@ -328,13 +334,17 @@ private fun TripCard(
     // the row is built once per publish and then read as plain values.
     val row = remember(trip, world, docs, allowances, today) {
         val sortedStops = TripModel.sortedStops(trip.stops)
+        val zoneAllowances = TripModel.zoneAllowancesFor(trip, allowances)
+        val zoneByTitle = zoneAllowances.associateBy { it.title }
         val stops = sortedStops.map { stop ->
             val countryName = world.countries[stop.countryIso2]?.name ?: stop.countryIso2
+            // Stay windows resolve against the passports that are not expired (P2-30).
+            val zoneLabel = zoneLabel(world.stayRuleFor(stop.countryIso2, validHomes, today), countryName)
             StopRow(
                 countryName = countryName,
-                // Stay windows resolve against the passports that are not expired (P2-30).
-                zoneLabel = zoneLabel(world.stayRuleFor(stop.countryIso2, validHomes, today), countryName),
+                zoneLabel = zoneLabel,
                 docLabel = stop.documentId?.let { id -> docs.firstOrNull { it.id == id }?.displayLabel(passportCounts, passportNumbers) ?: id },
+                zoneAllowance = zoneByTitle[zoneLabel],
             )
         }
         val relatedAllowance = allowances.firstOrNull { it.currentTripId == trip.id && !it.key.startsWith("doc:") }
@@ -355,6 +365,7 @@ private fun TripCard(
                 relatedAllowance?.entryRemaining != null -> "${relatedAllowance.entryRemaining} ${if (relatedAllowance.entryRemaining == 1) "entry" else "entries"} left"
                 else -> null
             },
+            zoneAllowances = zoneAllowances,
         )
     }
     val allowanceHintColor = row.relatedAllowance?.let { ringColor(it, LocalEffectiveDarkTheme.current) } ?: MaterialTheme.colorScheme.onSurfaceVariant
@@ -410,8 +421,12 @@ private fun TripCard(
                     modifier = Modifier.weight(1f),
                 )
             }
-            row.allowanceHint?.let {
-                StatusPill(it, allowanceHintColor)
+            // Multi-zone trips swap the single (ambiguous) pill for a cycling one that names each
+            // zone in turn; once expanded the cycling pill hides and a static per-zone pill is shown
+            // in the expanded block instead. Single-zone trips keep the original pill unchanged.
+            when {
+                row.zoneAllowances.size > 1 && !expanded -> CyclingZonePill(row.zoneAllowances)
+                row.zoneAllowances.size <= 1 -> row.allowanceHint?.let { StatusPill(it, allowanceHintColor) }
             }
         }
         AnimatedVisibility(
@@ -434,6 +449,16 @@ private fun TripCard(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
+                            // Multi-zone trips tag each stop with its own zone's allowance (compact form —
+                            // the country/zone is already named in the row), so no pill is piled at the
+                            // bottom. Single-zone trips keep the one header pill instead.
+                            if (row.zoneAllowances.size > 1) {
+                                sr.zoneAllowance?.let { a ->
+                                    zoneHint(a)?.let { h ->
+                                        StatusPill(h, ringColor(a, LocalEffectiveDarkTheme.current))
+                                    }
+                                }
+                            }
                         }
                         Text(
                             "${stop.arrival} → ${stop.departure ?: "open"}${sr.docLabel?.let { " · $it" } ?: " · No document"}",
@@ -454,6 +479,65 @@ private fun TripCard(
             if (row.docLabels.isNotEmpty()) {
                 Text(row.docLabels, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+        }
+    }
+}
+
+/**
+ * The compact allowance wording a zone shows (no destination prefix — the destination is named by
+ * [labeledZoneHint], or, in the expanded stop list, by the stop's own row): "76 days left",
+ * "-3 Days OVERSTAYING!", "5 entries left".
+ */
+private fun zoneHint(a: AllowanceSnapshot): String? = when {
+    a.overstayDays > 0 -> "-${a.overstayDays} Days OVERSTAYING!"
+    a.remainingDays != null -> if (a.remainingDays == 1) "1 day left" else "${a.remainingDays} days left"
+    a.entryRemaining != null -> "${a.entryRemaining} ${if (a.entryRemaining == 1) "entry" else "entries"} left"
+    else -> null
+}
+
+/**
+ * The cycling-pill face text: the zone's short name (ISO-2 code for a single-country zone, else the
+ * zone name) naming the destination, then [zoneHint] — e.g. "US: 76 days left",
+ * "Schengen Area: 76 days left", "GB: -3 Days OVERSTAYING!".
+ */
+private fun labeledZoneHint(a: AllowanceSnapshot): String {
+    val name = a.shortTitle ?: a.title
+    val hint = zoneHint(a) ?: return name
+    return "$name: $hint"
+}
+
+/**
+ * A single allowance pill that cycles through a multi-zone trip's zones in turn, mirroring the
+ * allowance ring's face-rotator (5 s cadence + crossfade). The invisible "ghost" faces pin the box
+ * to the widest face so swapping never shifts the row, and the merged TalkBack label reads every
+ * zone at once instead of re-announcing on each flip.
+ */
+@Composable
+private fun CyclingZonePill(zones: List<AllowanceSnapshot>) {
+    val isDark = LocalEffectiveDarkTheme.current
+    var face by remember(zones) { mutableStateOf(0) }
+    LaunchedEffect(zones) {
+        if (zones.size < 2) {
+            face = 0
+            return@LaunchedEffect
+        }
+        while (true) {
+            // The main face (the active stop's zone, first in the list) lingers 10 s so it reads as
+            // primary; the others get the standard 5 s cadence.
+            delay(if (face == 0) 10_000 else 5_000)
+            face = (face + 1) % zones.size
+        }
+    }
+    Box(
+        modifier = Modifier.semantics(mergeDescendants = true) {
+            contentDescription = zones.joinToString("; ") { labeledZoneHint(it) }
+        },
+    ) {
+        zones.forEach { a ->
+            StatusPill(labeledZoneHint(a), ringColor(a, isDark), modifier = Modifier.alpha(0f))
+        }
+        Crossfade(targetState = face, animationSpec = tween(300)) { i ->
+            StatusPill(labeledZoneHint(zones[i]), ringColor(zones[i], isDark))
         }
     }
 }

@@ -76,6 +76,26 @@ class TripModelTest {
 
     private fun allowance(calc: TripCalculation, key: String) = calc.allowances.first { it.key == key }
 
+    private fun zone(
+        key: String,
+        title: String,
+        relevantTripIds: List<String>,
+        currentTripId: String? = null,
+        overstayDays: Int = 0,
+        remainingDays: Int? = null,
+        entryRemaining: Int? = null,
+    ) = AllowanceSnapshot(
+        key = key,
+        title = title,
+        kind = AllowanceKind.ROLLING,
+        status = AllowanceStatus.OK,
+        remainingDays = remainingDays,
+        entryRemaining = entryRemaining,
+        overstayDays = overstayDays,
+        currentTripId = currentTripId,
+        relevantTripIds = relevantTripIds,
+    )
+
     @Test
     fun rollingWindowCountsUniqueDays() {
         val trips = listOf(
@@ -87,6 +107,31 @@ class TripModelTest {
         assertEquals(13, a.usedDays)
         assertEquals(77, a.remainingDays)
         assertEquals("t2", a.currentTripId)
+    }
+
+    @Test
+    fun zoneAllowancesForOrdersCurrentThenOverstayThenLowestRemaining() {
+        val t = trip("t1")
+        val schengen = zone("stay:schengen", "Schengen Area", listOf("t1"), currentTripId = "t1", remainingDays = 40)
+        val us = zone("stay:us", "United States", listOf("t1"), overstayDays = 3)
+        val ca = zone("stay:ca", "Canada", listOf("t1"), remainingDays = 10)
+        val unrelated = zone("stay:other", "Other", listOf("t2"))
+        val doc = AllowanceSnapshot(key = "doc:x", title = "Passport", kind = AllowanceKind.DOCUMENT_VALIDITY, status = AllowanceStatus.OK, relevantTripIds = listOf("t1"))
+
+        // A doc allowance and a zone only another trip touches are excluded; the trip's three zones
+        // come back most-useful-first: current (Schengen) → overstay (US) → fewest remaining (CA).
+        val result = TripModel.zoneAllowancesFor(t, listOf(unrelated, ca, doc, us, schengen))
+
+        assertEquals(listOf("stay:schengen", "stay:us", "stay:ca"), result.map { it.key })
+    }
+
+    @Test
+    fun zoneAllowancesForSingleZoneAndEmpty() {
+        val t = trip("t1")
+        val only = zone("stay:schengen", "Schengen Area", listOf("t1"), remainingDays = 40)
+        assertEquals(listOf("stay:schengen"), TripModel.zoneAllowancesFor(t, listOf(only)).map { it.key })
+        // A trip no zone references gets nothing back (e.g. a purely-future trip).
+        assertEquals(emptyList<String>(), TripModel.zoneAllowancesFor(t, emptyList()).map { it.key })
     }
 
     @Test
