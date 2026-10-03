@@ -393,6 +393,44 @@ class AccessModelTest {
         assertEquals("p", AccessModel.bestDocumentId("AD", docs, w))
     }
 
+    // ---- auto-select for a stop: carry only what still unlocks the destination ----
+
+    @Test fun autoSelectCarriesOnlyDocsThatUnlockDest() {
+        val w = world(
+            baseline = mapOf("GB" to listOf(corridor("GB", "SY", "visa-required"))),
+            regimes = listOf(regime("schengen", "Schengen", "visa-free", "DE", "FR")),
+        )
+        // A Schengen visa: unlocks DE/FR, not SY.
+        val docs = listOf(doc("p", Passport("GB")), doc("v", Custom(setOf("DE"), "schengen", "visa", "schengen-visa")))
+        // Carrying it onto a SY stop: it doesn't unlock SY, so it must NOT be pre-selected —
+        // fall back to the best valid document (the GB passport).
+        assertEquals("p", AccessModel.autoSelectDocumentId("SY", docs, w, carriedId = "v"))
+        // Carrying it onto a DE stop: it DOES unlock DE, so it is carried through.
+        assertEquals("v", AccessModel.autoSelectDocumentId("DE", docs, w, carriedId = "v"))
+        // No carry: the best valid document for SY is the passport.
+        assertEquals("p", AccessModel.autoSelectDocumentId("SY", docs, w))
+    }
+
+    @Test fun autoSelectNeverCarriesAnExpiredDoc() {
+        val w = world(
+            baseline = mapOf("GB" to listOf(corridor("GB", "SY", "visa-required"))),
+            holdings = mapOf("x" to DataHolding("x", "X Visa", "short_term_visa", "SY")),
+            benefits = mapOf("x" to listOf(Benefit("x", "SY", "visa-free", 90))),
+        )
+        val today = LocalDate.of(2026, 9, 8)
+        val docs = listOf(doc("p", Passport("GB")), docEx("expired", Holding("x"), "2020-01-01"))
+        // The expired visa is carried in, but it must not be pre-selected — fall back to the passport.
+        assertEquals("p", AccessModel.autoSelectDocumentId("SY", docs, w, today, carriedId = "expired"))
+    }
+
+    @Test fun autoSelectDefersToNoneWhenNothingUnlocksDest() {
+        val w = world()
+        val docs = listOf(doc("p", Passport("GB")), doc("v", Custom(setOf("DE"), "schengen", "visa", "schengen-visa")))
+        // A destination no held document documents: nothing is pre-selected (defer to none).
+        assertNull(AccessModel.autoSelectDocumentId("XX", docs, w, carriedId = "v"))
+        assertNull(AccessModel.autoSelectDocumentId("XX", docs, w))
+    }
+
     // ---- primary passport: a pure tie-breaker (star wins only on an exact access tie) ----
 
     @Test fun bestDocumentPrimaryBreaksTieBetweenIdenticalPassports() {

@@ -381,6 +381,26 @@ object AccessModel {
         candidateMaps: Map<String, Map<String, Access>>? = null,
     ): String? = bestDocumentIdCore(dest, docs, world, today, primaryId = null, trips = trips, ignoreExpiry = true, statuses = statuses, candidateMaps = candidateMaps)
 
+    /**
+     * The document to pre-select when adding or editing a stop for [dest]: the [carriedId] document
+     * (carried from the previous stop) if it still unlocks [dest], otherwise the best valid document
+     * for [dest] — or null when nothing held documents [dest]. A carried document that doesn't apply
+     * to the destination (a Schengen visa onto a UK stop) or that has lapsed is not pre-selected.
+     */
+    fun autoSelectDocumentId(
+        dest: String,
+        docs: List<Document>,
+        world: WorldData,
+        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        carriedId: String? = null,
+        primaryId: String? = null,
+        trips: List<Trip> = emptyList(),
+    ): String? {
+        val relevant = relevantDocuments(dest, docs, world, today, trips)
+        val carried = carriedId?.takeIf { id -> relevant.any { it.id == id } }
+        return carried ?: bestDocumentId(dest, docs, world, today, primaryId, trips)
+    }
+
     private fun bestDocumentIdCore(
         dest: String,
         docs: List<Document>,

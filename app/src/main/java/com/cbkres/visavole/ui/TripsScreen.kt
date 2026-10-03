@@ -1242,10 +1242,20 @@ private fun StopEditorDialog(
     var docTouched by remember { mutableStateOf(initial.documentId != null) }
     var showArrival by remember { mutableStateOf(false) }
     var showDeparture by remember { mutableStateOf(initiallyEditingDeparture) }
+    // Mirror the map's country-card: only offer documents that actually unlock the destination.
+    val relevantDocs = remember(stop.countryIso2, stop.arrival, docs, trips) {
+        if (stop.countryIso2 in world.countries) {
+            AccessModel.relevantDocuments(stop.countryIso2, docs, world, stop.arrival, trips)
+        } else {
+            docs
+        }
+    }
     LaunchedEffect(stop, docs, carryDocumentId) {
         if (docTouched) return@LaunchedEffect
-        val preferred = carryDocumentId?.takeIf { id -> docs.any { it.id == id } }
-            ?: AccessModel.bestDocumentId(stop.countryIso2, docs, world, stop.arrival, primaryDocId, trips)
+        val preferred = AccessModel.autoSelectDocumentId(
+            stop.countryIso2, docs, world, stop.arrival,
+            carriedId = carryDocumentId, primaryId = primaryDocId, trips,
+        )
         if (preferred != stop.documentId) {
             stop = stop.copy(documentId = preferred)
         }
@@ -1260,15 +1270,6 @@ private fun StopEditorDialog(
     val countrySelected = stop.countryIso2 in world.countries
     val passportCounts = remember(docs) { passportCountsByIso(docs) }
     val passportNumbers = remember(docs) { passportNumbers(docs) }
-    // Mirror the map's country-card: only offer documents that actually unlock the destination.
-    val relevantDocs = remember(stop.countryIso2, stop.arrival, docs, trips) {
-        if (stop.countryIso2 in world.countries) {
-            AccessModel.relevantDocuments(stop.countryIso2, docs, world, stop.arrival, trips)
-        } else {
-            docs
-        }
-    }
-
     VisaDialog(
         onDismissRequest = onDismiss,
         width = 400.dp,
