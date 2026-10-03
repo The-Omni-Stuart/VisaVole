@@ -87,6 +87,8 @@ import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.TripStop
 import com.cbkres.visavole.domain.TripStatus
+import com.cbkres.visavole.domain.TripWarning
+import com.cbkres.visavole.domain.WarningSeverity
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import java.time.LocalDate
@@ -1242,6 +1244,7 @@ private fun StopEditorDialog(
     var docTouched by remember { mutableStateOf(initial.documentId != null) }
     var showArrival by remember { mutableStateOf(false) }
     var showDeparture by remember { mutableStateOf(initiallyEditingDeparture) }
+    var pendingAccessWarning by remember { mutableStateOf<TripWarning?>(null) }
     // Mirror the map's country-card: only offer documents that actually unlock the destination.
     val relevantDocs = remember(stop.countryIso2, stop.arrival, docs, trips) {
         if (stop.countryIso2 in world.countries) {
@@ -1266,6 +1269,11 @@ private fun StopEditorDialog(
     val stopAccess = remember(stop.countryIso2, stop.arrival, docs, trips) {
         AccessModel.compute(docs, world, stop.arrival, trips)[stop.countryIso2]
     }
+    val accessWarning = TripModel.accessWarningFor(
+        stopAccess,
+        world.countries[stop.countryIso2]?.name ?: stop.countryIso2,
+        stop.arrival,
+    )
     val selectedDoc = docs.firstOrNull { it.id == stop.documentId }
     val countrySelected = stop.countryIso2 in world.countries
     val passportCounts = remember(docs) { passportCountsByIso(docs) }
@@ -1344,7 +1352,13 @@ private fun StopEditorDialog(
                     }
                     OutlinedButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(Modifier.width(12.dp))
-                    Button(onClick = { onDone(stop); onDismiss() }, enabled = countrySelected) { Text("Done") }
+                    Button(
+                        onClick = {
+                            val w = accessWarning
+                            if (w != null) pendingAccessWarning = w else { onDone(stop); onDismiss() }
+                        },
+                        enabled = countrySelected,
+                    ) { Text("Done") }
                 }
             }
             }
@@ -1378,6 +1392,39 @@ private fun StopEditorDialog(
             minDate = stop.arrival,
         )
     }
+    pendingAccessWarning?.let { w ->
+        StopAccessWarningDialog(
+            warning = w,
+            onConfirm = { onDone(stop); pendingAccessWarning = null; onDismiss() },
+            onDismiss = { pendingAccessWarning = null },
+        )
+    }
+}
+
+/** Warns before saving a stop whose destination needs a visa, e-visa, or has no entry grant. */
+@Composable
+private fun StopAccessWarningDialog(
+    warning: TripWarning,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    TripAlertDialog(
+        title = warning.title,
+        confirmLabel = "Save anyway",
+        onConfirm = onConfirm,
+        dismissLabel = "Keep editing",
+        onDismiss = onDismiss,
+        content = {
+            Text(
+                warning.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = severityColor(
+                    if (warning.severity == WarningSeverity.DANGER) Severity.BAD else Severity.WARN,
+                    LocalEffectiveDarkTheme.current,
+                ),
+            )
+        },
+    )
 }
 
 @Composable

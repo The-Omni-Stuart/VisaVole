@@ -7,6 +7,12 @@ import com.cbkres.visavole.data.Regime
 import com.cbkres.visavole.data.StayRule
 import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.data.Holding as DataHolding
+import com.cbkres.visavole.domain.AccessLevel.E_VISA
+import com.cbkres.visavole.domain.AccessLevel.FREEDOM
+import com.cbkres.visavole.domain.AccessLevel.REFUSED
+import com.cbkres.visavole.domain.AccessLevel.RESIDENCE
+import com.cbkres.visavole.domain.AccessLevel.VISA_FREE
+import com.cbkres.visavole.domain.AccessLevel.VISA_REQUIRED
 import com.cbkres.visavole.domain.DocKind.Custom
 import com.cbkres.visavole.domain.DocKind.Holding
 import com.cbkres.visavole.domain.DocKind.Passport
@@ -427,6 +433,30 @@ class TripModelTest {
         )
         val warnings = TripModel.projectionWarningsFor(candidate, emptyList(), listOf(schengenDoc()), schengenWorld(), today)
         assertTrue(warnings.any { it.severity == WarningSeverity.DANGER && it.title == "Not enough entries" })
+    }
+
+    @Test
+    fun accessWarningForFlagsBlockedAndExtraSteps() {
+        // No entry grant at all.
+        val none = TripModel.accessWarningFor(null, "Syria", today)
+        assertEquals("trip.access.none", none?.code)
+        assertEquals(WarningSeverity.DANGER, none?.severity)
+        // Visa required.
+        val vr = TripModel.accessWarningFor(Access(VISA_REQUIRED, null, "Passport rule"), "United Kingdom", today)
+        assertEquals("trip.access.blocked", vr?.code)
+        assertTrue("visa required" in (vr?.message ?: ""))
+        // Entry refused.
+        val rf = TripModel.accessWarningFor(Access(REFUSED, null, "Passport rule"), "Syria", today)
+        assertEquals("trip.access.blocked", rf?.code)
+        assertTrue("entry refused" in (rf?.message ?: ""))
+        // e-visa / eta: an extra step, but only a warning (not a hard block).
+        val ev = TripModel.accessWarningFor(Access(E_VISA, 90, "Passport rule"), "Australia", today)
+        assertEquals("trip.access.extraStep", ev?.code)
+        assertEquals(WarningSeverity.WARNING, ev?.severity)
+        // Visa-free, freedom and residence need no step: no warning.
+        assertNull(TripModel.accessWarningFor(Access(VISA_FREE, 90, "Passport rule"), "Andorra", today))
+        assertNull(TripModel.accessWarningFor(Access(FREEDOM, null, "Bloc"), "Germany", today))
+        assertNull(TripModel.accessWarningFor(Access(RESIDENCE, null, "Residence"), "Czechia", today))
     }
 
     @Test

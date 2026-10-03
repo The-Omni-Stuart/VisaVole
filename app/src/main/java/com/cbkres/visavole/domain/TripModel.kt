@@ -204,6 +204,23 @@ object TripModel {
         return out
     }
 
+    /**
+     * The entry warning for a single destination on [date], or null when entry is visa-free,
+     * freedom, a residence, or already covered by a held document. Shared by [projectionWarningsFor]
+     * (whole trip) and the stop editor (a single stop) so both warn identically.
+     */
+    fun accessWarningFor(access: Access?, countryName: String, date: LocalDate): TripWarning? = when {
+        access == null -> TripWarning("trip.access.none", WarningSeverity.DANGER, "No valid entry grant", "No valid entry grant found for $countryName on $date.")
+        access.level == VISA_REQUIRED || access.level == REFUSED -> TripWarning(
+            "trip.access.blocked",
+            WarningSeverity.DANGER,
+            "Entry blocked",
+            "$countryName is ${if (access.level == REFUSED) "entry refused" else "visa required"} on $date.",
+        )
+        access.level == ETA || access.level == E_VISA -> TripWarning("trip.access.extraStep", WarningSeverity.WARNING, "Extra step required", "$countryName needs ${access.level.label()} on $date.")
+        else -> null
+    }
+
     fun projectionWarningsFor(
         candidate: Trip,
         trips: List<Trip>,
@@ -295,18 +312,7 @@ object TripModel {
                 if (stop.arrival > date || stopEnd < date) continue
                 val a = access[stop.countryIso2]
                 val country = world.countries[stop.countryIso2]?.name ?: stop.countryIso2
-                val warn: TripWarning? = when {
-                    a == null -> TripWarning("trip.access.none", WarningSeverity.DANGER, "No valid entry grant", "No valid entry grant found for $country on $date.")
-                    a.level == VISA_REQUIRED || a.level == REFUSED -> TripWarning(
-                        "trip.access.blocked",
-                        WarningSeverity.DANGER,
-                        "Entry blocked",
-                        "$country is ${if (a.level == REFUSED) "entry refused" else "visa required"} on $date.",
-                    )
-                    a.level == ETA || a.level == E_VISA -> TripWarning("trip.access.extraStep", WarningSeverity.WARNING, "Extra step required", "$country needs ${a.level.label()} on $date.")
-                    else -> null
-                }
-                warn?.let { if (accessSeen.add(it.message)) out.add(it) }
+                accessWarningFor(a, country, date)?.let { if (accessSeen.add(it.message)) out.add(it) }
             }
         }
         return out
