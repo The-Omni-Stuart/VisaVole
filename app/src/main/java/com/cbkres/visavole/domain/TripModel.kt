@@ -63,6 +63,12 @@ object TripModel {
         return out
     }
 
+    /**
+     * True when the trip has at least one stop with no document assigned. An active (ongoing) trip in
+     * that state shows a flashing "no valid doc" ring instead of a misleading stay-window "days left".
+     */
+    fun tripHasNoDocument(trip: Trip): Boolean = trip.stops.any { it.documentId == null }
+
     fun closeTrip(trip: Trip, departure: LocalDate): Trip {
         val last = sortedStops(trip.stops).lastOrNull() ?: return trip
         val safeDeparture = departure.takeIf { !it.isBefore(last.arrival) } ?: last.arrival

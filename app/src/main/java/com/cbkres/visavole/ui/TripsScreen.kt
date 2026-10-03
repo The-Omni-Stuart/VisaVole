@@ -371,6 +371,9 @@ private fun TripCard(
         )
     }
     val allowanceHintColor = row.relatedAllowance?.let { ringColor(it, LocalEffectiveDarkTheme.current) } ?: MaterialTheme.colorScheme.onSurfaceVariant
+    // An active trip with no document for a stop can't actually travel, so a stay-window "days left"
+    // would mislead — flag it with a flashing "no valid doc" ring instead.
+    val noValidDoc = trip.statusAt(today) == TripStatus.ONGOING && TripModel.tripHasNoDocument(trip)
     VisaListCard(
         onClick = onExpand,
         flashTrigger = flashTrigger,
@@ -412,7 +415,7 @@ private fun TripCard(
         )
         // Top-aligned: expanded zone lists can wrap to several lines, and the hint pill should
         // stay on the first line instead of floating at the middle of the block.
-        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = if (noValidDoc) Alignment.CenterVertically else Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (row.zones.isNotEmpty()) {
                 Text(
                     row.zones.joinToString(", "),
@@ -423,10 +426,13 @@ private fun TripCard(
                     modifier = Modifier.weight(1f),
                 )
             }
-            // Multi-zone trips swap the single (ambiguous) pill for a cycling one that names each
-            // zone in turn; once expanded the cycling pill hides and a static per-zone pill is shown
-            // in the expanded block instead. Single-zone trips keep the original pill unchanged.
+            // A flashing red ring replaces the (misleading) "days left" pill when an active trip has
+            // no valid document for a stop. Otherwise: multi-zone trips swap the single (ambiguous)
+            // pill for a cycling one that names each zone in turn; once expanded the cycling pill
+            // hides and a static per-zone pill is shown in the expanded block instead. Single-zone
+            // trips keep the original pill unchanged.
             when {
+                noValidDoc -> NoValidDocRing()
                 row.zoneAllowances.size > 1 && !expanded -> CyclingZonePill(row.zoneAllowances)
                 row.zoneAllowances.size <= 1 -> row.allowanceHint?.let { StatusPill(it, allowanceHintColor) }
             }

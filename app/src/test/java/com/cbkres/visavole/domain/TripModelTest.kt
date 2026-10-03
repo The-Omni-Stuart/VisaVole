@@ -460,6 +460,18 @@ class TripModelTest {
     }
 
     @Test
+    fun tripHasNoDocumentFlagsStopsMissingADocument() {
+        // Every stop has a document: no flag.
+        val all = trip("c", stop("s1", "DE", today, today.plusDays(2), "d1"), stop("s2", "FR", today.plusDays(3), today.plusDays(5), "d2"))
+        assertFalse(TripModel.tripHasNoDocument(all))
+        // One stop has no document: flagged.
+        val missing = trip("c", stop("s1", "DE", today, today.plusDays(2), "d1"), stop("s2", "FR", today.plusDays(3), today.plusDays(5), null))
+        assertTrue(TripModel.tripHasNoDocument(missing))
+        // Empty trip: nothing missing.
+        assertFalse(TripModel.tripHasNoDocument(Trip("e", emptyList(), null)))
+    }
+
+    @Test
     fun primaryAllowancePrefersCurrentTrip() {
         val current = AllowanceSnapshot("stay:schengen", "Schengen", null, AllowanceKind.ROLLING, AllowanceStatus.WARNING, 83, 7, 90, 180, 0, null, null, null, null, "t1", listOf("t1"))
         val other = AllowanceSnapshot("doc:v", "Visa", null, AllowanceKind.ENTRY_COUNT, AllowanceStatus.WARNING, null, null, null, null, 0, 1, 1, 0, null, null, emptyList())

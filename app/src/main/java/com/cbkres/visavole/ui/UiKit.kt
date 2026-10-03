@@ -473,6 +473,40 @@ internal fun allowanceSummary(a: AllowanceSnapshot): String = when {
 private const val RING_ROTATE_MAX_DAYS = 90
 
 /**
+ * A compact, flashing red ring shown on an active (ongoing) trip that has no valid document for a
+ * stop. The stay-window "days left" would be misleading, so the centre says "no valid doc" instead.
+ * The ring pulses between bright red and the dim track on a loop (like an overstay) so it reads as
+ * an active problem, not a healthy — or merely empty — ring.
+ */
+@Composable
+fun NoValidDocRing(size: Dp = 64.dp, modifier: Modifier = Modifier) {
+    val color = MaterialTheme.colorScheme.error
+    val pulse = remember { Animatable(1f) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            pulse.animateTo(0.15f, tween(700, easing = FastOutSlowInEasing))
+            pulse.animateTo(1f, tween(700, easing = FastOutSlowInEasing))
+        }
+    }
+    Box(
+        modifier = modifier
+            .size(size)
+            .semantics(mergeDescendants = true) { contentDescription = "No valid document" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val stroke = (size / 11f).toPx()
+            drawCircle(color = color.copy(alpha = 0.15f), style = Stroke(stroke))
+            drawArc(color = color.copy(alpha = pulse.value), startAngle = -90f, sweepAngle = 360f, useCenter = false, style = Stroke(stroke))
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("no valid", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = color)
+            Text("doc", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = color)
+        }
+    }
+}
+
+/**
  * The allowance donut: the remaining window (or remaining entries) drawn in the status colour,
  * the centre showing the remaining count and a label. [size] scales the donut — the stroke and
  * the centre text follow it. An in-use entry shows "In use" with the entries remaining beneath;
