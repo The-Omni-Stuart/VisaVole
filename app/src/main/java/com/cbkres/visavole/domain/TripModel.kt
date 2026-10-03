@@ -63,12 +63,6 @@ object TripModel {
         return out
     }
 
-    /**
-     * True when the trip has at least one stop with no document assigned. An active (ongoing) trip in
-     * that state shows a flashing "no valid doc" ring instead of a misleading stay-window "days left".
-     */
-    fun tripHasNoDocument(trip: Trip): Boolean = trip.stops.any { it.documentId == null }
-
     fun closeTrip(trip: Trip, departure: LocalDate): Trip {
         val last = sortedStops(trip.stops).lastOrNull() ?: return trip
         val safeDeparture = departure.takeIf { !it.isBefore(last.arrival) } ?: last.arrival
@@ -552,6 +546,18 @@ object TripModel {
         val usedDays = if (capped != null && rawRemaining != null && capped < rawRemaining)
             windowDays?.let { it - capped.coerceAtLeast(0) } ?: used
         else used
+        // An active stop in this zone with no document makes the stay-window misleading — flag the
+        // zone so every surface (ring, card, pill) shows "no valid doc" instead of a remaining count.
+        val zoneCountries = rule.countries.toSet()
+        val noValidDoc = trips
+            .filter { it.id in usage.tripIds }
+            .flatMap { it.stops }
+            .any {
+                it.countryIso2 in zoneCountries &&
+                    it.documentId == null &&
+                    !it.arrival.isAfter(asOf) &&
+                    (it.departure == null || !it.departure.isBefore(asOf))
+            }
         return AllowanceSnapshot(
             key = key,
             title = title,
@@ -566,6 +572,7 @@ object TripModel {
             overstayDays = overstayDays,
             currentTripId = usage.activeTripIds.maxByOrNull { usage.activeTripDays[it] ?: 0 },
             relevantTripIds = usage.tripIds.toList(),
+            noValidDoc = noValidDoc,
         )
     }
 

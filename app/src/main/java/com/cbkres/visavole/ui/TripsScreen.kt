@@ -309,6 +309,7 @@ private data class TripCardRow(
     val relatedAllowance: AllowanceSnapshot?,
     val allowanceHint: String?,
     val zoneAllowances: List<AllowanceSnapshot>,
+    val noDocZoneTitles: Set<String>,
 )
 
 @Composable
@@ -368,12 +369,10 @@ private fun TripCard(
                 else -> null
             },
             zoneAllowances = zoneAllowances,
+            noDocZoneTitles = stops.filter { it.docLabel == null }.map { it.zoneLabel }.toSet(),
         )
     }
     val allowanceHintColor = row.relatedAllowance?.let { ringColor(it, LocalEffectiveDarkTheme.current) } ?: MaterialTheme.colorScheme.onSurfaceVariant
-    // An active trip with no document for a stop can't actually travel, so a stay-window "days left"
-    // would mislead — flag it with a flashing "no valid doc" ring instead.
-    val noValidDoc = trip.statusAt(today) == TripStatus.ONGOING && TripModel.tripHasNoDocument(trip)
     VisaListCard(
         onClick = onExpand,
         flashTrigger = flashTrigger,
@@ -415,7 +414,7 @@ private fun TripCard(
         )
         // Top-aligned: expanded zone lists can wrap to several lines, and the hint pill should
         // stay on the first line instead of floating at the middle of the block.
-        Row(verticalAlignment = if (noValidDoc) Alignment.CenterVertically else Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             if (row.zones.isNotEmpty()) {
                 Text(
                     row.zones.joinToString(", "),
@@ -426,15 +425,17 @@ private fun TripCard(
                     modifier = Modifier.weight(1f),
                 )
             }
-            // A flashing red ring replaces the (misleading) "days left" pill when an active trip has
-            // no valid document for a stop. Otherwise: multi-zone trips swap the single (ambiguous)
-            // pill for a cycling one that names each zone in turn; once expanded the cycling pill
-            // hides and a static per-zone pill is shown in the expanded block instead. Single-zone
-            // trips keep the original pill unchanged.
+            // Multi-zone trips swap the single (ambiguous) pill for a cycling one that names each
+            // zone in turn; once expanded the cycling pill hides and a static per-zone pill is shown
+            // in the expanded block instead. A zone whose stop has no document shows "no valid doc"
+            // in place of its allowance. Single-zone trips keep the original pill unchanged.
             when {
-                noValidDoc -> NoValidDocRing()
-                row.zoneAllowances.size > 1 && !expanded -> CyclingZonePill(row.zoneAllowances)
-                row.zoneAllowances.size <= 1 -> row.allowanceHint?.let { StatusPill(it, allowanceHintColor) }
+                row.zoneAllowances.size > 1 && !expanded -> CyclingZonePill(row.zoneAllowances, row.noDocZoneTitles)
+                row.zoneAllowances.size <= 1 -> {
+                    val noDoc = row.zoneAllowances.firstOrNull()?.title in row.noDocZoneTitles
+                    if (noDoc) StatusPill("no valid doc", MaterialTheme.colorScheme.error)
+                    else row.allowanceHint?.let { StatusPill(it, allowanceHintColor) }
+                }
             }
         }
         AnimatedVisibility(
@@ -518,11 +519,13 @@ private fun labeledZoneHint(a: AllowanceSnapshot): String {
  * A single allowance pill that cycles through a multi-zone trip's zones in turn, mirroring the
  * allowance ring's face-rotator (5 s cadence + crossfade). The invisible "ghost" faces pin the box
  * to the widest face so swapping never shifts the row, and the merged TalkBack label reads every
- * zone at once instead of re-announcing on each flip.
+ * zone at once instead of re-announcing on each flip. A zone in [noDocZoneTitles] (a stop with no
+ * document) shows "no valid doc" in place of its allowance, in the status red.
  */
 @Composable
-private fun CyclingZonePill(zones: List<AllowanceSnapshot>) {
+private fun CyclingZonePill(zones: List<AllowanceSnapshot>, noDocZoneTitles: Set<String>) {
     val isDark = LocalEffectiveDarkTheme.current
+    val error = MaterialTheme.colorScheme.error
     var face by remember(zones) { mutableStateOf(0) }
     LaunchedEffect(zones) {
         if (zones.size < 2) {
@@ -536,16 +539,20 @@ private fun CyclingZonePill(zones: List<AllowanceSnapshot>) {
             face = (face + 1) % zones.size
         }
     }
+    fun faceText(a: AllowanceSnapshot) =
+        if (a.title in noDocZoneTitles) "${a.shortTitle ?: a.title}: no valid doc" else labeledZoneHint(a)
+    fun faceColor(a: AllowanceSnapshot) =
+        if (a.title in noDocZoneTitles) error else ringColor(a, isDark)
     Box(
         modifier = Modifier.semantics(mergeDescendants = true) {
-            contentDescription = zones.joinToString("; ") { labeledZoneHint(it) }
+            contentDescription = zones.joinToString("; ") { faceText(it) }
         },
     ) {
         zones.forEach { a ->
-            StatusPill(labeledZoneHint(a), ringColor(a, isDark), modifier = Modifier.alpha(0f))
+            StatusPill(faceText(a), faceColor(a), modifier = Modifier.alpha(0f))
         }
         Crossfade(targetState = face, animationSpec = tween(300)) { i ->
-            StatusPill(labeledZoneHint(zones[i]), ringColor(zones[i], isDark))
+            StatusPill(faceText(zones[i]), faceColor(zones[i]))
         }
     }
 }

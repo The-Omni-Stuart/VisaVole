@@ -460,15 +460,19 @@ class TripModelTest {
     }
 
     @Test
-    fun tripHasNoDocumentFlagsStopsMissingADocument() {
-        // Every stop has a document: no flag.
-        val all = trip("c", stop("s1", "DE", today, today.plusDays(2), "d1"), stop("s2", "FR", today.plusDays(3), today.plusDays(5), "d2"))
-        assertFalse(TripModel.tripHasNoDocument(all))
-        // One stop has no document: flagged.
-        val missing = trip("c", stop("s1", "DE", today, today.plusDays(2), "d1"), stop("s2", "FR", today.plusDays(3), today.plusDays(5), null))
-        assertTrue(TripModel.tripHasNoDocument(missing))
-        // Empty trip: nothing missing.
-        assertFalse(TripModel.tripHasNoDocument(Trip("e", emptyList(), null)))
+    fun zoneAllowanceFlagsNoValidDocument() {
+        // An active stop in the zone with no document → the zone allowance flags noValidDoc.
+        val noDoc = trip("t1", stop("s1", "DE", today.minusDays(3), null))
+        val calc = TripModel.calculate(listOf(noDoc), listOf(passport("GB")), world(stayRules = listOf(schengen)), today)
+        assertTrue(allowance(calc, "stay:schengen").noValidDoc)
+        // Same stop with a document assigned → no flag.
+        val withDoc = trip("t2", stop("s1", "DE", today.minusDays(3), null, "d1"))
+        val calc2 = TripModel.calculate(listOf(withDoc), listOf(passport("GB")), world(stayRules = listOf(schengen)), today)
+        assertFalse(allowance(calc2, "stay:schengen").noValidDoc)
+        // A no-doc stop that hasn't started yet (upcoming) doesn't flag the active zone.
+        val mixed = trip("t3", stop("s1", "DE", today.minusDays(3), today.minusDays(1), "d1"), stop("s2", "FR", today.plusDays(3), today.plusDays(9)))
+        val calc3 = TripModel.calculate(listOf(mixed), listOf(passport("GB")), world(stayRules = listOf(schengen)), today)
+        assertFalse(allowance(calc3, "stay:schengen").noValidDoc)
     }
 
     @Test

@@ -412,6 +412,7 @@ internal fun allowanceFraction(a: AllowanceSnapshot): Float = when {
  * behind them) keep the remaining-fraction gradient instead of a document state.
  */
 internal fun ringColor(a: AllowanceSnapshot, isDark: Boolean): Color {
+    if (a.noValidDoc) return severityColor(Severity.BAD, isDark) // no document assigned — flash red like an overstay
     if (a.status == AllowanceStatus.UNKNOWN) return NO_DATA // neutral slate — allowance unknown (one NO-DATA entry, see MapColors)
     val severity = when {
         a.overstayDays > 0 || a.status == AllowanceStatus.DANGER || a.status == AllowanceStatus.EXHAUSTED -> Severity.BAD
@@ -448,6 +449,7 @@ internal fun entriesRemainingPhrase(remaining: Int?): String = when (remaining) 
  * visa gets the same coloured treatment as a residence's "Valid for N days".
  */
 internal fun allowanceSummary(a: AllowanceSnapshot): String = when {
+    a.noValidDoc -> "No valid document"
     a.overstayDays > 0 -> "-${a.overstayDays} Days OVERSTAYING!"
     a.status == AllowanceStatus.DANGER && a.kind != AllowanceKind.ROLLING && a.kind != AllowanceKind.PER_ENTRY ->
         "Expired on ${a.effectiveExpiry ?: "unknown"}"
@@ -471,40 +473,6 @@ internal fun allowanceSummary(a: AllowanceSnapshot): String = when {
 
 /** Entry-count documents rotate to a days-to-expiry face this close to their expiry. */
 private const val RING_ROTATE_MAX_DAYS = 90
-
-/**
- * A compact, flashing red ring shown on an active (ongoing) trip that has no valid document for a
- * stop. The stay-window "days left" would be misleading, so the centre says "no valid doc" instead.
- * The ring pulses between bright red and the dim track on a loop (like an overstay) so it reads as
- * an active problem, not a healthy — or merely empty — ring.
- */
-@Composable
-fun NoValidDocRing(size: Dp = 64.dp, modifier: Modifier = Modifier) {
-    val color = MaterialTheme.colorScheme.error
-    val pulse = remember { Animatable(1f) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            pulse.animateTo(0.15f, tween(700, easing = FastOutSlowInEasing))
-            pulse.animateTo(1f, tween(700, easing = FastOutSlowInEasing))
-        }
-    }
-    Box(
-        modifier = modifier
-            .size(size)
-            .semantics(mergeDescendants = true) { contentDescription = "No valid document" },
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(Modifier.fillMaxSize()) {
-            val stroke = (size / 11f).toPx()
-            drawCircle(color = color.copy(alpha = 0.15f), style = Stroke(stroke))
-            drawArc(color = color.copy(alpha = pulse.value), startAngle = -90f, sweepAngle = 360f, useCenter = false, style = Stroke(stroke))
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("no valid", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = color)
-            Text("doc", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = color)
-        }
-    }
-}
 
 /**
  * The allowance donut: the remaining window (or remaining entries) drawn in the status colour,
@@ -538,9 +506,13 @@ fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = 
     // An expired document still driving an in-progress trip flashes too: you're staying on a lapsed
     // doc, which is an active illegal situation, not just a quiet "expired" note.
     val expiredInUse = a.status == AllowanceStatus.DANGER && a.inUseTripId != null
+    // A zone whose active stop has no document can't actually be travelled on, so its (otherwise
+    // healthy) stay window flashes "no valid doc" instead of showing a remaining count.
+    val noValidDoc = a.noValidDoc
     // The ring pulses between bright red and the dim (empty) track, on a loop, so an illegal stay
-    // (or an in-use expired doc) can't be mistaken for a healthy — or merely empty — ring.
-    val pulsing = overstay || expiredInUse
+    // (in-use expired doc, or a stop with no document) can't be mistaken for a healthy — or merely
+    // empty — ring.
+    val pulsing = overstay || expiredInUse || noValidDoc
     val pulse = remember { Animatable(1f) }
     LaunchedEffect(pulsing) {
         if (!pulsing) {
@@ -553,6 +525,7 @@ fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = 
         }
     }
     val (center, centerLabel) = when {
+        noValidDoc -> "No valid" to "doc"
         overstay -> "-${a.overstayDays}" to "OVERSTAY!"
         // A window-less (UNKNOWN) allowance has no remaining count — show "no data", not a bogus
         // "0 days left" (P2-20).
@@ -597,7 +570,7 @@ fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = 
         }
         Crossfade(targetState = showDaysFace, animationSpec = tween(300)) { face ->
             val (c, l) = if (face) daysCenter ?: (center to centerLabel) else center to centerLabel
-            val wordFace = c == "In use" || c == "Expired"
+            val wordFace = c == "In use" || c == "Expired" || c == "No valid"
             Box(Modifier.heightIn(min = faceHeight), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
@@ -610,9 +583,9 @@ fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = 
                     Text(
                         l,
                         style = MaterialTheme.typography.labelSmall,
-                        // "OVERSTAY!" is bold + the ring's red; other labels stay muted.
-                        color = if (overstay) color else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = if (overstay) FontWeight.Bold else FontWeight.Normal,
+                        // "OVERSTAY!" / "doc" are bold + the ring's red; other labels stay muted.
+                        color = if (overstay || noValidDoc) color else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (overstay || noValidDoc) FontWeight.Bold else FontWeight.Normal,
                     )
                 }
             }

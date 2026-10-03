@@ -100,6 +100,9 @@ data class AllowanceSnapshot(
      *  (so a pill reads "US", not "United States"), or null for a named multi-country zone, where
      *  the caller falls back to [title] (e.g. "Schengen Area"). */
     val shortTitle: String? = null,
+    /** True when an active stop in this zone has no document assigned — the stay-window "days left"
+     *  would mislead, so every surface flashes "no valid doc" instead of a remaining count. */
+    val noValidDoc: Boolean = false,
 )
 
 enum class EntryState {
