@@ -109,6 +109,59 @@ class AccessModelTest {
         assertEquals(VISA_FREE, acc["FR"]!!.level)
     }
 
+    @Test fun nationalityGatedBenefitAppliesToCoveredNationality() {
+        // BIVS: a UK-visa benefit gated to Indian/Chinese nationals opens Ireland for an Indian traveller.
+        val w = world(
+            baseline = mapOf("IN" to listOf(corridor("IN", "IE", "visa-required"))),
+            holdings = mapOf("uk-visa" to DataHolding("uk-visa", "UK Visa", "short_term_visa", "GB")),
+            benefits = mapOf("uk-visa" to listOf(Benefit("uk-visa", "IE", "visa-free", 90, nationalities = setOf("IN", "CN")))),
+        )
+        val acc = AccessModel.compute(listOf(doc("p", Passport("IN")), doc("d", Holding("uk-visa"))), w)["IE"]!!
+        assertEquals(COVERED, acc.level)
+        assertEquals(90, acc.days)
+    }
+
+    @Test fun nationalityGatedBenefitAppliesToAllCoveredNationalities() {
+        val w = world(
+            baseline = mapOf("CN" to listOf(corridor("CN", "IE", "visa-required"))),
+            holdings = mapOf("uk-visa" to DataHolding("uk-visa", "UK Visa", "short_term_visa", "GB")),
+            benefits = mapOf("uk-visa" to listOf(Benefit("uk-visa", "IE", "visa-free", 90, nationalities = setOf("IN", "CN")))),
+        )
+        val acc = AccessModel.compute(listOf(doc("p", Passport("CN")), doc("d", Holding("uk-visa"))), w)["IE"]!!
+        assertEquals(COVERED, acc.level)
+        assertEquals(90, acc.days)
+    }
+
+    @Test fun nationalityGatedBenefitSkippedForUncoveredNationality() {
+        // FR is not a covered BIVS nationality, so the gated UK-visa benefit is skipped; IE stays visa-required.
+        val w = world(
+            baseline = mapOf("FR" to listOf(corridor("FR", "IE", "visa-required"))),
+            holdings = mapOf("uk-visa" to DataHolding("uk-visa", "UK Visa", "short_term_visa", "GB")),
+            benefits = mapOf("uk-visa" to listOf(Benefit("uk-visa", "IE", "visa-free", 90, nationalities = setOf("IN", "CN")))),
+        )
+        val acc = AccessModel.compute(listOf(doc("p", Passport("FR")), doc("d", Holding("uk-visa"))), w)["IE"]!!
+        assertEquals(VISA_REQUIRED, acc.level)
+    }
+
+    @Test fun ungatedBenefitStillAppliesRegardlessOfNationality() {
+        // A benefit with no nationality restriction applies to every nationality (control).
+        val w = world(
+            baseline = mapOf("FR" to listOf(corridor("FR", "IE", "visa-required"))),
+            holdings = mapOf("uk-visa" to DataHolding("uk-visa", "UK Visa", "short_term_visa", "GB")),
+            benefits = mapOf("uk-visa" to listOf(Benefit("uk-visa", "IE", "visa-free", 90))),
+        )
+        assertEquals(COVERED, AccessModel.compute(listOf(doc("p", Passport("FR")), doc("d", Holding("uk-visa"))), w)["IE"]!!.level)
+    }
+
+    @Test fun bivSLoadedFromBundledDbIsGatedToIndianAndChineseNationalities() {
+        // The real bundled db (the visadb release build) carries the BIVS benefit gated to IN/CN.
+        val w = JdbcRepository.load(File("src/main/assets/visa_data.db"))
+        val ie = w.benefits["uk-visa"]?.firstOrNull { it.destination == "IE" }
+        assertTrue("expected a uk-visa -> IE benefit in the bundled db", ie != null)
+        assertEquals(setOf("IN", "CN"), ie!!.nationalities)
+        assertEquals("visa-free", ie.type)
+    }
+
     @Test fun futureDatedDocUnlocksNothingAnywhere() {
         // P1-2: a visa whose validFrom lies after today unlocks nothing — not just in compute,
         // but in the breakdown, relevant docs, own-visa countries and the suggested document.
@@ -903,22 +956,25 @@ class AccessModelTest {
 
     @Test fun realDatabaseStayRulesReflectAuditedWindows() {
         val w = JdbcRepository.load(File("src/main/assets/visa_data.db"))
+        // The TH 60-day rule carries a valid_to of 2026-09-14 (the audited scheme's expiry). Pin the
+        // reference date so this data check stays deterministic once real time passes that expiry.
+        val today = LocalDate.of(2026, 9, 1)
 
-        assertEquals(183, w.stayRuleFor("PE", setOf("MX"))?.windowDays)
-        assertEquals(90, w.stayRuleFor("PE", setOf("GB"))?.windowDays)
-        assertEquals(60, w.stayRuleFor("PE", setOf("DO"))?.windowDays)
+        assertEquals(183, w.stayRuleFor("PE", setOf("MX"), today)?.windowDays)
+        assertEquals(90, w.stayRuleFor("PE", setOf("GB"), today)?.windowDays)
+        assertEquals(60, w.stayRuleFor("PE", setOf("DO"), today)?.windowDays)
 
-        assertEquals(30, w.stayRuleFor("PA", setOf("HK"))?.windowDays)
-        assertEquals(180, w.stayRuleFor("PA", setOf("US"))?.windowDays)
-        assertEquals(90, w.stayRuleFor("PA", setOf("GB"))?.windowDays)
+        assertEquals(30, w.stayRuleFor("PA", setOf("HK"), today)?.windowDays)
+        assertEquals(180, w.stayRuleFor("PA", setOf("US"), today)?.windowDays)
+        assertEquals(90, w.stayRuleFor("PA", setOf("GB"), today)?.windowDays)
 
-        assertEquals(7, w.stayRuleFor("TH", setOf("KH"))?.windowDays)
-        assertEquals(14, w.stayRuleFor("TH", setOf("MM"))?.windowDays)
-        assertEquals(30, w.stayRuleFor("TH", setOf("TL"))?.windowDays)
-        assertEquals(90, w.stayRuleFor("TH", setOf("AR"))?.windowDays)
-        assertEquals(60, w.stayRuleFor("TH", setOf("GB"))?.windowDays)
+        assertEquals(7, w.stayRuleFor("TH", setOf("KH"), today)?.windowDays)
+        assertEquals(14, w.stayRuleFor("TH", setOf("MM"), today)?.windowDays)
+        assertEquals(30, w.stayRuleFor("TH", setOf("TL"), today)?.windowDays)
+        assertEquals(90, w.stayRuleFor("TH", setOf("AR"), today)?.windowDays)
+        assertEquals(60, w.stayRuleFor("TH", setOf("GB"), today)?.windowDays)
 
-        val tr = w.stayRuleFor("TR", setOf("GB"))!!
+        val tr = w.stayRuleFor("TR", setOf("GB"), today)!!
         assertEquals(90, tr.windowDays)
         assertEquals(180, tr.windowPeriodDays)
         assertTrue(tr.multipleEntry)

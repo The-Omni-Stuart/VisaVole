@@ -73,18 +73,25 @@ object JdbcRepository {
 
     private fun loadBenefits(c: Connection): Map<String, List<Benefit>> {
         val hasResidenceMin = hasColumn(c, "visa_benefits", "residence_min")
+        val hasNationalities = hasColumn(c, "visa_benefits", "nationalities")
         val out = HashMap<String, MutableList<Benefit>>()
         c.createStatement().use { st ->
-            val sql = "SELECT holding, destination, type, days, entry_type" +
-                if (hasResidenceMin) ", residence_min FROM visa_benefits" else " FROM visa_benefits"
+            val sql = buildString {
+                append("SELECT holding, destination, type, days, entry_type")
+                if (hasResidenceMin) append(", residence_min")
+                if (hasNationalities) append(", nationalities")
+                append(" FROM visa_benefits")
+            }
             st.executeQuery(sql).use { rs ->
                 while (rs.next()) {
                     val h = rs.getString("holding")
                     val d = rs.getInt("days")
                     val days = if (rs.wasNull()) null else d
                     val residenceMin = if (hasResidenceMin) rs.getString("residence_min") else null
+                    // nationalities is a comma list (same shape as entry_type), so the same parser applies.
+                    val nationalities = if (hasNationalities) parseEntryTypes(rs.getString("nationalities")) else emptySet()
                     out.getOrPut(h) { mutableListOf() }
-                        .add(Benefit(h, rs.getString("destination"), rs.getString("type"), days, parseEntryTypes(rs.getString("entry_type")), residenceMin))
+                        .add(Benefit(h, rs.getString("destination"), rs.getString("type"), days, parseEntryTypes(rs.getString("entry_type")), residenceMin, nationalities))
                 }
             }
         }
@@ -95,7 +102,7 @@ object JdbcRepository {
     private fun hasColumn(c: Connection, table: String, column: String): Boolean {
         c.createStatement().use { st ->
             st.executeQuery("PRAGMA table_info($table)").use { rs ->
-                while (rs.next()) if (rs.getString(1) == column) return true
+                while (rs.next()) if (rs.getString(2) == column) return true
             }
         }
         return false

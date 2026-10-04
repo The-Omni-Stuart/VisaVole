@@ -69,16 +69,24 @@ class VisaRepository(private val db: VisaDb) {
 
     private fun loadBenefits(c: android.database.sqlite.SQLiteDatabase): Map<String, List<Benefit>> {
         val hasResidenceMin = hasColumn(c, "visa_benefits", "residence_min")
-        val sql = "SELECT holding, destination, type, days, entry_type" +
-            if (hasResidenceMin) ", residence_min FROM visa_benefits" else " FROM visa_benefits"
+        val hasNationalities = hasColumn(c, "visa_benefits", "nationalities")
+        val sql = buildString {
+            append("SELECT holding, destination, type, days, entry_type")
+            if (hasResidenceMin) append(", residence_min")
+            if (hasNationalities) append(", nationalities")
+            append(" FROM visa_benefits")
+        }
         val out = HashMap<String, MutableList<Benefit>>()
         c.rawQuery(sql, null).use { cur ->
+            val natIdx = if (hasNationalities) cur.getColumnIndex("nationalities") else -1
             while (cur.moveToNext()) {
                 val h = cur.getString(0)
                 val days = if (cur.isNull(3)) null else cur.getInt(3)
                 val entryTypes = parseEntryTypes(cur.getString(4))
                 val residenceMin = if (hasResidenceMin) cur.getString(5) else null
-                out.getOrPut(h) { mutableListOf() }.add(Benefit(h, cur.getString(1), cur.getString(2), days, entryTypes, residenceMin))
+                // nationalities is a comma list (same shape as entry_type), so the same parser applies.
+                val nationalities = if (natIdx >= 0) parseEntryTypes(cur.getString(natIdx)) else emptySet()
+                out.getOrPut(h) { mutableListOf() }.add(Benefit(h, cur.getString(1), cur.getString(2), days, entryTypes, residenceMin, nationalities))
             }
         }
         return out

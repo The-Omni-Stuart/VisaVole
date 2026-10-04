@@ -66,6 +66,12 @@ object AccessModel {
         return effective.ordinal >= min.ordinal
     }
 
+    /** A benefit with an empty [Benefit.nationalities] applies to every nationality; otherwise the
+     *  traveller must hold a passport of one of the listed nationalities ([homeNats]). This is what
+     *  makes a grant like the British-Irish Visa Scheme apply only to its covered nationalities. */
+    private fun nationalitySatisfied(benefitNationalities: Set<String>, homeNats: Set<String>): Boolean =
+        benefitNationalities.isEmpty() || benefitNationalities.intersect(homeNats).isNotEmpty()
+
     /**
      * True when [doc] is expired as of [today] — the unified [DocStatus] view (date expiry, entry
      * exhaustion, or supersession), not just the raw date. Callers without trip context pass the
@@ -144,8 +150,9 @@ object AccessModel {
     fun expiredPassportFreedomSet(home: String, world: WorldData): Set<String> =
         passportCandidates(home, world, expired = true).keys
 
-    /** Candidates from a held document (residence / visa / permit / custom). */
-    private fun documentCandidates(doc: Document, world: WorldData): Map<String, Access> {
+    /** Candidates from a held document (residence / visa / permit / custom). [homeNats] is the set
+     *  of passport nationalities the traveller holds, used to gate nationality-restricted benefits. */
+    private fun documentCandidates(doc: Document, world: WorldData, homeNats: Set<String>): Map<String, Access> {
         val map = LinkedHashMap<String, Access>()
         when (val k = doc.kind) {
             is Passport -> { /* contributed via passportCandidates */ }
@@ -165,6 +172,7 @@ object AccessModel {
                     // through entry-restricted grants (P2-31).
                     if (!entryTypeSatisfied(b.entryTypes, doc.entryType())) continue
                     if (!residenceMinSatisfied(doc, world, b)) continue
+                    if (!nationalitySatisfied(b.nationalities, homeNats)) continue
                     merge(map, b.destination, Access(benefitLevel, b.days, "${h.name} (${b.type})", true))
                 }
             }
@@ -210,6 +218,7 @@ object AccessModel {
                         if (!AccessLevel.isEntryBenefit(b.type)) continue
                         if (!entryTypeSatisfied(b.entryTypes, doc.entryType())) continue
                         if (!residenceMinSatisfied(doc, world, b)) continue
+                        if (!nationalitySatisfied(b.nationalities, homeNats)) continue
                         merge(map, b.destination, Access(perkLevel, b.days, "${h.name} (${b.type})", true))
                     }
                 }
@@ -251,12 +260,15 @@ object AccessModel {
         docs: List<Document>,
         world: WorldData,
         statuses: Map<String, DocStatus>,
-    ): Map<String, Map<String, Access>> = docs.associate { doc ->
-        val candidates = when (val k = doc.kind) {
-            is Passport -> passportCandidates(k.iso2, world, statuses[doc.id]?.expired == true)
-            else -> documentCandidates(doc, world)
+    ): Map<String, Map<String, Access>> {
+        val homeNats = homeCountries(docs)
+        return docs.associate { doc ->
+            val candidates = when (val k = doc.kind) {
+                is Passport -> passportCandidates(k.iso2, world, statuses[doc.id]?.expired == true)
+                else -> documentCandidates(doc, world, homeNats)
+            }
+            doc.id to candidates
         }
-        doc.id to candidates
     }
 
     /**
@@ -301,7 +313,7 @@ object AccessModel {
             .map { d ->
                 val candidates = when (val k = d.kind) {
                     is Passport -> passportCandidates(k.iso2, world, isExpired(d, docs, world, today, trips))
-                    else -> documentCandidates(d, world)
+                    else -> documentCandidates(d, world, homeCountries(docs))
                 }
                 val label = when (val k = d.kind) {
                     is Passport -> world.countries[k.iso2]?.name ?: k.iso2
@@ -340,7 +352,7 @@ object AccessModel {
             if (d.kind !is Passport && (expired || notYetValid(d, today))) return@filter false
             val candidates = when (val k = d.kind) {
                 is Passport -> passportCandidates(k.iso2, world, expired)
-                else -> documentCandidates(d, world)
+                else -> documentCandidates(d, world, homeCountries(docs))
             }
             (candidates[dest]?.level ?: UNKNOWN) != UNKNOWN
         }
@@ -412,6 +424,7 @@ object AccessModel {
         statuses: Map<String, DocStatus>? = null,
         candidateMaps: Map<String, Map<String, Access>>? = null,
     ): String? {
+        val homeNats = homeCountries(docs)
         val evaluated = docs
             .mapNotNull { doc ->
                 val expired = expiredOf(doc, docs, world, today, trips, statuses)
@@ -419,7 +432,7 @@ object AccessModel {
                 val candidates = candidateMaps?.get(doc.id)
                     ?: when (val k = doc.kind) {
                         is Passport -> passportCandidates(k.iso2, world, expired)
-                        else -> documentCandidates(doc, world)
+                        else -> documentCandidates(doc, world, homeNats)
                     }
                 candidates[dest]?.takeIf { it.level != UNKNOWN }?.let { doc to it }
             }
@@ -488,6 +501,7 @@ object AccessModel {
         statuses: Map<String, DocStatus>? = null,
     ): Map<String, Access> {
         val result = LinkedHashMap<String, Access>()
+        val homeNats = homeCountries(docs)
         for (doc in docs) {
             // A document that is not valid yet unlocks nothing at [today].
             if (notYetValid(doc, today)) continue
@@ -501,7 +515,7 @@ object AccessModel {
                 else -> {
                     // A lapsed document (visa / residence / permit) no longer unlocks anything.
                     if (expiredOf(doc, docs, world, today, trips, statuses)) continue
-                    for ((dest, access) in documentCandidates(doc, world)) merge(result, dest, access)
+                    for ((dest, access) in documentCandidates(doc, world, homeNats)) merge(result, dest, access)
                 }
             }
         }

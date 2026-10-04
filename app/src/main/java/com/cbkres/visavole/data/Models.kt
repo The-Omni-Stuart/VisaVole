@@ -22,7 +22,9 @@ data class Holding(val id: String, val name: String, val category: String, val i
  *  [entryTypes] restricts the grant to documents with one of these entry types
  *  ("single"/"double"/"multiple"); empty = applies to every entry type. [residenceMin] is the
  *  minimum residence class ("long_term" | "permanent") the document must reach for the grant to
- *  apply; null = no minimum. */
+ *  apply; null = no minimum. [nationalities] restricts the grant to travellers holding a passport
+ *  of one of these nationalities (ISO2); empty = applies to every nationality (e.g. the
+ *  British-Irish Visa Scheme only opens Ireland to Indian and Chinese nationals). */
 data class Benefit(
     val holding: String,
     val destination: String,
@@ -30,6 +32,7 @@ data class Benefit(
     val days: Int?,
     val entryTypes: Set<String> = emptySet(),
     val residenceMin: String? = null,
+    val nationalities: Set<String> = emptySet(),
 )
 
 /** A per-destination stay/entry rule from `stay_rules`: the window and entry type. */
