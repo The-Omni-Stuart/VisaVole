@@ -433,7 +433,7 @@ private fun TripCard(
                 row.zoneAllowances.size > 1 && !expanded -> CyclingZonePill(row.zoneAllowances, row.noDocZoneTitles)
                 row.zoneAllowances.size <= 1 -> {
                     val noDoc = row.zoneAllowances.firstOrNull()?.title in row.noDocZoneTitles
-                    if (noDoc) StatusPill("no valid doc", MaterialTheme.colorScheme.error)
+                    if (noDoc) StatusPill("no valid doc", severityColor(Severity.BAD, LocalEffectiveDarkTheme.current))
                     else row.allowanceHint?.let { StatusPill(it, allowanceHintColor) }
                 }
             }
@@ -463,8 +463,12 @@ private fun TripCard(
                             // bottom. Single-zone trips keep the one header pill instead.
                             if (row.zoneAllowances.size > 1) {
                                 sr.zoneAllowance?.let { a ->
-                                    zoneHint(a)?.let { h ->
-                                        StatusPill(h, ringColor(a, LocalEffectiveDarkTheme.current))
+                                    if (sr.docLabel == null) {
+                                        StatusPill("no valid doc", severityColor(Severity.BAD, LocalEffectiveDarkTheme.current))
+                                    } else {
+                                        zoneHint(a)?.let { h ->
+                                            StatusPill(h, ringColor(a, LocalEffectiveDarkTheme.current))
+                                        }
                                     }
                                 }
                             }
@@ -525,7 +529,7 @@ private fun labeledZoneHint(a: AllowanceSnapshot): String {
 @Composable
 private fun CyclingZonePill(zones: List<AllowanceSnapshot>, noDocZoneTitles: Set<String>) {
     val isDark = LocalEffectiveDarkTheme.current
-    val error = MaterialTheme.colorScheme.error
+    val error = severityColor(Severity.BAD, isDark)
     var face by remember(zones) { mutableStateOf(0) }
     LaunchedEffect(zones) {
         if (zones.size < 2) {

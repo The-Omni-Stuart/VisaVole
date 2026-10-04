@@ -525,7 +525,7 @@ fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = 
         }
     }
     val (center, centerLabel) = when {
-        noValidDoc -> "No valid" to "doc"
+        noValidDoc -> "NO DOC" to ""
         overstay -> "-${a.overstayDays}" to "OVERSTAY!"
         // A window-less (UNKNOWN) allowance has no remaining count — show "no data", not a bogus
         // "0 days left" (P2-20).
@@ -570,23 +570,34 @@ fun AllowanceRing(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = 
         }
         Crossfade(targetState = showDaysFace, animationSpec = tween(300)) { face ->
             val (c, l) = if (face) daysCenter ?: (center to centerLabel) else center to centerLabel
-            val wordFace = c == "In use" || c == "Expired" || c == "No valid"
+            val wordFace = c == "In use" || c == "Expired"
             Box(Modifier.heightIn(min = faceHeight), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                if (noValidDoc) {
+                    // A single balanced face: "NO DOC" centred, with no tiny caption to throw the
+                    // weight off (the full "No valid document" reads in the summary beside the ring).
                     Text(
-                        c,
-                        // Word faces ("In use", "Expired") run one step smaller than a bare number.
-                        style = if (wordFace) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
+                        center,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = color,
                     )
-                    Text(
-                        l,
-                        style = MaterialTheme.typography.labelSmall,
-                        // "OVERSTAY!" / "doc" are bold + the ring's red; other labels stay muted.
-                        color = if (overstay || noValidDoc) color else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = if (overstay || noValidDoc) FontWeight.Bold else FontWeight.Normal,
-                    )
+                } else {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            c,
+                            // Word faces ("In use", "Expired") run one step smaller than a bare number.
+                            style = if (wordFace) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = color,
+                        )
+                        Text(
+                            l,
+                            style = MaterialTheme.typography.labelSmall,
+                            // "OVERSTAY!" is bold + the ring's red; other labels stay muted.
+                            color = if (overstay) color else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (overstay) FontWeight.Bold else FontWeight.Normal,
+                        )
+                    }
                 }
             }
         }
