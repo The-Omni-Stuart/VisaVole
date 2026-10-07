@@ -278,7 +278,7 @@ internal fun WorldMapCanvas(
         val targetCenter = clampCenter(f.point - visibleCenterShift, bs * targetZoom, geometry, w, h, locked = false)
         val fromZoom = zoom
         val fromCenter = centerWorld
-        Animatable(0f).animateTo(1f, tween(350)) {
+        Animatable(0f).animateTo(1f, tween(600)) {
             val k = value
             zoom = fromZoom + (targetZoom - fromZoom) * k
             centerWorld = Offset(

@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
@@ -113,9 +114,11 @@ import com.cbkres.visavole.ui.Focus
 import com.cbkres.visavole.ui.IsoShape
 import com.cbkres.visavole.ui.defaultCenter
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -444,12 +447,26 @@ private fun MapTab(
     val density = LocalDensity.current
     var searchBarH by remember { mutableStateOf(0.dp) }
     var cardH by remember { mutableStateOf(0.dp) }
+    var lastStableCardH by remember { mutableStateOf(0.dp) }
     var legendH by remember { mutableStateOf(0.dp) }
     val selName = selected?.let { iso -> s.world.countries[iso]?.name ?: s.geometry.countries[iso]?.name ?: iso }
     val cardVisible = selected != null && selName != null
     // The bottom padding the map's floating UI keeps between itself and the card/legend: the
     // measured card height plus 24dp while a card is up, the legend height plus 8dp otherwise.
-    val settledBottomPadding = if (cardVisible) cardH + 24.dp else legendH + 8.dp
+    val controlsTargetBottomPadding =
+        if (cardVisible) cardH + 24.dp
+        else legendH + 8.dp
+
+    val centeringBottomPadding =
+        if (cardVisible) {
+            if (lastStableCardH > 0.dp) {
+                lastStableCardH + 24.dp
+            } else {
+                24.dp
+            }
+        } else {
+            legendH + 8.dp
+        }
     // Animated (same spring as the card slide). The map canvas is never shrunk for the card —
     // the card slides over the full-bleed map — so no dark band can appear between the map
     // edge and the card while the fixed 420dp drop exceeds the card's actual height. The
@@ -458,7 +475,7 @@ private fun MapTab(
     // target is stable while the card slides in (see WorldMapCanvas).
     val cardAnimSpec = spring<Dp>(Spring.DampingRatioNoBouncy, Spring.StiffnessMedium)
     val controlsBottomPadding by animateDpAsState(
-        targetValue = settledBottomPadding,
+        targetValue = controlsTargetBottomPadding,
         animationSpec = cardAnimSpec,
         label = "controlsBottomPadding",
     )
@@ -475,7 +492,7 @@ private fun MapTab(
             homeCountries = s.homeCountries,
             ownVisaCountries = s.ownVisaCountries,
             controlsBottomPadding = controlsBottomPadding,
-            centeringBottomPadding = settledBottomPadding,
+            centeringBottomPadding = centeringBottomPadding,
             topInset = searchBarH,
             modifier = Modifier.fillMaxSize(),
         )
@@ -523,6 +540,7 @@ private fun MapTab(
                 // breakdown rows + exact stay label fill in a moment later.
                 var breakdown by remember(selected) { mutableStateOf<List<DocAccess>?>(null) }
                 var daysLabel by remember(selected) { mutableStateOf<String?>(null) }
+
                 LaunchedEffect(selected, s.homeCountries, s.access, s.world, s.docs, s.trips, validHomes) {
                     if (selected == null) return@LaunchedEffect
                     val (b, dl) = withContext(Dispatchers.Default) {
@@ -537,17 +555,79 @@ private fun MapTab(
                     breakdown = b
                     daysLabel = dl
                 }
-                CountryDetailCard(
-                    countryName = selName!!,
-                    access = selectedAccess,
-                    breakdown = breakdown.orEmpty(),
-                    onDismiss = { pick(null) },
-                    modifier = Modifier.graphicsLayer { translationY = cardDrop.toPx() },
-                    isHome = selected in s.homeCountries,
-                    isOwnCovered = selected in s.ownVisaCountries,
-                    homePassport = if (selected in s.homeCountries) s.world.countries[selected]?.name else null,
-                    daysLabel = daysLabel,
+
+                val detailCardShape = RoundedCornerShape(
+                    topStart = 16.dp,
+                    topEnd = 16.dp,
+                    bottomStart = 0.dp,
+                    bottomEnd = 0.dp,
                 )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+
+                        // Move the whole thing when the card opens/closes.
+                        .graphicsLayer {
+                            translationY = cardDrop.toPx()
+                        }
+
+                        // These two belong OUTSIDE animateContentSize.
+                        // They paint the entire animated envelope, including the
+                        // temporary extra space while a large card shrinks.
+                        .clip(detailCardShape)
+                        .background(
+                            MaterialTheme.colorScheme.surfaceContainerHigh
+                        )
+
+                        // The wrapper changes height, not CountryDetailCard itself.
+                        .animateContentSize(
+                            animationSpec = tween(600),
+                            alignment = Alignment.TopCenter,
+                            finishedListener = { _, targetSize ->
+                                if (breakdown != null) {
+                                    lastStableCardH =
+                                        Dp(targetSize.height / density.density)
+                                }
+                            },
+                        )
+
+                        // While the next country is loading, hold exactly the
+                        // previous finished card height.
+                        .then(
+                            if (
+                                breakdown == null &&
+                                lastStableCardH > 0.dp
+                            ) {
+                                Modifier.height(lastStableCardH)
+                            } else {
+                                Modifier
+                            }
+                        ),
+
+                    // Keep the actual card CONTENT at the top of the animated area.
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    CountryDetailCard(
+                        countryName = selName!!,
+                        access = selectedAccess,
+                        breakdown = breakdown,
+                        onDismiss = { pick(null) },
+
+                        // No size animation here anymore.
+                        modifier = Modifier.fillMaxWidth(),
+
+                        isHome = selected in s.homeCountries,
+                        isOwnCovered = selected in s.ownVisaCountries,
+                        homePassport =
+                            if (selected in s.homeCountries) {
+                                s.world.countries[selected]?.name
+                            } else {
+                                null
+                            },
+                        daysLabel = daysLabel,
+                    )
+                }
             }
         }
         if (selName == null) {

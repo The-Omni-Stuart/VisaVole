@@ -1,5 +1,6 @@
 package com.cbkres.visavole.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -14,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +24,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,11 +38,12 @@ import com.cbkres.visavole.domain.Access
 import com.cbkres.visavole.domain.AccessLevel
 import com.cbkres.visavole.domain.DocAccess
 
+
 @Composable
 fun CountryDetailCard(
     countryName: String,
     access: Access?,
-    breakdown: List<DocAccess> = emptyList(),
+    breakdown: List<DocAccess>?,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     isHome: Boolean = false,
@@ -96,69 +106,128 @@ fun CountryDetailCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (breakdown.isNotEmpty()) {
-                Spacer(Modifier.height(20.dp))
-                Text(
-                    "Enter with",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                val breakdownScroll = rememberScrollState()
-                // P3: show up to 5 one-line rows before the breakdown becomes scrollable (was 4).
-                val maxVisibleBreakdownRows = 5
-                val breakdownRowHeight = 32.dp
-                val breakdownSpacing = 8.dp
-                val breakdownMaxHeight = breakdownRowHeight * maxVisibleBreakdownRows +
-                    breakdownSpacing * (maxVisibleBreakdownRows - 1)
-                // P3-57: only the top haze (the "scrolled" cue) — the bottom fade is ~fully
-                // opaque for a barely-scrollable breakdown and washes out the last row.
-                val (breakdownTop, _) = breakdownScroll.hazeAlphas()
-                HazeBox(breakdownTop, 0f, MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
+            AnimatedContent(
+                targetState = breakdown,
+                transitionSpec = {
+                    if (targetState == null) {
+                        // Switching country: go to loading immediately.
+                        fadeIn(tween(0)) togetherWith fadeOut(tween(0))
+                    } else {
+                        // Data has arrived: gently reveal it.
+                        fadeIn(
+                            animationSpec = tween(
+                                durationMillis = 250,
+                                delayMillis = 150,
+                            )
+                        ) togetherWith fadeOut(tween(120))
+                    }
+                },
+                label = "breakdownContent",
+            ) { currentBreakdown ->
+                if (currentBreakdown == null) {
                     Column(
-                        Modifier.then(
-                            if (breakdown.size > maxVisibleBreakdownRows) {
-                                Modifier
-                                    .height(breakdownMaxHeight)
-                                    .verticalScroll(breakdownScroll)
-                            } else {
-                                Modifier
-                            },
-                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        breakdown.forEachIndexed { i, entry ->
-                            Row(
-                                Modifier.height(breakdownRowHeight),
-                                verticalAlignment = Alignment.CenterVertically,
+                        Spacer(Modifier.height(20.dp))
+                        CircularProgressIndicator()
+                        Spacer(Modifier.height(8.dp))
+                    }
+                } else if (currentBreakdown.isNotEmpty()) {
+
+                    Column {
+                        Spacer(Modifier.height(20.dp))
+
+                        Text(
+                            "Enter with",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        val breakdownScroll = rememberScrollState()
+
+                        val maxVisibleBreakdownRows = 5
+                        val breakdownRowHeight = 32.dp
+                        val breakdownSpacing = 8.dp
+
+                        val breakdownMaxHeight =
+                            breakdownRowHeight * maxVisibleBreakdownRows +
+                                    breakdownSpacing * (maxVisibleBreakdownRows - 1)
+
+                        val (breakdownTop, _) = breakdownScroll.hazeAlphas()
+
+                        HazeBox(
+                            breakdownTop,
+                            0f,
+                            MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                Modifier.then(
+                                    if (currentBreakdown.size > maxVisibleBreakdownRows) {
+                                        Modifier
+                                            .height(breakdownMaxHeight)
+                                            .verticalScroll(breakdownScroll)
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
                             ) {
-                                val isYourCountry = entry.access.reason == "Your country"
-                                Text(
-                                    if (isYourCountry) "Your country" else entry.access.level.label(),
-                                    color = statusTone(entry.access.level, LocalEffectiveDarkTheme.current, isYourCountry, entry.isOwn),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    modifier = Modifier.widthIn(min = 72.dp),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                Spacer(Modifier.width(10.dp))
-                                Text(
-                                    entry.label,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                if (entry.access.days != null) {
-                                    Text(
-                                        "${entry.access.days} days",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
+                                currentBreakdown.forEachIndexed { i, entry ->
+
+                                    Row(
+                                        Modifier.height(breakdownRowHeight),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        val isYourCountry =
+                                            entry.access.reason == "Your country"
+
+                                        Text(
+                                            if (isYourCountry) {
+                                                "Your country"
+                                            } else {
+                                                entry.access.level.label()
+                                            },
+                                            color = statusTone(
+                                                entry.access.level,
+                                                LocalEffectiveDarkTheme.current,
+                                                isYourCountry,
+                                                entry.isOwn,
+                                            ),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.widthIn(min = 72.dp),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+
+                                        Spacer(Modifier.width(10.dp))
+
+                                        Text(
+                                            entry.label,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            modifier = Modifier.weight(1f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+
+                                        if (entry.access.days != null) {
+                                            Text(
+                                                "${entry.access.days} days",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+
+                                    if (i < currentBreakdown.size - 1) {
+                                        Spacer(Modifier.height(breakdownSpacing))
+                                    }
                                 }
                             }
-                            if (i < breakdown.size - 1) Spacer(Modifier.height(breakdownSpacing))
                         }
                     }
                 }
