@@ -120,6 +120,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import com.cbkres.visavole.ui.CountrySearchBar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -496,7 +497,7 @@ private fun MapTab(
             topInset = searchBarH,
             modifier = Modifier.fillMaxSize(),
         )
-        SearchBar(
+        CountrySearchBar(
             query = query,
             onQuery = onQuery,
             // P3-16: the IME "Search" action picks the first match (previously it only hid the
@@ -685,41 +686,41 @@ private fun MapTab(
     }
 }
 
-@Composable
-private fun SearchBar(
-    query: String,
-    onQuery: (String) -> Unit,
-    onSearch: () -> Unit,
-    onFocusChanged: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    OutlinedTextField(
-        value = query,
-        onValueChange = onQuery,
-        // P3-17: a real label (not just a placeholder) so TalkBack reliably announces the field's
-        // purpose — material3 wires the label to the editable node's accessible name.
-        label = { Text("Search country") },
-        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-        trailingIcon = {
-            if (query.isNotEmpty()) {
-                IconButton(onClick = { onQuery("") }) { Icon(Icons.Filled.Close, contentDescription = "Clear") }
-            }
-        },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { onSearch() }),
-        shape = MaterialTheme.shapes.large,
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ),
-        modifier = modifier
-            .fillMaxWidth()
-            .onFocusChanged { onFocusChanged(it.isFocused) }
-            .padding(horizontal = 12.dp)
-            .padding(top = 8.dp, bottom = 4.dp),
-    )
-}
+//@Composable
+//private fun SearchBar(
+//    query: String,
+//    onQuery: (String) -> Unit,
+//    onSearch: () -> Unit,
+//    onFocusChanged: (Boolean) -> Unit,
+//    modifier: Modifier = Modifier,
+//) {
+//    OutlinedTextField(
+//        value = query,
+//        onValueChange = onQuery,
+//        // P3-17: a real label (not just a placeholder) so TalkBack reliably announces the field's
+//        // purpose — material3 wires the label to the editable node's accessible name.
+//        label = { Text("Search country") },
+//        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+//        trailingIcon = {
+//            if (query.isNotEmpty()) {
+//                IconButton(onClick = { onQuery("") }) { Icon(Icons.Filled.Close, contentDescription = "Clear") }
+//            }
+//        },
+//        singleLine = true,
+//        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+//        keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+//        shape = MaterialTheme.shapes.large,
+//        colors = OutlinedTextFieldDefaults.colors(
+//            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+//            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+//        ),
+//        modifier = modifier
+//            .fillMaxWidth()
+//            .onFocusChanged { onFocusChanged(it.isFocused) }
+//            .padding(horizontal = 12.dp)
+//            .padding(top = 8.dp, bottom = 4.dp),
+//    )
+//}
 
 @Composable
 private fun LegendRow(counts: Map<AccessLevel?, Int>, homeCount: Int = 1) {
