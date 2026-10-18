@@ -106,6 +106,8 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import com.cbkres.visavole.ui.screens.ErrorScreen
+import com.cbkres.visavole.ui.screens.LoadingScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -181,38 +183,6 @@ fun VisaVoleApp(
                     onThemeModeChanged = onThemeModeChanged,
                     onDynamicColorChanged = onDynamicColorChanged,
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun LoadingScreen() {
-    Surface(color = MaterialTheme.colorScheme.background) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator()
-                Spacer(Modifier.height(12.dp))
-                Text("Loading…", style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-    }
-}
-
-/** Shown when the bundled visa data could not be loaded; retry reruns the initial load. */
-@Composable
-private fun ErrorScreen(message: String, onRetry: () -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.background) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(32.dp),
-            ) {
-                Text("Something went wrong", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(8.dp))
-                Text(message, style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(24.dp))
-                Button(onClick = onRetry) { Text("Retry") }
             }
         }
     }
