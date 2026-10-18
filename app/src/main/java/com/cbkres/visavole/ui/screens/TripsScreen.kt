@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui
+package com.cbkres.visavole.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -91,6 +91,11 @@ import com.cbkres.visavole.domain.TripWarning
 import com.cbkres.visavole.domain.WarningSeverity
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
+import com.cbkres.visavole.ui.animateItemToCenter
+import com.cbkres.visavole.ui.hazeAlphas
+import com.cbkres.visavole.ui.screens.CountryPicker
+import com.cbkres.visavole.ui.screens.SelectionField
+import com.cbkres.visavole.ui.toUtcMillis
 import java.time.LocalDate
 import java.util.UUID
 import kotlinx.coroutines.delay
@@ -98,8 +103,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun TripsScreen(
-    vm: AccessViewModel,
-    ready: AppState.Ready,
+    vm: com.cbkres.visavole.ui.AccessViewModel,
+    ready: com.cbkres.visavole.ui.AppState.Ready,
     scrollState: LazyListState,
     expandedTrips: List<String>,
     onToggleExpanded: (String) -> Unit,
@@ -139,8 +144,11 @@ fun TripsScreen(
     val validHomes = remember(ready.docs, ready.world, today) { AccessModel.validHomeCountries(ready.docs, ready.world, today) }
 
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
-        ScreenHeader("Trips", "Record your trips and track visa allowance balances.")
-        AddButtonRow("Add trip") { showAdd = true }
+        _root_ide_package_.com.cbkres.visavole.ui.ScreenHeader(
+            "Trips",
+            "Record your trips and track visa allowance balances."
+        )
+        _root_ide_package_.com.cbkres.visavole.ui.AddButtonRow("Add trip") { showAdd = true }
         val sections = ready.tripSections
         // Every trip card's position in the LazyColumn below, keyed by trip id: the allowances item
         // sits at 0, then each non-empty section adds a header before its cards. A ring tap centres
@@ -161,7 +169,11 @@ fun TripsScreen(
         val tripsListState = scrollState
         // State-taking overload: the per-frame haze read stays inside HazeBox, so scrolling
         // recomposes only the haze edges — not the whole screen and every visible card (P1-14).
-        HazeBox(tripsListState, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
+        _root_ide_package_.com.cbkres.visavole.ui.HazeBox(
+            tripsListState,
+            MaterialTheme.colorScheme.background,
+            modifier = Modifier.weight(1f)
+        ) {
             LazyColumn(
                 state = tripsListState,
                 modifier = Modifier
@@ -173,18 +185,20 @@ fun TripsScreen(
                 // With no trips there are no zone allowances either, so the allowances item would
                 // only add a second stacked placeholder ("No allowances to track yet") on top of
                 // "No trips yet" — suppress it until a trip exists (P3-14).
-                val hasTrips = sections.upcoming.isNotEmpty() || sections.current.isNotEmpty() || sections.previous.isNotEmpty()
+                val hasTrips =
+                    sections.upcoming.isNotEmpty() || sections.current.isNotEmpty() || sections.previous.isNotEmpty()
                 if (hasTrips) {
                     item(key = "allowances") {
-                        AllowanceSection(
+                        _root_ide_package_.com.cbkres.visavole.ui.AllowanceSection(
                             allowances = zoneAllowances,
                             primary = primary,
                             focusedKey = effectiveFocusKey,
                             onFocus = { focusedKey = if (focusedKey == it) null else it },
                             onRingClick = { snap ->
                                 // Jump the list to the zone's trip (the in-trip one first) and centre it.
-                                val trip = (snap.currentTripId ?: snap.relevantTripIds.firstOrNull())
-                                    ?.let { id -> ready.trips.firstOrNull { t -> t.id == id } }
+                                val trip =
+                                    (snap.currentTripId ?: snap.relevantTripIds.firstOrNull())
+                                        ?.let { id -> ready.trips.firstOrNull { t -> t.id == id } }
                                 if (trip != null) {
                                     if (trip.id !in expandedTrips) onToggleExpanded(trip.id)
                                     val target = tripIndex[trip.id]
@@ -193,8 +207,13 @@ fun TripsScreen(
                                         // lands on the trip wherever it sits in the list — not while the
                                         // card is still off-screen mid-scroll.
                                         scope.launch {
-                                            tripsListState.animateItemToCenter(target, listViewportPx)
-                                            val n = (flashTrip?.takeIf { it.first == trip.id }?.second ?: 0) + 1
+                                            tripsListState.animateItemToCenter(
+                                                target,
+                                                listViewportPx
+                                            )
+                                            val n =
+                                                (flashTrip?.takeIf { it.first == trip.id }?.second
+                                                    ?: 0) + 1
                                             flashTrip = trip.id to n
                                             // Clear the trigger once the ripple has had time to play (~600 ms:
                                             // a 300 ms held press then a 300 ms release fade): a card
@@ -211,24 +230,84 @@ fun TripsScreen(
                     }
                 }
                 if (!hasTrips) {
-                    item(key = "empty") { EmptyState("No trips yet. Add your first trip to start tracking allowances.") }
+                    item(key = "empty") { _root_ide_package_.com.cbkres.visavole.ui.EmptyState("No trips yet. Add your first trip to start tracking allowances.") }
                 } else {
                     if (sections.upcoming.isNotEmpty()) {
-                        item(key = "header-upcoming") { SectionLabel("Upcoming") }
+                        item(key = "header-upcoming") {
+                            _root_ide_package_.com.cbkres.visavole.ui.SectionLabel(
+                                "Upcoming"
+                            )
+                        }
                         items(sections.upcoming, key = { it.id }) { trip ->
-                            TripCard(trip, ready.world, ready.docs, ready.allowances, passportCounts, passportNumbers, validHomes, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip }, flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second ?: 0)
+                            TripCard(
+                                trip,
+                                ready.world,
+                                ready.docs,
+                                ready.allowances,
+                                passportCounts,
+                                passportNumbers,
+                                validHomes,
+                                today,
+                                expanded = trip.id in expandedTrips,
+                                onExpand = { onToggleExpanded(trip.id) },
+                                onEdit = { editingTrip = trip },
+                                onEnd = {},
+                                onDelete = { deletingTrip = trip },
+                                flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second
+                                    ?: 0
+                            )
                         }
                     }
                     if (sections.current.isNotEmpty()) {
-                        item(key = "header-current") { SectionLabel("Current") }
+                        item(key = "header-current") {
+                            _root_ide_package_.com.cbkres.visavole.ui.SectionLabel(
+                                "Current"
+                            )
+                        }
                         items(sections.current, key = { it.id }) { trip ->
-                            TripCard(trip, ready.world, ready.docs, ready.allowances, passportCounts, passportNumbers, validHomes, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = { endingTrip = trip }, onDelete = { deletingTrip = trip }, flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second ?: 0)
+                            TripCard(
+                                trip,
+                                ready.world,
+                                ready.docs,
+                                ready.allowances,
+                                passportCounts,
+                                passportNumbers,
+                                validHomes,
+                                today,
+                                expanded = trip.id in expandedTrips,
+                                onExpand = { onToggleExpanded(trip.id) },
+                                onEdit = { editingTrip = trip },
+                                onEnd = { endingTrip = trip },
+                                onDelete = { deletingTrip = trip },
+                                flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second
+                                    ?: 0
+                            )
                         }
                     }
                     if (sections.previous.isNotEmpty()) {
-                        item(key = "header-previous") { SectionLabel("Previous") }
+                        item(key = "header-previous") {
+                            _root_ide_package_.com.cbkres.visavole.ui.SectionLabel(
+                                "Previous"
+                            )
+                        }
                         items(sections.previous, key = { it.id }) { trip ->
-                            TripCard(trip, ready.world, ready.docs, ready.allowances, passportCounts, passportNumbers, validHomes, today, expanded = trip.id in expandedTrips, onExpand = { onToggleExpanded(trip.id) }, onEdit = { editingTrip = trip }, onEnd = {}, onDelete = { deletingTrip = trip }, flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second ?: 0)
+                            TripCard(
+                                trip,
+                                ready.world,
+                                ready.docs,
+                                ready.allowances,
+                                passportCounts,
+                                passportNumbers,
+                                validHomes,
+                                today,
+                                expanded = trip.id in expandedTrips,
+                                onExpand = { onToggleExpanded(trip.id) },
+                                onEdit = { editingTrip = trip },
+                                onEnd = {},
+                                onDelete = { deletingTrip = trip },
+                                flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second
+                                    ?: 0
+                            )
                         }
                     }
                 }
@@ -372,8 +451,13 @@ private fun TripCard(
             noDocZoneTitles = stops.filter { it.docLabel == null }.map { it.zoneLabel }.toSet(),
         )
     }
-    val allowanceHintColor = row.relatedAllowance?.let { ringColor(it, LocalEffectiveDarkTheme.current) } ?: MaterialTheme.colorScheme.onSurfaceVariant
-    VisaListCard(
+    val allowanceHintColor = row.relatedAllowance?.let {
+        _root_ide_package_.com.cbkres.visavole.ui.ringColor(
+            it,
+            _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+        )
+    } ?: MaterialTheme.colorScheme.onSurfaceVariant
+    _root_ide_package_.com.cbkres.visavole.ui.VisaListCard(
         onClick = onExpand,
         flashTrigger = flashTrigger,
         actions = {
@@ -390,9 +474,21 @@ private fun TripCard(
             }
         },
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatusPill(trip.statusAt(today).label, MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(row.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+                trip.statusAt(today).label,
+                MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                row.title,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
             Text(
                 text = if (expanded) "−" else "+",
                 style = MaterialTheme.typography.titleMedium,
@@ -414,7 +510,10 @@ private fun TripCard(
         )
         // Top-aligned: expanded zone lists can wrap to several lines, and the hint pill should
         // stay on the first line instead of floating at the middle of the block.
-        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             if (row.zones.isNotEmpty()) {
                 Text(
                     row.zones.joinToString(", "),
@@ -430,11 +529,26 @@ private fun TripCard(
             // in the expanded block instead. A zone whose stop has no document shows "no valid doc"
             // in place of its allowance. Single-zone trips keep the original pill unchanged.
             when {
-                row.zoneAllowances.size > 1 && !expanded -> CyclingZonePill(row.zoneAllowances, row.noDocZoneTitles)
+                row.zoneAllowances.size > 1 && !expanded -> CyclingZonePill(
+                    row.zoneAllowances,
+                    row.noDocZoneTitles
+                )
+
                 row.zoneAllowances.size <= 1 -> {
                     val noDoc = row.zoneAllowances.firstOrNull()?.title in row.noDocZoneTitles
-                    if (noDoc) StatusPill("no valid doc", severityColor(Severity.BAD, LocalEffectiveDarkTheme.current))
-                    else row.allowanceHint?.let { StatusPill(it, allowanceHintColor) }
+                    if (noDoc) _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+                        "no valid doc",
+                        _root_ide_package_.com.cbkres.visavole.ui.severityColor(
+                            _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD,
+                            _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+                        )
+                    )
+                    else row.allowanceHint?.let {
+                        _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+                            it,
+                            allowanceHintColor
+                        )
+                    }
                 }
             }
         }
@@ -448,9 +562,23 @@ private fun TripCard(
                 row.sortedStops.forEachIndexed { index, stop ->
                     val sr = row.stops[index]
                     Column(Modifier.padding(vertical = 6.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("${index + 1}.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                            Text(sr.countryName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                "${index + 1}.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                sr.countryName,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
                             Text(
                                 sr.zoneLabel,
                                 style = MaterialTheme.typography.labelSmall,
@@ -464,10 +592,22 @@ private fun TripCard(
                             if (row.zoneAllowances.size > 1) {
                                 sr.zoneAllowance?.let { a ->
                                     if (sr.docLabel == null) {
-                                        StatusPill("no valid doc", severityColor(Severity.BAD, LocalEffectiveDarkTheme.current))
+                                        _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+                                            "no valid doc",
+                                            _root_ide_package_.com.cbkres.visavole.ui.severityColor(
+                                                _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD,
+                                                _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+                                            )
+                                        )
                                     } else {
                                         zoneHint(a)?.let { h ->
-                                            StatusPill(h, ringColor(a, LocalEffectiveDarkTheme.current))
+                                            _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+                                                h,
+                                                _root_ide_package_.com.cbkres.visavole.ui.ringColor(
+                                                    a,
+                                                    _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+                                                )
+                                            )
                                         }
                                     }
                                 }
@@ -487,10 +627,21 @@ private fun TripCard(
         }
         if (!expanded) {
             if (trip.note != null) {
-                Text(trip.note!!, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    trip.note!!,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
             if (row.docLabels.isNotEmpty()) {
-                Text(row.docLabels, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    row.docLabels,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
@@ -528,8 +679,11 @@ private fun labeledZoneHint(a: AllowanceSnapshot): String {
  */
 @Composable
 private fun CyclingZonePill(zones: List<AllowanceSnapshot>, noDocZoneTitles: Set<String>) {
-    val isDark = LocalEffectiveDarkTheme.current
-    val error = severityColor(Severity.BAD, isDark)
+    val isDark = _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+    val error = _root_ide_package_.com.cbkres.visavole.ui.severityColor(
+        _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD,
+        isDark
+    )
     var face by remember(zones) { mutableStateOf(0) }
     LaunchedEffect(zones) {
         if (zones.size < 2) {
@@ -546,17 +700,27 @@ private fun CyclingZonePill(zones: List<AllowanceSnapshot>, noDocZoneTitles: Set
     fun faceText(a: AllowanceSnapshot) =
         if (a.title in noDocZoneTitles) "${a.shortTitle ?: a.title}: no valid doc" else labeledZoneHint(a)
     fun faceColor(a: AllowanceSnapshot) =
-        if (a.title in noDocZoneTitles) error else ringColor(a, isDark)
+        if (a.title in noDocZoneTitles) error else _root_ide_package_.com.cbkres.visavole.ui.ringColor(
+            a,
+            isDark
+        )
     Box(
         modifier = Modifier.semantics(mergeDescendants = true) {
             contentDescription = zones.joinToString("; ") { faceText(it) }
         },
     ) {
         zones.forEach { a ->
-            StatusPill(faceText(a), faceColor(a), modifier = Modifier.alpha(0f))
+            _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+                faceText(a),
+                faceColor(a),
+                modifier = Modifier.alpha(0f)
+            )
         }
         Crossfade(targetState = face, animationSpec = tween(300)) { i ->
-            StatusPill(faceText(zones[i]), faceColor(zones[i]))
+            _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+                faceText(zones[i]),
+                faceColor(zones[i])
+            )
         }
     }
 }
@@ -584,35 +748,57 @@ private fun TripAlertDialog(
     onDismiss: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    VisaDialog(onDismissRequest = onDismiss) {
+    _root_ide_package_.com.cbkres.visavole.ui.VisaDialog(onDismissRequest = onDismiss) {
         Column(Modifier.padding(20.dp)) {
             Text(title, style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(12.dp))
+            content()
+            Spacer(Modifier.height(20.dp))
+            if (neutralLabel != null && confirmLabel != null) {
+                Button(
+                    onClick = onConfirm,
+                    enabled = confirmEnabled,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(confirmLabel) }
                 Spacer(Modifier.height(12.dp))
-                content()
-                Spacer(Modifier.height(20.dp))
-                if (neutralLabel != null && confirmLabel != null) {
-                    Button(onClick = onConfirm, enabled = confirmEnabled, modifier = Modifier.fillMaxWidth()) { Text(confirmLabel) }
-                    Spacer(Modifier.height(12.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { onNeutral?.invoke() ?: onDismiss() }, modifier = Modifier.weight(1f)) { Text(neutralLabel) }
-                        OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text(dismissLabel) }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = { onNeutral?.invoke() ?: onDismiss() },
+                        modifier = Modifier.weight(1f)
+                    ) { Text(neutralLabel) }
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                        Text(
+                            dismissLabel
+                        )
                     }
-                } else if (neutralLabel != null) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { onNeutral?.invoke() ?: onDismiss() }, modifier = Modifier.weight(1f)) { Text(neutralLabel) }
-                        OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) { Text(dismissLabel) }
+                }
+            } else if (neutralLabel != null) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = { onNeutral?.invoke() ?: onDismiss() },
+                        modifier = Modifier.weight(1f)
+                    ) { Text(neutralLabel) }
+                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
+                        Text(
+                            dismissLabel
+                        )
                     }
-                } else {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedButton(onClick = onDismiss) { Text(dismissLabel) }
-                        if (confirmLabel != null) {
-                            Spacer(Modifier.width(12.dp))
-                            Button(onClick = onConfirm, enabled = confirmEnabled) { Text(confirmLabel) }
-                        }
+                }
+            } else {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(onClick = onDismiss) { Text(dismissLabel) }
+                    if (confirmLabel != null) {
+                        Spacer(Modifier.width(12.dp))
+                        Button(onClick = onConfirm, enabled = confirmEnabled) { Text(confirmLabel) }
                     }
                 }
             }
         }
+    }
 }
 
 @Composable
@@ -625,32 +811,44 @@ private fun GapDialog(
     onSplit: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    VisaDialog(onDismissRequest = onDismiss) {
+    _root_ide_package_.com.cbkres.visavole.ui.VisaDialog(onDismissRequest = onDismiss) {
         Column(Modifier.padding(20.dp)) {
             Text("Gap between stops", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(12.dp))
-                Text(details, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(12.dp))
+            Text(
+                details,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            error?.let { err ->
                 Spacer(Modifier.height(8.dp))
-                Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                error?.let { err ->
-                    Spacer(Modifier.height(8.dp))
-                    Text(err, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Text(
+                    err,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            Spacer(Modifier.height(20.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onKeepGap, modifier = Modifier.weight(1f)) {
+                    Text("Keep gap")
                 }
-                Spacer(Modifier.height(20.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = onKeepGap, modifier = Modifier.weight(1f)) {
-                        Text("Keep gap")
-                    }
-                    OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
-                        Text("Cancel")
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-                Button(onClick = onSplit, modifier = Modifier.fillMaxWidth()) {
-                    Text("End trip and start new trip")
+                OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
+                    Text("Cancel")
                 }
             }
+            Spacer(Modifier.height(12.dp))
+            Button(onClick = onSplit, modifier = Modifier.fillMaxWidth()) {
+                Text("End trip and start new trip")
+            }
         }
+    }
 }
 
 @Composable
@@ -660,33 +858,41 @@ private fun OngoingConfirmDialog(
     onDone: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    VisaDialog(onDismissRequest = onDismiss) {
+    _root_ide_package_.com.cbkres.visavole.ui.VisaDialog(onDismissRequest = onDismiss) {
         Column(Modifier.padding(20.dp)) {
             Text("No final departure", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(12.dp))
-                Text("This trip will be marked as ongoing.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(20.dp))
-                OutlinedButton(onClick = onAddDeparture, modifier = Modifier.fillMaxWidth()) {
-                    Text("Add departure")
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "This trip will be marked as ongoing.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(20.dp))
+            OutlinedButton(onClick = onAddDeparture, modifier = Modifier.fillMaxWidth()) {
+                Text("Add departure")
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) {
+                    Text("Back")
                 }
-                Spacer(Modifier.height(12.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) {
-                        Text("Back")
-                    }
-                    Button(onClick = onDone, modifier = Modifier.weight(1f)) {
-                        Text("Done")
-                    }
+                Button(onClick = onDone, modifier = Modifier.weight(1f)) {
+                    Text("Done")
                 }
             }
         }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddTripDialog(
-    vm: AccessViewModel,
-    ready: AppState.Ready,
+    vm: com.cbkres.visavole.ui.AccessViewModel,
+    ready: com.cbkres.visavole.ui.AppState.Ready,
     initial: Trip?,
     onDismiss: () -> Unit,
 ) {
@@ -868,62 +1074,69 @@ private fun AddTripDialog(
         gapError = null
     }
 
-    VisaDialog(
+    _root_ide_package_.com.cbkres.visavole.ui.VisaDialog(
         onDismissRequest = onDismiss,
         width = 400.dp,
         maxHeight = (LocalConfiguration.current.screenHeightDp - 96).dp,
         dismissable = false,
     ) {
         Column(Modifier.padding(20.dp)) {
-            Text(if (isEditingExisting) "Edit trip" else "Add trip", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(12.dp))
-                TripStopList(
-                    stops = stops,
-                    world = ready.world,
-                    docs = ready.docs,
-                    today = today,
-                    maxHeight = (LocalConfiguration.current.screenHeightDp * 0.45f).dp,
-                    onEdit = { editingStopId = it.id },
-                    onRemove = { stop ->
-                        stops = stops.filter { it.id != stop.id }
-                        lastStopSnapshot = null
-                        refreshGap()
-                    },
+            Text(
+                if (isEditingExisting) "Edit trip" else "Add trip",
+                style = MaterialTheme.typography.titleLarge
+            )
+            Spacer(Modifier.height(12.dp))
+            TripStopList(
+                stops = stops,
+                world = ready.world,
+                docs = ready.docs,
+                today = today,
+                maxHeight = (LocalConfiguration.current.screenHeightDp * 0.45f).dp,
+                onEdit = { editingStopId = it.id },
+                onRemove = { stop ->
+                    stops = stops.filter { it.id != stop.id }
+                    lastStopSnapshot = null
+                    refreshGap()
+                },
+            )
+            OutlinedButton(
+                onClick = { requestAddStop() },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Add stop")
+            }
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = note,
+                onValueChange = { note = it },
+                label = { Text("Note (optional)") },
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(20.dp))
+            if (stops.isEmpty()) {
+                Text(
+                    "Add at least one stop to save the trip",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                OutlinedButton(
-                    onClick = { requestAddStop() },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Add stop")
-                }
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("Note (optional)") },
-                    shape = MaterialTheme.shapes.large,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(20.dp))
-                if (stops.isEmpty()) {
-                    Text(
-                        "Add at least one stop to save the trip",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(onClick = onDismiss) { Text("Cancel") }
-                    Spacer(Modifier.width(12.dp))
-                    Button(onClick = { trySave() }, enabled = stops.isNotEmpty()) {
-                        Text(if (isEditingExisting) "Save" else "Add")
-                    }
+                Spacer(Modifier.height(8.dp))
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+                Spacer(Modifier.width(12.dp))
+                Button(onClick = { trySave() }, enabled = stops.isNotEmpty()) {
+                    Text(if (isEditingExisting) "Save" else "Add")
                 }
             }
         }
+    }
 
     editingStopId?.let { id ->
         val ordered = TripModel.sortedStops(stops)
@@ -1118,7 +1331,7 @@ private fun TripStopList(
 ) {
     val stopsScroll = rememberScrollState()
     val (stopsTop, stopsEnd) = stopsScroll.hazeAlphas()
-    HazeBox(
+    _root_ide_package_.com.cbkres.visavole.ui.HazeBox(
         stopsTop,
         stopsEnd,
         MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -1131,7 +1344,11 @@ private fun TripStopList(
                 .verticalScroll(stopsScroll),
         ) {
             if (stops.isEmpty()) {
-                Text("No stops yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "No stops yet.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             stops.forEach { stop ->
                 StopRow(
@@ -1145,7 +1362,11 @@ private fun TripStopList(
                 Spacer(Modifier.height(6.dp))
             }
             if (stops.size > 1) {
-                Text("Stops are kept in arrival order.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "Stops are kept in arrival order.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Spacer(Modifier.height(6.dp))
             }
         }
@@ -1215,9 +1436,9 @@ private fun SaveWarningsDialog(
                     Text(
                         "${f.title}: ${f.message}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = severityColor(
-                            if (f.severity == GuardSeverity.BLOCK || f.code in SAVABLE_DANGER_CODES) Severity.BAD else Severity.WARN,
-                            LocalEffectiveDarkTheme.current,
+                        color = _root_ide_package_.com.cbkres.visavole.ui.severityColor(
+                            if (f.severity == GuardSeverity.BLOCK || f.code in _root_ide_package_.com.cbkres.visavole.ui.SAVABLE_DANGER_CODES) _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD else _root_ide_package_.com.cbkres.visavole.ui.Severity.WARN,
+                            _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current,
                         ),
                         modifier = Modifier.padding(vertical = 3.dp),
                     )
@@ -1295,17 +1516,26 @@ private fun StopEditorDialog(
     val countrySelected = stop.countryIso2 in world.countries
     val passportCounts = remember(docs) { passportCountsByIso(docs) }
     val passportNumbers = remember(docs) { passportNumbers(docs) }
-    VisaDialog(
+    _root_ide_package_.com.cbkres.visavole.ui.VisaDialog(
         onDismissRequest = onDismiss,
         width = 400.dp,
         maxHeight = (LocalConfiguration.current.screenHeightDp - 96).dp,
         dismissable = false,
     ) {
-            val stopDialogScroll = rememberScrollState()
-            val (stopTop, stopEnd) = stopDialogScroll.hazeAlphas()
-            HazeBox(stopTop, stopEnd, MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp)) {
-                Column(Modifier.padding(20.dp).verticalScroll(stopDialogScroll)) {
-                    Text(if (onRemove == null) "Add stop" else "Edit stop", style = MaterialTheme.typography.titleLarge)
+        val stopDialogScroll = rememberScrollState()
+        val (stopTop, stopEnd) = stopDialogScroll.hazeAlphas()
+        _root_ide_package_.com.cbkres.visavole.ui.HazeBox(
+            stopTop,
+            stopEnd,
+            MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.fillMaxWidth()
+                .heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp)
+        ) {
+            Column(Modifier.padding(20.dp).verticalScroll(stopDialogScroll)) {
+                Text(
+                    if (onRemove == null) "Add stop" else "Edit stop",
+                    style = MaterialTheme.typography.titleLarge
+                )
                 Spacer(Modifier.height(16.dp))
                 CountryPicker(
                     countries = world.countries,
@@ -1318,9 +1548,15 @@ private fun StopEditorDialog(
                 Spacer(Modifier.height(8.dp))
                 StopDateButton("Arrival: ${stop.arrival}", onClick = { showArrival = true })
                 Spacer(Modifier.height(8.dp))
-                StopDateButton("Departure: ${stop.departure ?: "open"}", onClick = { showDeparture = true })
+                StopDateButton(
+                    "Departure: ${stop.departure ?: "open"}",
+                    onClick = { showDeparture = true })
                 Spacer(Modifier.height(8.dp))
-                SelectionField(label = "Document", value = selectedDoc?.compactDisplayLabel(passportCounts, passportNumbers) ?: "None") { onSelected ->
+                SelectionField(
+                    label = "Document",
+                    value = selectedDoc?.compactDisplayLabel(passportCounts, passportNumbers)
+                        ?: "None"
+                ) { onSelected ->
                     DropdownMenuItem(
                         text = { Text("None") },
                         onClick = {
@@ -1362,7 +1598,11 @@ private fun StopEditorDialog(
                     )
                     Spacer(Modifier.height(8.dp))
                 }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     if (onRemove != null) {
                         TextButton(onClick = onRemove) { Text("Remove") }
                         Spacer(Modifier.width(8.dp))
@@ -1372,17 +1612,19 @@ private fun StopEditorDialog(
                     Button(
                         onClick = {
                             val w = accessWarning
-                            if (w != null) pendingAccessWarning = w else { onDone(stop); onDismiss() }
+                            if (w != null) pendingAccessWarning = w else {
+                                onDone(stop); onDismiss()
+                            }
                         },
                         enabled = countrySelected,
                     ) { Text("Done") }
                 }
             }
-            }
         }
+    }
 
     if (showArrival) {
-        VisaDatePickerDialog(
+        _root_ide_package_.com.cbkres.visavole.ui.VisaDatePickerDialog(
             initialMillis = stop.arrival.toUtcMillis(),
             confirmLabel = "Done",
             onConfirm = { date ->
@@ -1395,7 +1637,7 @@ private fun StopEditorDialog(
         )
     }
     if (showDeparture) {
-        VisaDatePickerDialog(
+        _root_ide_package_.com.cbkres.visavole.ui.VisaDatePickerDialog(
             initialMillis = stop.departure?.toUtcMillis() ?: stop.arrival.toUtcMillis(),
             confirmLabel = "Done",
             onConfirm = { date ->
@@ -1404,7 +1646,9 @@ private fun StopEditorDialog(
             },
             onDismiss = { showDeparture = false },
             secondaryLabel = if (isFinal) "Clear" else null,
-            onSecondary = if (isFinal) ({ stop = stop.copy(departure = null); showDeparture = false }) else null,
+            onSecondary = if (isFinal) ({
+                stop = stop.copy(departure = null); showDeparture = false
+            }) else null,
             // The departure may not precede the arrival.
             minDate = stop.arrival,
         )
@@ -1435,9 +1679,9 @@ private fun StopAccessWarningDialog(
             Text(
                 warning.message,
                 style = MaterialTheme.typography.bodySmall,
-                color = severityColor(
-                    if (warning.severity == WarningSeverity.DANGER) Severity.BAD else Severity.WARN,
-                    LocalEffectiveDarkTheme.current,
+                color = _root_ide_package_.com.cbkres.visavole.ui.severityColor(
+                    if (warning.severity == WarningSeverity.DANGER) _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD else _root_ide_package_.com.cbkres.visavole.ui.Severity.WARN,
+                    _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current,
                 ),
             )
         },
@@ -1446,7 +1690,7 @@ private fun StopAccessWarningDialog(
 
 @Composable
 private fun EndTripDialog(today: LocalDate, onConfirm: (LocalDate) -> Unit, onDismiss: () -> Unit) {
-    VisaDatePickerDialog(
+    _root_ide_package_.com.cbkres.visavole.ui.VisaDatePickerDialog(
         initialMillis = today.toUtcMillis(),
         confirmLabel = "End",
         onConfirm = { date -> date?.let(onConfirm) },

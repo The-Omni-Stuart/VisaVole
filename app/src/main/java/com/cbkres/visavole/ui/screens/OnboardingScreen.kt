@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui
+package com.cbkres.visavole.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,6 +29,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.data.Country
 import com.cbkres.visavole.domain.GuardFinding
+import com.cbkres.visavole.ui.CountryRow
+import com.cbkres.visavole.ui.HazeBox
+import com.cbkres.visavole.ui.VisaDatePickerDialog
+import com.cbkres.visavole.ui.hazeAlphas
+import com.cbkres.visavole.ui.toUtcIsoDate
+import com.cbkres.visavole.ui.toUtcMillis
 import java.time.LocalDate
 
 /** First-run setup: add the traveller's first passport (required to compute the map). */
@@ -101,7 +107,12 @@ fun OnboardingScreen(
             ) {
                 val onboardingListState = rememberLazyListState()
                 val (onbTop, onbEnd) = onboardingListState.hazeAlphas()
-                HazeBox(onbTop, onbEnd, MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxSize()) {
+                HazeBox(
+                    onbTop,
+                    onbEnd,
+                    MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxSize()
+                ) {
                     LazyColumn(
                         state = onboardingListState,
                         modifier = Modifier
@@ -183,7 +194,11 @@ fun OnboardingScreen(
                     addError = "Set both a start and an end date, or skip both."
                     return@VisaDatePickerDialog
                 }
-                addError = onAddPassport(iso, vfrom.toUtcIsoDate(), date?.toUtcIsoDate()).firstOrNull()?.message
+                addError = onAddPassport(
+                    iso,
+                    vfrom.toUtcIsoDate(),
+                    date?.toUtcIsoDate()
+                ).firstOrNull()?.message
                 showExpiryPicker = false
                 showValidityDialog = false
             },

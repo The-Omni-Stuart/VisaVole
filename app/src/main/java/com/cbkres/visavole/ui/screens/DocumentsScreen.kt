@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui
+package com.cbkres.visavole.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -86,6 +86,10 @@ import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportDocument
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.domain.residenceClassFor
+import com.cbkres.visavole.ui.animateItemToCenter
+import com.cbkres.visavole.ui.hazeAlphas
+import com.cbkres.visavole.ui.toUtcIsoDate
+import com.cbkres.visavole.ui.toUtcMillis
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
@@ -129,15 +133,21 @@ private fun docDetailsAnnotated(doc: Document, world: WorldData, base: Color, is
         b.append(text)
         b.addStyle(SpanStyle(color = color), s, b.length)
     }
-    part(holdingName?.takeIf { it != docTitle(doc, world) })
+    part(holdingName?.takeIf { it != _root_ide_package_.com.cbkres.visavole.ui.docTitle(
+        doc,
+        world
+    )
+    })
     part(regime?.let { "bloc $it" })
     doc.entryType()?.let { type ->
         val (label, severity) = when (type) {
-            "single" -> "single" to Severity.BAD
-            "double" -> "double" to Severity.WARN
-            else -> "multiple" to Severity.OK
+            "single" -> "single" to _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD
+            "double" -> "double" to _root_ide_package_.com.cbkres.visavole.ui.Severity.WARN
+            else -> "multiple" to _root_ide_package_.com.cbkres.visavole.ui.Severity.OK
         }
-        part("${label} entry", severityColor(severity, isDark))
+        part("${label} entry",
+            _root_ide_package_.com.cbkres.visavole.ui.severityColor(severity, isDark)
+        )
     } ?: run {
         part(doc.residenceClassFor(world)?.label)
     }
@@ -146,8 +156,8 @@ private fun docDetailsAnnotated(doc: Document, world: WorldData, base: Color, is
 
 @Composable
 fun DocumentsScreen(
-    vm: AccessViewModel,
-    ready: AppState.Ready,
+    vm: com.cbkres.visavole.ui.AccessViewModel,
+    ready: com.cbkres.visavole.ui.AppState.Ready,
     scrollState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
@@ -173,10 +183,13 @@ fun DocumentsScreen(
         ready.docs.associateBy({ it.id }, { d -> GuardEngine.evaluate(GuardAction.RemoveDocument(d.id), guardCtx) })
     }
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
-        ScreenHeader("Documents", "Add the passport and papers you hold — the map updates to match.")
-        AddButtonRow("Add document") { showAdd = true }
+        _root_ide_package_.com.cbkres.visavole.ui.ScreenHeader(
+            "Documents",
+            "Add the passport and papers you hold — the map updates to match."
+        )
+        _root_ide_package_.com.cbkres.visavole.ui.AddButtonRow("Add document") { showAdd = true }
         if (ready.docs.isEmpty()) {
-            EmptyState("No documents yet. Start with a passport or a residence permit.")
+            _root_ide_package_.com.cbkres.visavole.ui.EmptyState("No documents yet. Start with a passport or a residence permit.")
         } else {
             // Unified validity for every document (date expiry, entry exhaustion, supersession).
             val statuses = remember(ready.docs, ready.trips, ready.world, today) {
@@ -242,7 +255,11 @@ fun DocumentsScreen(
             val docsListState = scrollState
             // State-taking overload: the per-frame haze read stays inside HazeBox, so scrolling
             // recomposes only the haze edges — not the whole screen and every visible card (P1-14).
-            HazeBox(docsListState, MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f)) {
+            _root_ide_package_.com.cbkres.visavole.ui.HazeBox(
+                docsListState,
+                MaterialTheme.colorScheme.background,
+                modifier = Modifier.weight(1f)
+            ) {
                 LazyColumn(
                     state = docsListState,
                     modifier = Modifier
@@ -252,34 +269,53 @@ fun DocumentsScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     item(key = "allowances") {
-                        AllowanceSection(
+                        _root_ide_package_.com.cbkres.visavole.ui.AllowanceSection(
                             allowances = docAllowances,
                             primary = docPrimary,
                             focusedKey = effectiveFocusAllowance,
                             // Toggle (matching Trips): re-tapping the focused card returns to the
                             // primary document. Set-only, the old code, trapped the user on a
                             // secondary doc with no way back.
-                            onFocus = { focusedAllowance = if (focusedAllowance == it) null else it },
+                            onFocus = {
+                                focusedAllowance = if (focusedAllowance == it) null else it
+                            },
                             titleRow = { a ->
-                                val doc = ready.docs.firstOrNull { d -> d.id == a.key.removePrefix("doc:") }
+                                val doc =
+                                    ready.docs.firstOrNull { d -> d.id == a.key.removePrefix("doc:") }
                                 if (doc != null) {
                                     // The same badge the card wears: type pill + country name.
-                                    val (label, tone) = docTypeBadge(doc, ready.world, LocalEffectiveDarkTheme.current)
-                                    StatusPill(label, tone)
+                                    val (label, tone) = _root_ide_package_.com.cbkres.visavole.ui.docTypeBadge(
+                                        doc,
+                                        ready.world,
+                                        _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+                                    )
+                                    _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+                                        label,
+                                        tone
+                                    )
                                     Text(
-                                        docTitle(doc, ready.world),
+                                        _root_ide_package_.com.cbkres.visavole.ui.docTitle(
+                                            doc,
+                                            ready.world
+                                        ),
                                         style = MaterialTheme.typography.titleMedium,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
                                 } else {
-                                    Text(a.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        a.title,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
                             },
                             onRingClick = { snap ->
                                 // Jump the list to the tapped document, centre it, and flash the
                                 // card so the landing is obvious.
-                                val doc = ready.docs.firstOrNull { d -> d.id == snap.key.removePrefix("doc:") }
+                                val doc =
+                                    ready.docs.firstOrNull { d -> d.id == snap.key.removePrefix("doc:") }
                                 if (doc != null) {
                                     val index = docIndex[doc.id]
                                     if (index != null) {
@@ -288,7 +324,8 @@ fun DocumentsScreen(
                                         // card is still off-screen mid-scroll.
                                         scope.launch {
                                             docsListState.animateItemToCenter(index, listViewportPx)
-                                            val n = (flashDoc?.takeIf { it.first == doc.id }?.second ?: 0) + 1
+                                            val n = (flashDoc?.takeIf { it.first == doc.id }?.second
+                                                ?: 0) + 1
                                             flashDoc = doc.id to n
                                             // Clear the trigger once the ripple has had time to play (~600 ms:
                                             // a 300 ms held press then a 300 ms release fade): a card
@@ -303,24 +340,43 @@ fun DocumentsScreen(
                         )
                     }
                     if (active.isNotEmpty()) {
-                        item(key = "header-active") { SectionLabel("Active") }
+                        item(key = "header-active") {
+                            _root_ide_package_.com.cbkres.visavole.ui.SectionLabel(
+                                "Active"
+                            )
+                        }
                         items(active, key = { it.id }) { doc ->
                             val iso = (doc.kind as? DocKind.Passport)?.iso2
                             val sameNatCount = iso?.let { validPassportIsoCounts[it] ?: 0 } ?: 0
                             val star: (() -> Unit)? =
-                                if (doc.kind is DocKind.Passport && sameNatCount >= 2) { { vm.setPrimary(doc.id) } } else null
-                            val number = iso?.let { if ((passportIsoTotal[it] ?: 0) >= 2) passportNumber[doc.id] else null }
+                                if (doc.kind is DocKind.Passport && sameNatCount >= 2) {
+                                    { vm.setPrimary(doc.id) }
+                                } else null
+                            val number = iso?.let {
+                                if ((passportIsoTotal[it]
+                                        ?: 0) >= 2
+                                ) passportNumber[doc.id] else null
+                            }
                             DocCard(
                                 doc,
                                 ready.world,
                                 today,
                                 statuses[doc.id],
-                                supersededByLabel = doc.supersededBy?.let { id -> ready.docs.firstOrNull { d -> d.id == id }?.let { docTitle(it, ready.world) } },
+                                supersededByLabel = doc.supersededBy?.let { id ->
+                                    ready.docs.firstOrNull { d -> d.id == id }?.let {
+                                        _root_ide_package_.com.cbkres.visavole.ui.docTitle(
+                                            it,
+                                            ready.world
+                                        )
+                                    }
+                                },
                                 canRemove = removeBlockings[doc.id]?.canProceed == true,
                                 passportNumber = number,
                                 isPrimary = doc.id == ready.primaryDocId,
                                 onRemove = { removingDoc = doc },
-                                onRemoveBlocked = { blockedRemove = removeBlockings[doc.id]?.findings?.firstOrNull() },
+                                onRemoveBlocked = {
+                                    blockedRemove = removeBlockings[doc.id]?.findings?.firstOrNull()
+                                },
                                 onEdit = { editing = doc },
                                 onStar = star,
                                 flashTrigger = flashDoc?.takeIf { it.first == doc.id }?.second ?: 0,
@@ -328,23 +384,40 @@ fun DocumentsScreen(
                         }
                     }
                     if (archived.isNotEmpty()) {
-                        item(key = "header-archive") { SectionLabel("Archive") }
+                        item(key = "header-archive") {
+                            _root_ide_package_.com.cbkres.visavole.ui.SectionLabel(
+                                "Archive"
+                            )
+                        }
                         items(archived, key = { it.id }) { doc ->
                             // An expired passport can never be the primary, so it shows no star — but
                             // it keeps its stable "(N)" number so it stays identifiable after expiry.
                             val iso = (doc.kind as? DocKind.Passport)?.iso2
-                            val number = iso?.let { if ((passportIsoTotal[it] ?: 0) >= 2) passportNumber[doc.id] else null }
+                            val number = iso?.let {
+                                if ((passportIsoTotal[it]
+                                        ?: 0) >= 2
+                                ) passportNumber[doc.id] else null
+                            }
                             DocCard(
                                 doc,
                                 ready.world,
                                 today,
                                 statuses[doc.id],
-                                supersededByLabel = doc.supersededBy?.let { id -> ready.docs.firstOrNull { d -> d.id == id }?.let { docTitle(it, ready.world) } },
+                                supersededByLabel = doc.supersededBy?.let { id ->
+                                    ready.docs.firstOrNull { d -> d.id == id }?.let {
+                                        _root_ide_package_.com.cbkres.visavole.ui.docTitle(
+                                            it,
+                                            ready.world
+                                        )
+                                    }
+                                },
                                 canRemove = removeBlockings[doc.id]?.canProceed == true,
                                 passportNumber = number,
                                 isPrimary = false,
                                 onRemove = { removingDoc = doc },
-                                onRemoveBlocked = { blockedRemove = removeBlockings[doc.id]?.findings?.firstOrNull() },
+                                onRemoveBlocked = {
+                                    blockedRemove = removeBlockings[doc.id]?.findings?.firstOrNull()
+                                },
                                 onEdit = { editing = doc },
                                 onStar = null,
                                 flashTrigger = flashDoc?.takeIf { it.first == doc.id }?.second ?: 0,
@@ -419,23 +492,31 @@ private fun ExpiryStatusPill(
         // Same state-to-colour map as the ring and the tab-top summary line: in use with nothing
         // left is terminal (red), in use or down to the last entry is a watch-it state (amber).
         entry?.total != null && entry.state == EntryState.IN_USE ->
-            Triple("In use", if (entry.remaining == 0) Severity.BAD else Severity.WARN, false)
+            Triple("In use", if (entry.remaining == 0) _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD else _root_ide_package_.com.cbkres.visavole.ui.Severity.WARN, false)
         status?.reason == ExpiryReason.SUPERSEDED && status.expired ->
-            Triple("Replaced by $replacedBy", Severity.BAD, true)
+            Triple("Replaced by $replacedBy", _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD, true)
         status?.expired == true && status.reason == ExpiryReason.ENTRIES ->
-            Triple("Entries used up", Severity.BAD, true)
-        status?.expired == true -> Triple("Expired on $effective", Severity.BAD, true)
+            Triple("Entries used up", _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD, true)
+        status?.expired == true -> Triple("Expired on $effective", _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD, true)
         status?.reason == ExpiryReason.SUPERSEDED ->
-            Triple("Replaced by $replacedBy from $effective", Severity.WARN, false)
+            Triple("Replaced by $replacedBy from $effective", _root_ide_package_.com.cbkres.visavole.ui.Severity.WARN, false)
         entry?.total != null && entry.remaining != null && entry.remaining > 0 ->
-            Triple("${entry.remaining} ${if (entry.remaining == 1) "entry" else "entries"} left", if (entry.remaining == 1) Severity.WARN else Severity.OK, false)
-        days == null -> Triple("No expiry", Severity.OK, false)
-        days <= 7 -> Triple("Expiring soon ($days ${if (days == 1L) "day" else "days"})", Severity.WARN, false)
-        else -> Triple("Valid for $days ${if (days == 1L) "day" else "days"}", Severity.OK, false)
+            Triple("${entry.remaining} ${if (entry.remaining == 1) "entry" else "entries"} left", if (entry.remaining == 1) _root_ide_package_.com.cbkres.visavole.ui.Severity.WARN else _root_ide_package_.com.cbkres.visavole.ui.Severity.OK, false)
+        days == null -> Triple("No expiry", _root_ide_package_.com.cbkres.visavole.ui.Severity.OK, false)
+        days <= 7 -> Triple("Expiring soon ($days ${if (days == 1L) "day" else "days"})", _root_ide_package_.com.cbkres.visavole.ui.Severity.WARN, false)
+        else -> Triple("Valid for $days ${if (days == 1L) "day" else "days"}", _root_ide_package_.com.cbkres.visavole.ui.Severity.OK, false)
     }
     // Long pills (e.g. "Replaced by <label>") must wrap instead of squeezing the card's weighted
     // text column; the cap keeps the title column readable for the longest labels.
-    StatusPill(text, severityColor(severity, LocalEffectiveDarkTheme.current), bold = bold, maxWidth = 120.dp)
+    _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+        text,
+        _root_ide_package_.com.cbkres.visavole.ui.severityColor(
+            severity,
+            _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+        ),
+        bold = bold,
+        maxWidth = 120.dp
+    )
 }
 
 @Composable
@@ -456,8 +537,12 @@ private fun DocCard(
 ) {
     val isPassport = doc.kind is DocKind.Passport
     val surface = MaterialTheme.colorScheme.onSurface
-    val (typeLabel, typeTone) = docTypeBadge(doc, world, LocalEffectiveDarkTheme.current)
-    VisaListCard(
+    val (typeLabel, typeTone) = _root_ide_package_.com.cbkres.visavole.ui.docTypeBadge(
+        doc,
+        world,
+        _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+    )
+    _root_ide_package_.com.cbkres.visavole.ui.VisaListCard(
         flashTrigger = flashTrigger,
         actions = {
             if (onStar != null) {
@@ -467,7 +552,7 @@ private fun DocCard(
                         contentDescription = if (isPrimary) "Primary passport" else "Set as primary",
                         // material-icons-core has no true Star outline (bug), so the non-primary
                         // star is the same solid star in a faded grey to stay monochrome.
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isPrimary) 1f else DIM_ALPHA),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isPrimary) 1f else _root_ide_package_.com.cbkres.visavole.ui.DIM_ALPHA),
                     )
                 }
             }
@@ -476,7 +561,7 @@ private fun DocCard(
             }
             IconButton(
                 onClick = { if (canRemove) onRemove() else onRemoveBlocked() },
-                modifier = Modifier.alpha(if (canRemove) 1f else DIM_ALPHA),
+                modifier = Modifier.alpha(if (canRemove) 1f else _root_ide_package_.com.cbkres.visavole.ui.DIM_ALPHA),
             ) {
                 Icon(
                     Icons.Filled.Close,
@@ -488,11 +573,14 @@ private fun DocCard(
     ) {
         // Row 1: the type badge (in the tone the map uses for what the doc unlocks) + the
         // country(ies) it applies to; a passport's stable "(N)" number trails the name.
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatusPill(typeLabel, typeTone)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            _root_ide_package_.com.cbkres.visavole.ui.StatusPill(typeLabel, typeTone)
             Text(
                 buildAnnotatedString {
-                    append(docTitle(doc, world))
+                    append(_root_ide_package_.com.cbkres.visavole.ui.docTitle(doc, world))
                     if (isPassport && passportNumber != null) {
                         withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
                             append("  ($passportNumber)")
@@ -507,13 +595,25 @@ private fun DocCard(
         }
         // Row 2: the validity period, trips-card style; dropped when the document has no dates.
         docValidityText(doc)?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         // Row 3: the structural details left, the status pill right — a consistent badge column.
         // Top-aligned so the pill sits on the first line when the details text wraps.
         if (status != null) {
-            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                val details = docDetailsAnnotated(doc, world, MaterialTheme.colorScheme.onSurfaceVariant, LocalEffectiveDarkTheme.current)
+            Row(
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                val details = docDetailsAnnotated(
+                    doc,
+                    world,
+                    MaterialTheme.colorScheme.onSurfaceVariant,
+                    _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+                )
                 if (details != null) {
                     Text(
                         details,
@@ -762,24 +862,37 @@ fun AddDocumentDialog(
         onDismiss()
     }
 
-    VisaDialog(
+    _root_ide_package_.com.cbkres.visavole.ui.VisaDialog(
         onDismissRequest = onDismiss,
         width = 400.dp,
         maxHeight = (LocalConfiguration.current.screenHeightDp - 96).dp,
         dismissable = false,
     ) {
-            val docDialogScroll = rememberScrollState()
-            val (docTop, docEnd) = docDialogScroll.hazeAlphas()
-            HazeBox(docTop, docEnd, MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth().heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp)) {
-                Column(Modifier.padding(20.dp).verticalScroll(docDialogScroll)) {
-                    Text(if (initial == null) "Add document" else "Edit document", style = MaterialTheme.typography.titleLarge)
+        val docDialogScroll = rememberScrollState()
+        val (docTop, docEnd) = docDialogScroll.hazeAlphas()
+        _root_ide_package_.com.cbkres.visavole.ui.HazeBox(
+            docTop,
+            docEnd,
+            MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.fillMaxWidth()
+                .heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp)
+        ) {
+            Column(Modifier.padding(20.dp).verticalScroll(docDialogScroll)) {
+                Text(
+                    if (initial == null) "Add document" else "Edit document",
+                    style = MaterialTheme.typography.titleLarge
+                )
                 Spacer(Modifier.height(16.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DocType.entries.forEach { t ->
                         FilterChip(
                             selected = docType == t,
                             enabled = !(visaMulti && t != DocType.VISA),
-                            onClick = { if (t != docType) { docType = t; onSwitchTab(t) } },
+                            onClick = {
+                                if (t != docType) {
+                                    docType = t; onSwitchTab(t)
+                                }
+                            },
                             label = { Text(t.label) },
                         )
                     }
@@ -790,10 +903,12 @@ fun AddDocumentDialog(
                     countries,
                     query,
                     { query = it },
-                    selected = if (docType == DocType.PASSPORT) lastIso?.let { setOf(it) } ?: emptySet() else customIso,
+                    selected = if (docType == DocType.PASSPORT) lastIso?.let { setOf(it) }
+                        ?: emptySet() else customIso,
                     onToggle = { iso ->
                         if (docType == DocType.VISA) {
-                            val next = if (customIso.contains(iso)) customIso - iso else customIso + iso
+                            val next =
+                                if (customIso.contains(iso)) customIso - iso else customIso + iso
                             customIso = next
                             lastIso = if (next.contains(iso)) iso else next.firstOrNull()
                         } else {
@@ -811,84 +926,84 @@ fun AddDocumentDialog(
                 if (docType == DocType.RESIDENCE || docType == DocType.VISA) {
                     Spacer(Modifier.height(8.dp))
                     val autoTypeName = inferredHolding?.let { world.holdings[it]?.name }
-                        val typeValue = when (val choice = holdingChoice) {
-                            null -> autoTypeName?.let { "$it (auto)" } ?: "none (custom only)"
-                            "" -> "none"
-                            else -> world.holdings[choice]?.name ?: choice
-                        }
-                        SelectionField("Type", typeValue) { onSelected ->
+                    val typeValue = when (val choice = holdingChoice) {
+                        null -> autoTypeName?.let { "$it (auto)" } ?: "none (custom only)"
+                        "" -> "none"
+                        else -> world.holdings[choice]?.name ?: choice
+                    }
+                    SelectionField("Type", typeValue) { onSelected ->
+                        DropdownMenuItem(
+                            text = { Text("Auto — ${autoTypeName ?: "none"}") },
+                            onClick = { holdingChoice = null; onSelected() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("No known type (custom only)") },
+                            onClick = { holdingChoice = ""; onSelected() },
+                        )
+                        world.holdingsForKind(docType.kind).forEach { h ->
                             DropdownMenuItem(
-                                text = { Text("Auto — ${autoTypeName ?: "none"}") },
-                                onClick = { holdingChoice = null; onSelected() },
+                                text = { Text(h.name) },
+                                onClick = { holdingChoice = h.id; onSelected() },
                             )
-                            DropdownMenuItem(
-                                text = { Text("No known type (custom only)") },
-                                onClick = { holdingChoice = ""; onSelected() },
-                            )
-                            world.holdingsForKind(docType.kind).forEach { h ->
-                                DropdownMenuItem(
-                                    text = { Text(h.name) },
-                                    onClick = { holdingChoice = h.id; onSelected() },
-                                )
-                            }
                         }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    val autoName = inferredBloc?.name
+                    val blocValue = when (val choice = customBlocChoice) {
+                        null -> autoName?.let { "$it (auto)" } ?: "none detected"
+                        "" -> "none"
+                        else -> world.regimes.firstOrNull { it.id == choice }?.name ?: choice
+                    }
+                    SelectionField("Mobility bloc", blocValue) { onSelected ->
+                        DropdownMenuItem(
+                            text = { Text("Auto — ${autoName ?: "none detected"}") },
+                            onClick = { customBlocChoice = null; onSelected() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("No mobility bloc") },
+                            onClick = { customBlocChoice = ""; onSelected() },
+                        )
+                        world.regimes.sortedBy { it.name }.forEach { r ->
+                            DropdownMenuItem(
+                                text = { Text("${r.name} (${r.id})") },
+                                onClick = { customBlocChoice = r.id; onSelected() },
+                            )
+                        }
+                    }
+                    if (docType == DocType.RESIDENCE) {
                         Spacer(Modifier.height(8.dp))
-                        val autoName = inferredBloc?.name
-                        val blocValue = when (val choice = customBlocChoice) {
-                            null -> autoName?.let { "$it (auto)" } ?: "none detected"
-                            "" -> "none"
-                            else -> world.regimes.firstOrNull { it.id == choice }?.name ?: choice
-                        }
-                        SelectionField("Mobility bloc", blocValue) { onSelected ->
-                            DropdownMenuItem(
-                                text = { Text("Auto — ${autoName ?: "none detected"}") },
-                                onClick = { customBlocChoice = null; onSelected() },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("No mobility bloc") },
-                                onClick = { customBlocChoice = ""; onSelected() },
-                            )
-                            world.regimes.sortedBy { it.name }.forEach { r ->
+                        SelectionField("Residence class", residenceClass.label) { onSelected ->
+                            ResidenceClass.entries.forEach { rc ->
                                 DropdownMenuItem(
-                                    text = { Text("${r.name} (${r.id})") },
-                                    onClick = { customBlocChoice = r.id; onSelected() },
-                                )
-                            }
-                        }
-                        if (docType == DocType.RESIDENCE) {
-                            Spacer(Modifier.height(8.dp))
-                            SelectionField("Residence class", residenceClass.label) { onSelected ->
-                                ResidenceClass.entries.forEach { rc ->
-                                    DropdownMenuItem(
-                                        text = { Text(rc.label) },
-                                        onClick = { residenceClass = rc; onSelected() },
-                                    )
-                                }
-                            }
-                        }
-                        if (docType == DocType.VISA) {
-                            Spacer(Modifier.height(8.dp))
-                            val entryValue = when (entryType) {
-                                "single" -> "Single entry"
-                                "double" -> "Double entry"
-                                else -> "Multiple entry"
-                            }
-                            SelectionField("Entry type", entryValue) { onSelected ->
-                                DropdownMenuItem(
-                                    text = { Text("Single entry") },
-                                    onClick = { entryType = "single"; onSelected() },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Double entry") },
-                                    onClick = { entryType = "double"; onSelected() },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Multiple entry") },
-                                    onClick = { entryType = "multiple"; onSelected() },
+                                    text = { Text(rc.label) },
+                                    onClick = { residenceClass = rc; onSelected() },
                                 )
                             }
                         }
                     }
+                    if (docType == DocType.VISA) {
+                        Spacer(Modifier.height(8.dp))
+                        val entryValue = when (entryType) {
+                            "single" -> "Single entry"
+                            "double" -> "Double entry"
+                            else -> "Multiple entry"
+                        }
+                        SelectionField("Entry type", entryValue) { onSelected ->
+                            DropdownMenuItem(
+                                text = { Text("Single entry") },
+                                onClick = { entryType = "single"; onSelected() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Double entry") },
+                                onClick = { entryType = "double"; onSelected() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Multiple entry") },
+                                onClick = { entryType = "multiple"; onSelected() },
+                            )
+                        }
+                    }
+                }
 
                 Spacer(Modifier.height(16.dp))
                 val todayMillis = remember {
@@ -904,7 +1019,11 @@ fun AddDocumentDialog(
                     onExpiry = { expiryDate = it },
                 )
                 Spacer(Modifier.height(20.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
                     OutlinedButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(Modifier.width(12.dp))
                     Button(onClick = {
@@ -920,8 +1039,8 @@ fun AddDocumentDialog(
                     }
                 }
             }
-            }
         }
+    }
 
     if (showValidityPairDialog) {
         AlertDialog(
@@ -1025,7 +1144,7 @@ private fun ValidityPeriodField(
         Text(validityLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
     if (showValidFromPicker) {
-        VisaDatePickerDialog(
+        _root_ide_package_.com.cbkres.visavole.ui.VisaDatePickerDialog(
             initialMillis = validFromDate ?: todayMillis,
             confirmLabel = "Next",
             onConfirm = { date ->
@@ -1046,7 +1165,7 @@ private fun ValidityPeriodField(
     }
     if (showValidToPicker) {
         val fallbackTo = maxOf(validFromDate ?: todayMillis, todayMillis)
-        VisaDatePickerDialog(
+        _root_ide_package_.com.cbkres.visavole.ui.VisaDatePickerDialog(
             initialMillis = expiryDate ?: fallbackTo,
             confirmLabel = "Done",
             onConfirm = { date ->
@@ -1083,7 +1202,10 @@ private fun MultiCountryConfirmDialog(
             TextButton(onClick = onDismiss) { Text("Back") }
         },
         text = {
-            val warn = severityColor(Severity.WARN, LocalEffectiveDarkTheme.current)
+            val warn = _root_ide_package_.com.cbkres.visavole.ui.severityColor(
+                _root_ide_package_.com.cbkres.visavole.ui.Severity.WARN,
+                _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+            )
             Text(
                 buildAnnotatedString {
                     append("You have multiple countries selected for this visa: ")
@@ -1185,16 +1307,21 @@ internal fun CountryPicker(
             color = MaterialTheme.colorScheme.surfaceContainerLow,
         ) {
             val (pickerTop, pickerEnd) = listState.hazeAlphas()
-            HazeBox(pickerTop, pickerEnd, MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxSize()) {
+            _root_ide_package_.com.cbkres.visavole.ui.HazeBox(
+                pickerTop,
+                pickerEnd,
+                MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxSize()
+            ) {
                 LazyColumn(state = listState, modifier = Modifier.padding(4.dp)) {
                     items(list, key = { it.key }) { entry ->
-                    CountryRow(
-                        name = entry.value.name,
-                        onClick = { onToggle(entry.key) },
-                        iso = entry.key,
-                        selected = selected.contains(entry.key),
-                    )
-                }
+                        _root_ide_package_.com.cbkres.visavole.ui.CountryRow(
+                            name = entry.value.name,
+                            onClick = { onToggle(entry.key) },
+                            iso = entry.key,
+                            selected = selected.contains(entry.key),
+                        )
+                    }
                 }
             }
         }

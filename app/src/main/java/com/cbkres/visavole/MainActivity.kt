@@ -87,10 +87,10 @@ import com.cbkres.visavole.ui.CountryDetailCard
 import com.cbkres.visavole.ui.CountryRow
 import com.cbkres.visavole.ui.CountrySearchBar
 import com.cbkres.visavole.ui.EmptyState
-import com.cbkres.visavole.ui.DocumentsScreen
-import com.cbkres.visavole.ui.OnboardingScreen
-import com.cbkres.visavole.ui.SettingsScreen
-import com.cbkres.visavole.ui.TripsScreen
+import com.cbkres.visavole.ui.screens.DocumentsScreen
+import com.cbkres.visavole.ui.screens.OnboardingScreen
+import com.cbkres.visavole.ui.screens.SettingsScreen
+import com.cbkres.visavole.ui.screens.TripsScreen
 import com.cbkres.visavole.ui.VisaSnackbarHost
 import com.cbkres.visavole.ui.theme.Visa_VoleTheme
 import com.cbkres.visavole.ui.theme.ThemePrefs

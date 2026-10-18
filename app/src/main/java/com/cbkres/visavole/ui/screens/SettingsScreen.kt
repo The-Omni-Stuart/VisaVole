@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui
+package com.cbkres.visavole.ui.screens
 
 import android.content.Context
 import android.content.Intent
@@ -66,8 +66,8 @@ private const val LICENSE_URL = "https://github.com/The-Omni-Stuart/VisaVole/blo
 // exactly where the other tabs' content starts.
 @Composable
 fun SettingsScreen(
-    vm: AccessViewModel,
-    ready: AppState.Ready,
+    vm: com.cbkres.visavole.ui.AccessViewModel,
+    ready: com.cbkres.visavole.ui.AppState.Ready,
     themeMode: ThemePrefs.Mode,
     dynamicColor: Boolean,
     onThemeModeChanged: (ThemePrefs.Mode) -> Unit,
@@ -89,7 +89,7 @@ fun SettingsScreen(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> if (uri != null) vm.prepareRestore(uri) { pendingRestore = it } }
 
-    HazeBox(
+    _root_ide_package_.com.cbkres.visavole.ui.HazeBox(
         settingsScroll,
         MaterialTheme.colorScheme.background,
         modifier = modifier
@@ -155,11 +155,17 @@ fun SettingsScreen(
             }
             Spacer(Modifier.height(48.dp))
 
-            OutlinedButton(onClick = { openUrl(context, SOURCE_URL) }, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = { openUrl(context, SOURCE_URL) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text("Source Code")
             }
             Spacer(Modifier.height(12.dp))
-            OutlinedButton(onClick = { openUrl(context, ISSUES_URL) }, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = { openUrl(context, ISSUES_URL) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Found a bug?", style = MaterialTheme.typography.titleSmall)
                     Text("Report it here!", style = MaterialTheme.typography.bodySmall)
@@ -192,7 +198,10 @@ fun SettingsScreen(
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
                     "Proudly free and open source under the ",
                     style = MaterialTheme.typography.bodySmall,
