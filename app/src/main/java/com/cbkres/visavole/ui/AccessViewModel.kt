@@ -11,16 +11,16 @@ import com.cbkres.visavole.data.PersistedState
 import com.cbkres.visavole.data.StateCodec
 import com.cbkres.visavole.data.VisaDb
 import com.cbkres.visavole.data.VisaRepository
-import com.cbkres.visavole.data.WorldGeometry
 import com.cbkres.visavole.data.WorldData
+import com.cbkres.visavole.data.WorldGeometry
 import com.cbkres.visavole.data.WorldMapData
 import com.cbkres.visavole.domain.Access
 import com.cbkres.visavole.domain.AccessModel
 import com.cbkres.visavole.domain.AllowanceSnapshot
-import com.cbkres.visavole.domain.Document
-import com.cbkres.visavole.domain.DocumentMigration
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.DocStatus
+import com.cbkres.visavole.domain.Document
+import com.cbkres.visavole.domain.DocumentMigration
 import com.cbkres.visavole.domain.GuardAction
 import com.cbkres.visavole.domain.GuardContext
 import com.cbkres.visavole.domain.GuardEngine
@@ -32,18 +32,18 @@ import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.TripSections
 import com.cbkres.visavole.domain.passportDocument
 import com.cbkres.visavole.domain.residenceClassFor
-import java.io.File
-import java.time.LocalDate
-import java.time.ZoneOffset
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 sealed interface AppState {
     data object Loading : AppState

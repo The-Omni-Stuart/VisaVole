@@ -6,7 +6,6 @@ import com.cbkres.visavole.data.JdbcRepository
 import com.cbkres.visavole.data.Regime
 import com.cbkres.visavole.data.StayRule
 import com.cbkres.visavole.data.WorldData
-import com.cbkres.visavole.data.Holding as DataHolding
 import com.cbkres.visavole.domain.AccessLevel.COVERED
 import com.cbkres.visavole.domain.AccessLevel.ETA
 import com.cbkres.visavole.domain.AccessLevel.E_VISA
@@ -25,6 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.time.LocalDate
+import com.cbkres.visavole.data.Holding as DataHolding
 
 class AccessModelTest {
 

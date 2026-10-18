@@ -2,6 +2,7 @@ package com.cbkres.visavole.data
 
 import android.content.Context
 import android.net.Uri
+import com.cbkres.visavole.data.BackupManager.Companion.MAX_IMPORT_BYTES
 import java.io.ByteArrayOutputStream
 import java.io.File
 

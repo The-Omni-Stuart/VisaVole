@@ -1,5 +1,4 @@
 import groovy.json.JsonSlurper
-import java.io.File
 import java.net.HttpURLConnection
 import java.net.URI
 import java.security.MessageDigest

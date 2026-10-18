@@ -2,8 +2,8 @@ package com.cbkres.visavole.domain
 
 import com.cbkres.visavole.data.StayRule
 import com.cbkres.visavole.data.WorldData
-import com.cbkres.visavole.domain.AccessLevel.E_VISA
 import com.cbkres.visavole.domain.AccessLevel.ETA
+import com.cbkres.visavole.domain.AccessLevel.E_VISA
 import com.cbkres.visavole.domain.AccessLevel.FREEDOM
 import com.cbkres.visavole.domain.AccessLevel.REFUSED
 import com.cbkres.visavole.domain.AccessLevel.RESIDENCE
@@ -12,6 +12,11 @@ import com.cbkres.visavole.domain.AccessLevel.VISA_REQUIRED
 import com.cbkres.visavole.domain.DocKind.Custom
 import com.cbkres.visavole.domain.DocKind.Holding
 import com.cbkres.visavole.domain.DocKind.Passport
+import com.cbkres.visavole.domain.TripModel.computeEntryStatus
+import com.cbkres.visavole.domain.TripModel.entryStatusFor
+import com.cbkres.visavole.domain.TripModel.firstGapIndex
+import com.cbkres.visavole.domain.TripModel.overlapWarningsFor
+import com.cbkres.visavole.domain.TripModel.projectionWarningsFor
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit

@@ -1,5 +1,8 @@
 package com.cbkres.visavole.data
 
+import com.cbkres.visavole.data.StateCodec.SCHEMA_VERSION
+import com.cbkres.visavole.data.StateCodec.decode
+import com.cbkres.visavole.data.StateCodec.encode
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.ResidenceClass

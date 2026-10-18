@@ -1,10 +1,10 @@
 package com.cbkres.visavole.data
 
-import java.sql.Connection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.sql.Connection
 
 /**
  * Pins the PERMISSIVE parsing in [JdbcRepository] (and its Android mirror [VisaRepository], which

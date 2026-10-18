@@ -3,9 +3,9 @@ package com.cbkres.visavole.ui.screens
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.widget.Toast
 import android.graphics.Canvas
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -46,10 +46,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import kotlin.math.roundToInt
 import com.cbkres.visavole.data.BackupManager
 import com.cbkres.visavole.data.PersistedState
 import com.cbkres.visavole.ui.theme.ThemePrefs
+import kotlin.math.roundToInt
 
 private const val SOURCE_URL = "https://github.com/The-Omni-Stuart/VisaVole"
 private const val ISSUES_URL = "https://github.com/The-Omni-Stuart/VisaVole/issues"
