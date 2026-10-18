@@ -22,10 +22,8 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,10 +31,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.hazeAlphas
@@ -79,7 +74,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
@@ -91,6 +85,7 @@ import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.AppState
 import com.cbkres.visavole.ui.CountryDetailCard
 import com.cbkres.visavole.ui.CountryRow
+import com.cbkres.visavole.ui.CountrySearchBar
 import com.cbkres.visavole.ui.EmptyState
 import com.cbkres.visavole.ui.DocumentsScreen
 import com.cbkres.visavole.ui.OnboardingScreen
@@ -100,11 +95,10 @@ import com.cbkres.visavole.ui.VisaSnackbarHost
 import com.cbkres.visavole.ui.theme.Visa_VoleTheme
 import com.cbkres.visavole.ui.theme.ThemePrefs
 import com.cbkres.visavole.ui.WorldMapCanvas
-import com.cbkres.visavole.ui.HOME
-import com.cbkres.visavole.ui.colorFor
 import com.cbkres.visavole.ui.Focus
 import com.cbkres.visavole.ui.IsoShape
 import com.cbkres.visavole.ui.defaultCenter
+import com.cbkres.visavole.ui.MapLegend
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.MutableFloatState
@@ -112,7 +106,6 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import com.cbkres.visavole.ui.CountrySearchBar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -634,7 +627,7 @@ private fun MapTab(
                 // per-level buckets — otherwise a home country (level FREEDOM) is double-counted
                 // in both (P3-15). Null levels (no documented rule) are kept so the slate swatch
                 // has a real count.
-                LegendRow(
+                MapLegend(
                     s.access.entries
                         .filter { it.key !in s.homeCountries }
                         .groupBy { it.value.level }
@@ -674,111 +667,6 @@ private fun MapTab(
                     }
                 }
             }
-        }
-    }
-}
-
-//@Composable
-//private fun SearchBar(
-//    query: String,
-//    onQuery: (String) -> Unit,
-//    onSearch: () -> Unit,
-//    onFocusChanged: (Boolean) -> Unit,
-//    modifier: Modifier = Modifier,
-//) {
-//    OutlinedTextField(
-//        value = query,
-//        onValueChange = onQuery,
-//        // P3-17: a real label (not just a placeholder) so TalkBack reliably announces the field's
-//        // purpose — material3 wires the label to the editable node's accessible name.
-//        label = { Text("Search country") },
-//        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-//        trailingIcon = {
-//            if (query.isNotEmpty()) {
-//                IconButton(onClick = { onQuery("") }) { Icon(Icons.Filled.Close, contentDescription = "Clear") }
-//            }
-//        },
-//        singleLine = true,
-//        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-//        keyboardActions = KeyboardActions(onSearch = { onSearch() }),
-//        shape = MaterialTheme.shapes.large,
-//        colors = OutlinedTextFieldDefaults.colors(
-//            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-//            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-//        ),
-//        modifier = modifier
-//            .fillMaxWidth()
-//            .onFocusChanged { onFocusChanged(it.isFocused) }
-//            .padding(horizontal = 12.dp)
-//            .padding(top = 8.dp, bottom = 4.dp),
-//    )
-//}
-
-@Composable
-private fun LegendRow(counts: Map<AccessLevel?, Int>, homeCount: Int = 1) {
-    val levels = listOf(
-        AccessLevel.FREEDOM, AccessLevel.RESIDENCE, AccessLevel.VISA_FREE, AccessLevel.COVERED,
-        AccessLevel.ETA, AccessLevel.E_VISA, AccessLevel.VISA_REQUIRED, AccessLevel.REFUSED,
-    )
-    val legendScroll = rememberScrollState()
-    val (legendStart, legendEnd) = legendScroll.hazeAlphas()
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 0.dp) {
-        HazeBox(legendStart, legendEnd, MaterialTheme.colorScheme.surfaceContainerHigh, horizontal = true, modifier = Modifier.fillMaxWidth()) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(legendScroll)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .size(14.dp)
-                        .background(HOME),
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    if (homeCount > 1) "Your countries $homeCount" else "Your country",
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-            levels.forEach { lvl ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier
-                            .size(14.dp)
-                            .background(colorFor(lvl)),
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text(lvl.label(), style = MaterialTheme.typography.labelSmall)
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        "${counts[lvl] ?: 0}",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
-            // Slate swatch: countries with no documented rule render slate on the map but had no
-            // legend entry (P3-15).
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier
-                        .size(14.dp)
-                        .background(colorFor(null)),
-                )
-                Spacer(Modifier.width(4.dp))
-                Text("No documented rule", style = MaterialTheme.typography.labelSmall)
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    "${counts[null] ?: 0}",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
         }
     }
 }
