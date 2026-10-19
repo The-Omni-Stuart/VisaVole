@@ -11,7 +11,7 @@ import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.AppState
 import com.cbkres.visavole.ui.screens.ErrorScreen
 import com.cbkres.visavole.ui.screens.LoadingScreen
-import com.cbkres.visavole.ui.screens.OnboardingScreen
+import com.cbkres.visavole.ui.screens.onboarding.OnboardingScreen
 import com.cbkres.visavole.ui.theme.ThemePrefs
 
 @Composable

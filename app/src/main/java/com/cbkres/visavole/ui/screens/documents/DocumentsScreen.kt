@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui.screens
+package com.cbkres.visavole.ui.screens.documents
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -83,8 +83,24 @@ import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportDocument
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.domain.residenceClassFor
+import com.cbkres.visavole.ui.AccessViewModel
+import com.cbkres.visavole.ui.AddButtonRow
+import com.cbkres.visavole.ui.AllowanceSection
+import com.cbkres.visavole.ui.AppState
+import com.cbkres.visavole.ui.CountryRow
+import com.cbkres.visavole.ui.EmptyState
+import com.cbkres.visavole.ui.HazeBox
+import com.cbkres.visavole.ui.ScreenHeader
+import com.cbkres.visavole.ui.SectionLabel
+import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.animateItemToCenter
+import com.cbkres.visavole.ui.docTitle
+import com.cbkres.visavole.ui.docTypeBadge
 import com.cbkres.visavole.ui.hazeAlphas
+import com.cbkres.visavole.ui.screens.map.DIM_ALPHA
+import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
+import com.cbkres.visavole.ui.screens.map.Severity
+import com.cbkres.visavole.ui.screens.map.severityColor
 import com.cbkres.visavole.ui.toUtcIsoDate
 import com.cbkres.visavole.ui.toUtcMillis
 import kotlinx.coroutines.delay
@@ -130,7 +146,7 @@ private fun docDetailsAnnotated(doc: Document, world: WorldData, base: Color, is
         b.append(text)
         b.addStyle(SpanStyle(color = color), s, b.length)
     }
-    part(holdingName?.takeIf { it != _root_ide_package_.com.cbkres.visavole.ui.docTitle(
+    part(holdingName?.takeIf { it != docTitle(
         doc,
         world
     )
@@ -138,12 +154,12 @@ private fun docDetailsAnnotated(doc: Document, world: WorldData, base: Color, is
     part(regime?.let { "bloc $it" })
     doc.entryType()?.let { type ->
         val (label, severity) = when (type) {
-            "single" -> "single" to _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD
-            "double" -> "double" to _root_ide_package_.com.cbkres.visavole.ui.Severity.WARN
-            else -> "multiple" to _root_ide_package_.com.cbkres.visavole.ui.Severity.OK
+            "single" -> "single" to Severity.BAD
+            "double" -> "double" to Severity.WARN
+            else -> "multiple" to Severity.OK
         }
         part("${label} entry",
-            _root_ide_package_.com.cbkres.visavole.ui.severityColor(severity, isDark)
+            severityColor(severity, isDark)
         )
     } ?: run {
         part(doc.residenceClassFor(world)?.label)
@@ -153,8 +169,8 @@ private fun docDetailsAnnotated(doc: Document, world: WorldData, base: Color, is
 
 @Composable
 fun DocumentsScreen(
-    vm: com.cbkres.visavole.ui.AccessViewModel,
-    ready: com.cbkres.visavole.ui.AppState.Ready,
+    vm: AccessViewModel,
+    ready: AppState.Ready,
     scrollState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
@@ -180,13 +196,13 @@ fun DocumentsScreen(
         ready.docs.associateBy({ it.id }, { d -> GuardEngine.evaluate(GuardAction.RemoveDocument(d.id), guardCtx) })
     }
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
-        _root_ide_package_.com.cbkres.visavole.ui.ScreenHeader(
+        ScreenHeader(
             "Documents",
             "Add the passport and papers you hold — the map updates to match."
         )
-        _root_ide_package_.com.cbkres.visavole.ui.AddButtonRow("Add document") { showAdd = true }
+        AddButtonRow("Add document") { showAdd = true }
         if (ready.docs.isEmpty()) {
-            _root_ide_package_.com.cbkres.visavole.ui.EmptyState("No documents yet. Start with a passport or a residence permit.")
+            EmptyState("No documents yet. Start with a passport or a residence permit.")
         } else {
             // Unified validity for every document (date expiry, entry exhaustion, supersession).
             val statuses = remember(ready.docs, ready.trips, ready.world, today) {
@@ -252,7 +268,7 @@ fun DocumentsScreen(
             val docsListState = scrollState
             // State-taking overload: the per-frame haze read stays inside HazeBox, so scrolling
             // recomposes only the haze edges — not the whole screen and every visible card (P1-14).
-            _root_ide_package_.com.cbkres.visavole.ui.HazeBox(
+            HazeBox(
                 docsListState,
                 MaterialTheme.colorScheme.background,
                 modifier = Modifier.weight(1f)
@@ -266,7 +282,7 @@ fun DocumentsScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     item(key = "allowances") {
-                        _root_ide_package_.com.cbkres.visavole.ui.AllowanceSection(
+                        AllowanceSection(
                             allowances = docAllowances,
                             primary = docPrimary,
                             focusedKey = effectiveFocusAllowance,
@@ -281,17 +297,17 @@ fun DocumentsScreen(
                                     ready.docs.firstOrNull { d -> d.id == a.key.removePrefix("doc:") }
                                 if (doc != null) {
                                     // The same badge the card wears: type pill + country name.
-                                    val (label, tone) = _root_ide_package_.com.cbkres.visavole.ui.docTypeBadge(
+                                    val (label, tone) = docTypeBadge(
                                         doc,
                                         ready.world,
-                                        _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+                                        LocalEffectiveDarkTheme.current
                                     )
-                                    _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+                                    StatusPill(
                                         label,
                                         tone
                                     )
                                     Text(
-                                        _root_ide_package_.com.cbkres.visavole.ui.docTitle(
+                                        docTitle(
                                             doc,
                                             ready.world
                                         ),
@@ -338,7 +354,7 @@ fun DocumentsScreen(
                     }
                     if (active.isNotEmpty()) {
                         item(key = "header-active") {
-                            _root_ide_package_.com.cbkres.visavole.ui.SectionLabel(
+                            SectionLabel(
                                 "Active"
                             )
                         }
@@ -361,7 +377,7 @@ fun DocumentsScreen(
                                 statuses[doc.id],
                                 supersededByLabel = doc.supersededBy?.let { id ->
                                     ready.docs.firstOrNull { d -> d.id == id }?.let {
-                                        _root_ide_package_.com.cbkres.visavole.ui.docTitle(
+                                        docTitle(
                                             it,
                                             ready.world
                                         )
@@ -382,7 +398,7 @@ fun DocumentsScreen(
                     }
                     if (archived.isNotEmpty()) {
                         item(key = "header-archive") {
-                            _root_ide_package_.com.cbkres.visavole.ui.SectionLabel(
+                            SectionLabel(
                                 "Archive"
                             )
                         }
@@ -402,7 +418,7 @@ fun DocumentsScreen(
                                 statuses[doc.id],
                                 supersededByLabel = doc.supersededBy?.let { id ->
                                     ready.docs.firstOrNull { d -> d.id == id }?.let {
-                                        _root_ide_package_.com.cbkres.visavole.ui.docTitle(
+                                        docTitle(
                                             it,
                                             ready.world
                                         )
@@ -489,27 +505,27 @@ private fun ExpiryStatusPill(
         // Same state-to-colour map as the ring and the tab-top summary line: in use with nothing
         // left is terminal (red), in use or down to the last entry is a watch-it state (amber).
         entry?.total != null && entry.state == EntryState.IN_USE ->
-            Triple("In use", if (entry.remaining == 0) _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD else _root_ide_package_.com.cbkres.visavole.ui.Severity.WARN, false)
+            Triple("In use", if (entry.remaining == 0) Severity.BAD else Severity.WARN, false)
         status?.reason == ExpiryReason.SUPERSEDED && status.expired ->
-            Triple("Replaced by $replacedBy", _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD, true)
+            Triple("Replaced by $replacedBy", Severity.BAD, true)
         status?.expired == true && status.reason == ExpiryReason.ENTRIES ->
-            Triple("Entries used up", _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD, true)
-        status?.expired == true -> Triple("Expired on $effective", _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD, true)
+            Triple("Entries used up", Severity.BAD, true)
+        status?.expired == true -> Triple("Expired on $effective", Severity.BAD, true)
         status?.reason == ExpiryReason.SUPERSEDED ->
-            Triple("Replaced by $replacedBy from $effective", _root_ide_package_.com.cbkres.visavole.ui.Severity.WARN, false)
+            Triple("Replaced by $replacedBy from $effective", Severity.WARN, false)
         entry?.total != null && entry.remaining != null && entry.remaining > 0 ->
-            Triple("${entry.remaining} ${if (entry.remaining == 1) "entry" else "entries"} left", if (entry.remaining == 1) _root_ide_package_.com.cbkres.visavole.ui.Severity.WARN else _root_ide_package_.com.cbkres.visavole.ui.Severity.OK, false)
-        days == null -> Triple("No expiry", _root_ide_package_.com.cbkres.visavole.ui.Severity.OK, false)
-        days <= 7 -> Triple("Expiring soon ($days ${if (days == 1L) "day" else "days"})", _root_ide_package_.com.cbkres.visavole.ui.Severity.WARN, false)
-        else -> Triple("Valid for $days ${if (days == 1L) "day" else "days"}", _root_ide_package_.com.cbkres.visavole.ui.Severity.OK, false)
+            Triple("${entry.remaining} ${if (entry.remaining == 1) "entry" else "entries"} left", if (entry.remaining == 1) Severity.WARN else Severity.OK, false)
+        days == null -> Triple("No expiry", Severity.OK, false)
+        days <= 7 -> Triple("Expiring soon ($days ${if (days == 1L) "day" else "days"})", Severity.WARN, false)
+        else -> Triple("Valid for $days ${if (days == 1L) "day" else "days"}", Severity.OK, false)
     }
     // Long pills (e.g. "Replaced by <label>") must wrap instead of squeezing the card's weighted
     // text column; the cap keeps the title column readable for the longest labels.
     _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
         text,
-        _root_ide_package_.com.cbkres.visavole.ui.severityColor(
+        severityColor(
             severity,
-            _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+            LocalEffectiveDarkTheme.current
         ),
         bold = bold,
         maxWidth = 120.dp
@@ -537,7 +553,7 @@ private fun DocCard(
     val (typeLabel, typeTone) = _root_ide_package_.com.cbkres.visavole.ui.docTypeBadge(
         doc,
         world,
-        _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+        LocalEffectiveDarkTheme.current
     )
     _root_ide_package_.com.cbkres.visavole.ui.VisaListCard(
         flashTrigger = flashTrigger,
@@ -549,7 +565,7 @@ private fun DocCard(
                         contentDescription = if (isPrimary) "Primary passport" else "Set as primary",
                         // material-icons-core has no true Star outline (bug), so the non-primary
                         // star is the same solid star in a faded grey to stay monochrome.
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isPrimary) 1f else _root_ide_package_.com.cbkres.visavole.ui.DIM_ALPHA),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isPrimary) 1f else DIM_ALPHA),
                     )
                 }
             }
@@ -558,7 +574,7 @@ private fun DocCard(
             }
             IconButton(
                 onClick = { if (canRemove) onRemove() else onRemoveBlocked() },
-                modifier = Modifier.alpha(if (canRemove) 1f else _root_ide_package_.com.cbkres.visavole.ui.DIM_ALPHA),
+                modifier = Modifier.alpha(if (canRemove) 1f else DIM_ALPHA),
             ) {
                 Icon(
                     Icons.Filled.Close,
@@ -574,10 +590,10 @@ private fun DocCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            _root_ide_package_.com.cbkres.visavole.ui.StatusPill(typeLabel, typeTone)
+            StatusPill(typeLabel, typeTone)
             Text(
                 buildAnnotatedString {
-                    append(_root_ide_package_.com.cbkres.visavole.ui.docTitle(doc, world))
+                    append(docTitle(doc, world))
                     if (isPassport && passportNumber != null) {
                         withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
                             append("  ($passportNumber)")
@@ -609,7 +625,7 @@ private fun DocCard(
                     doc,
                     world,
                     MaterialTheme.colorScheme.onSurfaceVariant,
-                    _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+                    LocalEffectiveDarkTheme.current
                 )
                 if (details != null) {
                     Text(
@@ -1019,7 +1035,7 @@ fun AddDocumentDialog(
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(Modifier.width(12.dp))
@@ -1199,9 +1215,9 @@ private fun MultiCountryConfirmDialog(
             TextButton(onClick = onDismiss) { Text("Back") }
         },
         text = {
-            val warn = _root_ide_package_.com.cbkres.visavole.ui.severityColor(
-                _root_ide_package_.com.cbkres.visavole.ui.Severity.WARN,
-                _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+            val warn = severityColor(
+                Severity.WARN,
+                LocalEffectiveDarkTheme.current
             )
             Text(
                 buildAnnotatedString {
@@ -1304,7 +1320,7 @@ internal fun CountryPicker(
             color = MaterialTheme.colorScheme.surfaceContainerLow,
         ) {
             val (pickerTop, pickerEnd) = listState.hazeAlphas()
-            _root_ide_package_.com.cbkres.visavole.ui.HazeBox(
+            HazeBox(
                 pickerTop,
                 pickerEnd,
                 MaterialTheme.colorScheme.surfaceContainerLow,
@@ -1312,7 +1328,7 @@ internal fun CountryPicker(
             ) {
                 LazyColumn(state = listState, modifier = Modifier.padding(4.dp)) {
                     items(list, key = { it.key }) { entry ->
-                        _root_ide_package_.com.cbkres.visavole.ui.CountryRow(
+                        CountryRow(
                             name = entry.value.name,
                             onClick = { onToggle(entry.key) },
                             iso = entry.key,

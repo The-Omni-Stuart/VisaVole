@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui.screens
+package com.cbkres.visavole.ui.screens.map
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -48,15 +48,9 @@ import com.cbkres.visavole.domain.AccessLevel
 import com.cbkres.visavole.domain.AccessModel
 import com.cbkres.visavole.domain.DocAccess
 import com.cbkres.visavole.ui.AppState
-import com.cbkres.visavole.ui.CountryDetailCard
 import com.cbkres.visavole.ui.CountryRow
-import com.cbkres.visavole.ui.CountrySearchBar
 import com.cbkres.visavole.ui.EmptyState
-import com.cbkres.visavole.ui.Focus
 import com.cbkres.visavole.ui.HazeBox
-import com.cbkres.visavole.ui.IsoShape
-import com.cbkres.visavole.ui.MapLegend
-import com.cbkres.visavole.ui.WorldMapCanvas
 import com.cbkres.visavole.ui.hazeAlphas
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

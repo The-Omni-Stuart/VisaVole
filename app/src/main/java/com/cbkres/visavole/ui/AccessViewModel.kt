@@ -32,6 +32,10 @@ import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.TripSections
 import com.cbkres.visavole.domain.passportDocument
 import com.cbkres.visavole.domain.residenceClassFor
+import com.cbkres.visavole.ui.screens.map.Focus
+import com.cbkres.visavole.ui.screens.map.IsoShape
+import com.cbkres.visavole.ui.screens.map.buildFocus
+import com.cbkres.visavole.ui.screens.map.buildShapes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow

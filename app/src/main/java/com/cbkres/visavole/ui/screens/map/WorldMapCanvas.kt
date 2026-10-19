@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui
+package com.cbkres.visavole.ui.screens.map
 
 import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
@@ -54,6 +54,10 @@ import com.cbkres.visavole.data.WorldMapData
 import com.cbkres.visavole.domain.Access
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.exp
+import kotlin.math.hypot
+import kotlin.math.ln
 
 private const val MIN_ZOOM = 1f
 // High enough for tiny island states (MT, CY, LU, MC…) to become genuinely inspectable without
@@ -410,7 +414,7 @@ internal fun WorldMapCanvas(
                                         val sc = bs * zoom
                                         centerWorld = clampCenter(centerWorld - Offset(d.x / sc, d.y / sc), sc, geometry, w, h, locked = false)
                                         val dt = ((now - lastPinchTime).coerceAtLeast(1L)).toFloat()
-                                        val instant = kotlin.math.ln(dist / lastDist) / dt
+                                        val instant = ln(dist / lastDist) / dt
                                         zoomVelocity = zoomVelocity * 0.7f + instant * 0.3f
                                     }
                                     lastPinchIds = ids
@@ -442,7 +446,7 @@ internal fun WorldMapCanvas(
                                         // Activate on cumulative distance from the original down point,
                                         // then grab the world point under the finger so subsequent moves
                                         // track absolute finger position rather than accumulated deltas.
-                                        if (kotlin.math.hypot(p.x - down.position.x, p.y - down.position.y) > panSlop) {
+                                        if (hypot(p.x - down.position.x, p.y - down.position.y) > panSlop) {
                                             dragging = true
                                             val sc = bs * zoom
                                             grab = Offset(
@@ -457,7 +461,7 @@ internal fun WorldMapCanvas(
                                     } else {
                                         val reanchor = pinchReanchor
                                         if (reanchor != null &&
-                                            kotlin.math.hypot(p.x - reanchor.x, p.y - reanchor.y) <= panSlop
+                                            hypot(p.x - reanchor.x, p.y - reanchor.y) <= panSlop
                                         ) {
                                             // Ignore residual motion from the pinch before treating the
                                             // surviving finger as a fresh one-finger pan.
@@ -533,7 +537,7 @@ internal fun WorldMapCanvas(
                                 // feel zoom inertia even when one finger lifts first.
                                 val freshZoom = if (releaseTime - lastPinchTime <= 50L) shapedZoomVelocity(zoomVelocity) else 0f
                                 val freshPan = if (releaseTime - lastMoveTime <= 50L) shapedFlingVelocity(velocity) else Offset.Zero
-                                if (kotlin.math.abs(freshZoom) > ZOOM_FLING_MIN_VELOCITY) {
+                                if (abs(freshZoom) > ZOOM_FLING_MIN_VELOCITY) {
                                     // Continue the zoom around the screen centre (not the last
                                     // finger/centroid) so the inertia keeps the position fixed —
                                     // pivoting on the lifted fingers read as a "jump" on release.
@@ -541,12 +545,12 @@ internal fun WorldMapCanvas(
                                     zoomFlingJob = pointerScope.launch {
                                         var zv = freshZoom
                                         var lastFrame = withFrameNanos { it }
-                                        while (kotlin.math.abs(zv) > ZOOM_FLING_MIN_VELOCITY) {
+                                        while (abs(zv) > ZOOM_FLING_MIN_VELOCITY) {
                                             val frame = withFrameNanos { it }
                                             val dtMs = ((frame - lastFrame) / 1_000_000f).coerceIn(0f, 34f)
                                             lastFrame = frame
                                             if (dtMs > 0f) {
-                                                val factor = kotlin.math.exp(zv * dtMs)
+                                                val factor = exp(zv * dtMs)
                                                 if (factor != 1f) {
                                                     val ds = if (canvasSize.width > 0f) canvasSize else Size(1f, 1f)
                                                     val bs = baseScaleFor(geometry, ds.width, ds.height)
@@ -555,7 +559,7 @@ internal fun WorldMapCanvas(
                                                     centerWorld = clampCenter(nc, bs * nz, geometry, ds.width, ds.height, locked = false)
                                                 }
                                             }
-                                            zv *= kotlin.math.exp(-dtMs / ZOOM_FLING_DECAY_MS)
+                                            zv *= exp(-dtMs / ZOOM_FLING_DECAY_MS)
                                         }
                                     }
                                 } else if (freshPan.length() > FLING_MIN_VELOCITY) {
@@ -579,7 +583,7 @@ internal fun WorldMapCanvas(
                                                       if (clamped.y != unclamped.y) pv.y * FLING_EDGE_SLIDE_DAMPING else pv.y,
                                                   )
                                              }
-                                             val decay = kotlin.math.exp(-dtMs / FLING_DECAY_MS)
+                                             val decay = exp(-dtMs / FLING_DECAY_MS)
                                              pv = Offset(pv.x * decay, pv.y * decay)
                                         }
                                     }
@@ -737,7 +741,7 @@ private fun shapedFlingVelocity(raw: Offset): Offset =
 
 private fun shapedZoomVelocity(raw: Float): Float {
     if (raw == 0f) return 0f
-    val target = ZOOM_FLING_MAX_VELOCITY * (1f - kotlin.math.exp(-kotlin.math.abs(raw) / ZOOM_FLING_VELOCITY_SCALE))
+    val target = ZOOM_FLING_MAX_VELOCITY * (1f - exp(-abs(raw) / ZOOM_FLING_VELOCITY_SCALE))
     return if (raw > 0f) target else -target
 }
 
@@ -783,7 +787,7 @@ private fun bboxOf(rings: List<FloatArray>): BBox {
 }
 
 private fun distBetween(a: Offset, b: Offset): Float =
-    kotlin.math.hypot((a.x - b.x).toDouble(), (a.y - b.y).toDouble()).toFloat()
+    hypot((a.x - b.x).toDouble(), (a.y - b.y).toDouble()).toFloat()
 
 private fun Offset.length(): Float = distBetween(this, Offset.Zero)
 
@@ -836,5 +840,5 @@ private fun polygonArea(ring: FloatArray): Float {
         a += (pjX + piX) * (pjY - piY)
         j = i
     }
-    return kotlin.math.abs(a) / 2f
+    return abs(a) / 2f
 }

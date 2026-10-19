@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui.screens
+package com.cbkres.visavole.ui.screens.settings
 
 import android.content.Context
 import android.content.Intent
@@ -48,6 +48,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.data.BackupManager
 import com.cbkres.visavole.data.PersistedState
+import com.cbkres.visavole.ui.AccessViewModel
+import com.cbkres.visavole.ui.AppState
 import com.cbkres.visavole.ui.theme.ThemePrefs
 import kotlin.math.roundToInt
 
@@ -66,8 +68,8 @@ private const val LICENSE_URL = "https://github.com/The-Omni-Stuart/VisaVole/blo
 // exactly where the other tabs' content starts.
 @Composable
 fun SettingsScreen(
-    vm: com.cbkres.visavole.ui.AccessViewModel,
-    ready: com.cbkres.visavole.ui.AppState.Ready,
+    vm: AccessViewModel,
+    ready: AppState.Ready,
     themeMode: ThemePrefs.Mode,
     dynamicColor: Boolean,
     onThemeModeChanged: (ThemePrefs.Mode) -> Unit,

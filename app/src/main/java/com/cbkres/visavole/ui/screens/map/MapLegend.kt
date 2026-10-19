@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui
+package com.cbkres.visavole.ui.screens.map
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -20,6 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.AccessLevel
+import com.cbkres.visavole.ui.HazeBox
+import com.cbkres.visavole.ui.hazeAlphas
 
 @Composable
 internal fun MapLegend(counts: Map<AccessLevel?, Int>, homeCount: Int = 1) {
@@ -30,7 +32,13 @@ internal fun MapLegend(counts: Map<AccessLevel?, Int>, homeCount: Int = 1) {
     val legendScroll = rememberScrollState()
     val (legendStart, legendEnd) = legendScroll.hazeAlphas()
     Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 0.dp) {
-        HazeBox(legendStart, legendEnd, MaterialTheme.colorScheme.surfaceContainerHigh, horizontal = true, modifier = Modifier.fillMaxWidth()) {
+        HazeBox(
+            legendStart,
+            legendEnd,
+            MaterialTheme.colorScheme.surfaceContainerHigh,
+            horizontal = true,
+            modifier = Modifier.fillMaxWidth()
+        ) {
             Row(
                 Modifier
                     .fillMaxWidth()

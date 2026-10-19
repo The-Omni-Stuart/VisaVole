@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui
+package com.cbkres.visavole.ui.screens.map
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
@@ -34,6 +34,9 @@ import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.Access
 import com.cbkres.visavole.domain.AccessLevel
 import com.cbkres.visavole.domain.DocAccess
+import com.cbkres.visavole.ui.HazeBox
+import com.cbkres.visavole.ui.StatusPill
+import com.cbkres.visavole.ui.hazeAlphas
 
 
 @Composable
@@ -68,7 +71,8 @@ fun CountryDetailCard(
             }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val chipTone = statusTone(level, LocalEffectiveDarkTheme.current, isHome, isOwnCovered)
+                val chipTone =
+                    statusTone(level, LocalEffectiveDarkTheme.current, isHome, isOwnCovered)
                 StatusPill(
                     text = if (isHome) "Your country" else level.label(),
                     color = chipTone,

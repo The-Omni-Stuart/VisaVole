@@ -80,6 +80,14 @@ import com.cbkres.visavole.domain.AllowanceStatus
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.docCategory
+import com.cbkres.visavole.ui.screens.map.HOME
+import com.cbkres.visavole.ui.screens.map.HOME_DARK
+import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
+import com.cbkres.visavole.ui.screens.map.NO_DATA
+import com.cbkres.visavole.ui.screens.map.STATUS_CHIP_ALPHA
+import com.cbkres.visavole.ui.screens.map.Severity
+import com.cbkres.visavole.ui.screens.map.severityColor
+import com.cbkres.visavole.ui.screens.map.statusTone
 import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.LocalDate
@@ -410,7 +418,10 @@ internal fun allowanceFraction(a: AllowanceSnapshot): Float = when {
  * behind them) keep the remaining-fraction gradient instead of a document state.
  */
 internal fun ringColor(a: AllowanceSnapshot, isDark: Boolean): Color {
-    if (a.noValidDoc) return severityColor(Severity.BAD, isDark) // no document assigned — flash red like an overstay
+    if (a.noValidDoc) return severityColor(
+        Severity.BAD,
+        isDark
+    ) // no document assigned — flash red like an overstay
     if (a.status == AllowanceStatus.UNKNOWN) return NO_DATA // neutral slate — allowance unknown (one NO-DATA entry, see MapColors)
     val severity = when {
         a.overstayDays > 0 || a.status == AllowanceStatus.DANGER || a.status == AllowanceStatus.EXHAUSTED -> Severity.BAD

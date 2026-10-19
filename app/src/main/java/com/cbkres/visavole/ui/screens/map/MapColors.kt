@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui
+package com.cbkres.visavole.ui.screens.map
 
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.compositionLocalOf

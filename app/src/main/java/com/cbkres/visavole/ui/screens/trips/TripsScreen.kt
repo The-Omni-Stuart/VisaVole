@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui.screens
+package com.cbkres.visavole.ui.screens.trips
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -85,8 +85,24 @@ import com.cbkres.visavole.domain.TripWarning
 import com.cbkres.visavole.domain.WarningSeverity
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
+import com.cbkres.visavole.ui.AccessViewModel
+import com.cbkres.visavole.ui.AddButtonRow
+import com.cbkres.visavole.ui.AllowanceSection
+import com.cbkres.visavole.ui.AppState
+import com.cbkres.visavole.ui.EmptyState
+import com.cbkres.visavole.ui.HazeBox
+import com.cbkres.visavole.ui.ScreenHeader
+import com.cbkres.visavole.ui.SectionLabel
+import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.animateItemToCenter
+import com.cbkres.visavole.ui.screens.documents.CountryPicker
+import com.cbkres.visavole.ui.screens.documents.SelectionField
 import com.cbkres.visavole.ui.hazeAlphas
+import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
+import com.cbkres.visavole.ui.screens.map.SAVABLE_DANGER_CODES
+import com.cbkres.visavole.ui.screens.map.Severity
+import com.cbkres.visavole.ui.screens.map.severityColor
+import com.cbkres.visavole.ui.ringColor
 import com.cbkres.visavole.ui.toUtcMillis
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -95,8 +111,8 @@ import java.util.UUID
 
 @Composable
 fun TripsScreen(
-    vm: com.cbkres.visavole.ui.AccessViewModel,
-    ready: com.cbkres.visavole.ui.AppState.Ready,
+    vm: AccessViewModel,
+    ready: AppState.Ready,
     scrollState: LazyListState,
     expandedTrips: List<String>,
     onToggleExpanded: (String) -> Unit,
@@ -136,11 +152,11 @@ fun TripsScreen(
     val validHomes = remember(ready.docs, ready.world, today) { AccessModel.validHomeCountries(ready.docs, ready.world, today) }
 
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
-        _root_ide_package_.com.cbkres.visavole.ui.ScreenHeader(
+        ScreenHeader(
             "Trips",
             "Record your trips and track visa allowance balances."
         )
-        _root_ide_package_.com.cbkres.visavole.ui.AddButtonRow("Add trip") { showAdd = true }
+        AddButtonRow("Add trip") { showAdd = true }
         val sections = ready.tripSections
         // Every trip card's position in the LazyColumn below, keyed by trip id: the allowances item
         // sits at 0, then each non-empty section adds a header before its cards. A ring tap centres
@@ -161,7 +177,7 @@ fun TripsScreen(
         val tripsListState = scrollState
         // State-taking overload: the per-frame haze read stays inside HazeBox, so scrolling
         // recomposes only the haze edges — not the whole screen and every visible card (P1-14).
-        _root_ide_package_.com.cbkres.visavole.ui.HazeBox(
+        HazeBox(
             tripsListState,
             MaterialTheme.colorScheme.background,
             modifier = Modifier.weight(1f)
@@ -181,7 +197,7 @@ fun TripsScreen(
                     sections.upcoming.isNotEmpty() || sections.current.isNotEmpty() || sections.previous.isNotEmpty()
                 if (hasTrips) {
                     item(key = "allowances") {
-                        _root_ide_package_.com.cbkres.visavole.ui.AllowanceSection(
+                        AllowanceSection(
                             allowances = zoneAllowances,
                             primary = primary,
                             focusedKey = effectiveFocusKey,
@@ -222,11 +238,11 @@ fun TripsScreen(
                     }
                 }
                 if (!hasTrips) {
-                    item(key = "empty") { _root_ide_package_.com.cbkres.visavole.ui.EmptyState("No trips yet. Add your first trip to start tracking allowances.") }
+                    item(key = "empty") { EmptyState("No trips yet. Add your first trip to start tracking allowances.") }
                 } else {
                     if (sections.upcoming.isNotEmpty()) {
                         item(key = "header-upcoming") {
-                            _root_ide_package_.com.cbkres.visavole.ui.SectionLabel(
+                            SectionLabel(
                                 "Upcoming"
                             )
                         }
@@ -252,7 +268,7 @@ fun TripsScreen(
                     }
                     if (sections.current.isNotEmpty()) {
                         item(key = "header-current") {
-                            _root_ide_package_.com.cbkres.visavole.ui.SectionLabel(
+                            SectionLabel(
                                 "Current"
                             )
                         }
@@ -278,7 +294,7 @@ fun TripsScreen(
                     }
                     if (sections.previous.isNotEmpty()) {
                         item(key = "header-previous") {
-                            _root_ide_package_.com.cbkres.visavole.ui.SectionLabel(
+                            SectionLabel(
                                 "Previous"
                             )
                         }
@@ -444,9 +460,9 @@ private fun TripCard(
         )
     }
     val allowanceHintColor = row.relatedAllowance?.let {
-        _root_ide_package_.com.cbkres.visavole.ui.ringColor(
+        ringColor(
             it,
-            _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+            LocalEffectiveDarkTheme.current
         )
     } ?: MaterialTheme.colorScheme.onSurfaceVariant
     _root_ide_package_.com.cbkres.visavole.ui.VisaListCard(
@@ -470,7 +486,7 @@ private fun TripCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+            StatusPill(
                 trip.statusAt(today).label,
                 MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -528,15 +544,15 @@ private fun TripCard(
 
                 row.zoneAllowances.size <= 1 -> {
                     val noDoc = row.zoneAllowances.firstOrNull()?.title in row.noDocZoneTitles
-                    if (noDoc) _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+                    if (noDoc) StatusPill(
                         "no valid doc",
-                        _root_ide_package_.com.cbkres.visavole.ui.severityColor(
-                            _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD,
-                            _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+                        severityColor(
+                            Severity.BAD,
+                            LocalEffectiveDarkTheme.current
                         )
                     )
                     else row.allowanceHint?.let {
-                        _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+                        StatusPill(
                             it,
                             allowanceHintColor
                         )
@@ -584,20 +600,20 @@ private fun TripCard(
                             if (row.zoneAllowances.size > 1) {
                                 sr.zoneAllowance?.let { a ->
                                     if (sr.docLabel == null) {
-                                        _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+                                        StatusPill(
                                             "no valid doc",
-                                            _root_ide_package_.com.cbkres.visavole.ui.severityColor(
-                                                _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD,
-                                                _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+                                            severityColor(
+                                                Severity.BAD,
+                                                LocalEffectiveDarkTheme.current
                                             )
                                         )
                                     } else {
                                         zoneHint(a)?.let { h ->
-                                            _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+                                            StatusPill(
                                                 h,
-                                                _root_ide_package_.com.cbkres.visavole.ui.ringColor(
+                                                ringColor(
                                                     a,
-                                                    _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
+                                                    LocalEffectiveDarkTheme.current
                                                 )
                                             )
                                         }
@@ -671,9 +687,9 @@ private fun labeledZoneHint(a: AllowanceSnapshot): String {
  */
 @Composable
 private fun CyclingZonePill(zones: List<AllowanceSnapshot>, noDocZoneTitles: Set<String>) {
-    val isDark = _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current
-    val error = _root_ide_package_.com.cbkres.visavole.ui.severityColor(
-        _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD,
+    val isDark = LocalEffectiveDarkTheme.current
+    val error = severityColor(
+        Severity.BAD,
         isDark
     )
     var face by remember(zones) { mutableStateOf(0) }
@@ -702,14 +718,14 @@ private fun CyclingZonePill(zones: List<AllowanceSnapshot>, noDocZoneTitles: Set
         },
     ) {
         zones.forEach { a ->
-            _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+            StatusPill(
                 faceText(a),
                 faceColor(a),
                 modifier = Modifier.alpha(0f)
             )
         }
         Crossfade(targetState = face, animationSpec = tween(300)) { i ->
-            _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+            StatusPill(
                 faceText(zones[i]),
                 faceColor(zones[i])
             )
@@ -883,8 +899,8 @@ private fun OngoingConfirmDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddTripDialog(
-    vm: com.cbkres.visavole.ui.AccessViewModel,
-    ready: com.cbkres.visavole.ui.AppState.Ready,
+    vm: AccessViewModel,
+    ready: AppState.Ready,
     initial: Trip?,
     onDismiss: () -> Unit,
 ) {
@@ -1428,9 +1444,9 @@ private fun SaveWarningsDialog(
                     Text(
                         "${f.title}: ${f.message}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = _root_ide_package_.com.cbkres.visavole.ui.severityColor(
-                            if (f.severity == GuardSeverity.BLOCK || f.code in _root_ide_package_.com.cbkres.visavole.ui.SAVABLE_DANGER_CODES) _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD else _root_ide_package_.com.cbkres.visavole.ui.Severity.WARN,
-                            _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current,
+                        color = severityColor(
+                            if (f.severity == GuardSeverity.BLOCK || f.code in SAVABLE_DANGER_CODES) Severity.BAD else Severity.WARN,
+                            LocalEffectiveDarkTheme.current,
                         ),
                         modifier = Modifier.padding(vertical = 3.dp),
                     )
@@ -1671,9 +1687,9 @@ private fun StopAccessWarningDialog(
             Text(
                 warning.message,
                 style = MaterialTheme.typography.bodySmall,
-                color = _root_ide_package_.com.cbkres.visavole.ui.severityColor(
-                    if (warning.severity == WarningSeverity.DANGER) _root_ide_package_.com.cbkres.visavole.ui.Severity.BAD else _root_ide_package_.com.cbkres.visavole.ui.Severity.WARN,
-                    _root_ide_package_.com.cbkres.visavole.ui.LocalEffectiveDarkTheme.current,
+                color = severityColor(
+                    if (warning.severity == WarningSeverity.DANGER) Severity.BAD else Severity.WARN,
+                    LocalEffectiveDarkTheme.current,
                 ),
             )
         },

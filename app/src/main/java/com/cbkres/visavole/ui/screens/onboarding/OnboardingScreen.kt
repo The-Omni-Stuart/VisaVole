@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui.screens
+package com.cbkres.visavole.ui.screens.onboarding
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
