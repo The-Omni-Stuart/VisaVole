@@ -92,7 +92,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.sqlite.jdbc)
     // Real org.json for JVM unit tests (the mockable android.jar stubs would throw "not mocked").
-    testImplementation("org.json:json:20240303")
+    testImplementation(libs.orgJson)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
 
