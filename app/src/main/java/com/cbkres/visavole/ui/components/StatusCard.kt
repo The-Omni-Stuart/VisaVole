@@ -30,7 +30,6 @@ import com.cbkres.visavole.ui.allowanceSummary
 import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.ringColor
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
-import kotlin.collections.forEach
 
 // TODO: Make this more generic since it's used for document expiery as well
 

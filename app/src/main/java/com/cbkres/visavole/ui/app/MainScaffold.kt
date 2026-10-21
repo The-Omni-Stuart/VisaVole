@@ -45,9 +45,9 @@ import androidx.compose.ui.geometry.Offset
 import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.AppState
 import com.cbkres.visavole.ui.VisaSnackbarHost
-import com.cbkres.visavole.ui.screens.map.defaultCenter
 import com.cbkres.visavole.ui.screens.documents.DocumentsScreen
 import com.cbkres.visavole.ui.screens.map.MapScreen
+import com.cbkres.visavole.ui.screens.map.defaultCenter
 import com.cbkres.visavole.ui.screens.settings.SettingsScreen
 import com.cbkres.visavole.ui.screens.trips.TripsScreen
 import com.cbkres.visavole.ui.theme.ThemePrefs

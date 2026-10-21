@@ -51,7 +51,6 @@ import com.cbkres.visavole.ui.screens.map.Severity
 import com.cbkres.visavole.ui.screens.map.severityColor
 import kotlinx.coroutines.delay
 import java.time.LocalDate
-import kotlin.collections.forEach
 
 private fun zoneLabel(rule: StayRule?, fallback: String): String = when {
     rule == null -> fallback
