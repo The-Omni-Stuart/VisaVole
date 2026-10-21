@@ -135,7 +135,7 @@ internal fun MainScaffold(
                 },
             )
         },
-        snackbarHost = { VisaSnackbarHost(snackbarHostState) },
+        snackbarHost = { VisaSnackbarHost(snackbarHostState) }, // Q: Is this ever used?
         bottomBar = {
             // Settings is a full-screen overlay, so the persistent nav bar hides while it's open.
             // expand/collapse is a *size* animation (not just an offset), so the Scaffold's content

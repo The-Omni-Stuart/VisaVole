@@ -97,7 +97,7 @@ private fun HazeEdges(
  * region can get the soft edge fades with one call.
  */
 @Composable
-fun HazeBox(
+internal fun HazeBox(
     startAlpha: Float,
     endAlpha: Float,
     color: Color,
@@ -117,7 +117,7 @@ fun HazeBox(
  * screen — otherwise every visible card recomposes on every scroll frame.
  */
 @Composable
-fun HazeBox(
+internal fun HazeBox(
     scrollState: LazyListState,
     color: Color,
     horizontal: Boolean = false,
@@ -133,7 +133,7 @@ fun HazeBox(
 
 /** [HazeBox] for a classic [ScrollState]; see the [LazyListState] overload. */
 @Composable
-fun HazeBox(
+internal fun HazeBox(
     scrollState: ScrollState,
     color: Color,
     horizontal: Boolean = false,
@@ -148,14 +148,14 @@ fun HazeBox(
 }
 
 /** Start/end haze opacity for a classic [ScrollState]. */
-fun ScrollState.hazeAlphas(): Pair<Float, Float> {
+internal fun ScrollState.hazeAlphas(): Pair<Float, Float> {
     val start = (value / HAZE_RAMP).coerceIn(0f, 1f)
     val end = ((maxValue - value) / HAZE_RAMP).coerceIn(0f, 1f)
     return start to end
 }
 
 /** Start/end haze opacity for a [LazyListState]. */
-fun LazyListState.hazeAlphas(): Pair<Float, Float> {
+internal  fun LazyListState.hazeAlphas(): Pair<Float, Float> {
     val info = layoutInfo
     val visible = info.visibleItemsInfo
     if (visible.isEmpty()) return 0f to 0f

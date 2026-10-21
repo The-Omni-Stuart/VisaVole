@@ -85,7 +85,7 @@ import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.domain.residenceClassFor
 import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.AddButtonRow
-import com.cbkres.visavole.ui.AllowanceSection
+import com.cbkres.visavole.ui.components.StatusCard
 import com.cbkres.visavole.ui.AppState
 import com.cbkres.visavole.ui.CountryRow
 import com.cbkres.visavole.ui.EmptyState
@@ -282,7 +282,7 @@ fun DocumentsScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     item(key = "allowances") {
-                        AllowanceSection(
+                        StatusCard(
                             allowances = docAllowances,
                             primary = docPrimary,
                             focusedKey = effectiveFocusAllowance,

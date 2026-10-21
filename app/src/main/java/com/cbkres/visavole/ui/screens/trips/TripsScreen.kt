@@ -87,7 +87,7 @@ import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.AddButtonRow
-import com.cbkres.visavole.ui.AllowanceSection
+import com.cbkres.visavole.ui.components.StatusCard
 import com.cbkres.visavole.ui.AppState
 import com.cbkres.visavole.ui.EmptyState
 import com.cbkres.visavole.ui.HazeBox
@@ -122,31 +122,19 @@ fun TripsScreen(
     val scope = rememberCoroutineScope()
     val today = ready.today
     var focusedKey by remember { mutableStateOf<String?>(null) }
-    // The trips list's viewport height, in px — lets a tapped ring centre its trip on screen.
     var listViewportPx by remember { mutableStateOf(0) }
-    // The trip card a ring tap just centred, with a per-trip counter: each tap bumps the second
-    // half, which makes that card's VisaListCard play its one-shot "look here" ripple.
     var flashTrip by remember { mutableStateOf<Pair<String, Int>?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var editingTrip by remember { mutableStateOf<Trip?>(null) }
     var deletingTrip by remember { mutableStateOf<Trip?>(null) }
     var endingTrip by remember { mutableStateOf<Trip?>(null) }
-    // The Trips tab only surfaces zone (stay-window) allowances; per-document entry rings
-    // live on the Documents tab, next to the document itself. P3-44: remember the per-publish
-    // filters so they don't re-run on every scroll-frame recomposition (P1-14).
     val zoneAllowances = remember(ready.allowances) { ready.allowances.filter { !it.key.startsWith("doc:") } }
-    // Effective focus: honor the tapped card only while that allowance still exists, so a
-    // focused zone that disappears (deleted trip, lapsed doc) falls back to the primary display
-    // instead of leaving a dead key behind.
     val effectiveFocusKey = remember(zoneAllowances, focusedKey) {
         focusedKey?.takeIf { key -> zoneAllowances.any { it.key == key } }
     }
     val primary = remember(zoneAllowances, effectiveFocusKey) {
         TripModel.primaryAllowance(zoneAllowances, effectiveFocusKey)
     }
-    // P3-43: the passport maps + valid home set are identical across every trip card, so compute
-    // them once per publish here instead of as a `remember(docs)` inside each card (which wasted
-    // N-1 of the N lookups on every recomposition).
     val passportCounts = remember(ready.docs) { passportCountsByIso(ready.docs) }
     val passportNumbers = remember(ready.docs) { passportNumbers(ready.docs) }
     val validHomes = remember(ready.docs, ready.world, today) { AccessModel.validHomeCountries(ready.docs, ready.world, today) }
@@ -156,11 +144,8 @@ fun TripsScreen(
             "Trips",
             "Record your trips and track visa allowance balances."
         )
-        AddButtonRow("Add trip") { showAdd = true }
+
         val sections = ready.tripSections
-        // Every trip card's position in the LazyColumn below, keyed by trip id: the allowances item
-        // sits at 0, then each non-empty section adds a header before its cards. A ring tap centres
-        // its trip from here instead of re-deriving the header offsets by hand.
         val tripIndex = remember(sections.upcoming, sections.current, sections.previous) {
             val m = HashMap<String, Int>()
             var i = 1
@@ -172,11 +157,9 @@ fun TripsScreen(
             }
             m
         }
-        // One scroll plane under the add button: the allowance section is the first item of the
-        // same list as the trip sections (its horizontal card switcher keeps its own scroll + haze).
+
         val tripsListState = scrollState
-        // State-taking overload: the per-frame haze read stays inside HazeBox, so scrolling
-        // recomposes only the haze edges — not the whole screen and every visible card (P1-14).
+
         HazeBox(
             tripsListState,
             MaterialTheme.colorScheme.background,
@@ -190,137 +173,192 @@ fun TripsScreen(
                 contentPadding = PaddingValues(top = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                // With no trips there are no zone allowances either, so the allowances item would
-                // only add a second stacked placeholder ("No allowances to track yet") on top of
-                // "No trips yet" — suppress it until a trip exists (P3-14).
                 val hasTrips =
-                    sections.upcoming.isNotEmpty() || sections.current.isNotEmpty() || sections.previous.isNotEmpty()
+                    sections.upcoming.isNotEmpty() ||
+                            sections.current.isNotEmpty() ||
+                            sections.previous.isNotEmpty()
+
                 if (hasTrips) {
                     item(key = "allowances") {
-                        AllowanceSection(
+                        StatusCard(
                             allowances = zoneAllowances,
                             primary = primary,
                             focusedKey = effectiveFocusKey,
-                            onFocus = { focusedKey = if (focusedKey == it) null else it },
+                            onFocus = {
+                                focusedKey = if (focusedKey == it) null else it
+                            },
                             onRingClick = { snap ->
-                                // Jump the list to the zone's trip (the in-trip one first) and centre it.
                                 val trip =
                                     (snap.currentTripId ?: snap.relevantTripIds.firstOrNull())
-                                        ?.let { id -> ready.trips.firstOrNull { t -> t.id == id } }
+                                        ?.let { id ->
+                                            ready.trips.firstOrNull { trip ->
+                                                trip.id == id
+                                            }
+                                        }
+
                                 if (trip != null) {
-                                    if (trip.id !in expandedTrips) onToggleExpanded(trip.id)
+                                    if (trip.id !in expandedTrips) {
+                                        onToggleExpanded(trip.id)
+                                    }
+
                                     val target = tripIndex[trip.id]
+
                                     if (target != null) {
-                                        // Fire the flash only once the centring scroll has settled, so it
-                                        // lands on the trip wherever it sits in the list — not while the
-                                        // card is still off-screen mid-scroll.
                                         scope.launch {
                                             tripsListState.animateItemToCenter(
                                                 target,
                                                 listViewportPx
                                             )
-                                            val n =
-                                                (flashTrip?.takeIf { it.first == trip.id }?.second
-                                                    ?: 0) + 1
-                                            flashTrip = trip.id to n
-                                            // Clear the trigger once the ripple has had time to play (~600 ms:
-                                            // a 300 ms held press then a 300 ms release fade): a card
-                                            // re-entering the composition with the trigger still set would
-                                            // replay the flash.
+
+                                            val flashCount =
+                                                (flashTrip
+                                                    ?.takeIf { it.first == trip.id }
+                                                    ?.second ?: 0) + 1
+
+                                            flashTrip = trip.id to flashCount
+
                                             delay(900)
-                                            if (flashTrip == (trip.id to n)) flashTrip = null
+
+                                            if (flashTrip == trip.id to flashCount) {
+                                                flashTrip = null
+                                            }
                                         }
                                     }
                                 }
                             },
                         )
+
                         Spacer(Modifier.height(4.dp))
                     }
-                }
-                if (!hasTrips) {
-                    item(key = "empty") { EmptyState("No trips yet. Add your first trip to start tracking allowances.") }
-                } else {
+
+                    // TODO: Current layout: Upcoming, Current, Previous. Maybe change to tabs?
+                    // TODO: pull out to generic display comp
+
                     if (sections.upcoming.isNotEmpty()) {
                         item(key = "header-upcoming") {
-                            SectionLabel(
-                                "Upcoming"
-                            )
+                            SectionLabel("Upcoming")
                         }
-                        items(sections.upcoming, key = { it.id }) { trip ->
+
+                        items(
+                            items = sections.upcoming,
+                            key = { it.id }
+                        ) { trip ->
                             TripCard(
-                                trip,
-                                ready.world,
-                                ready.docs,
-                                ready.allowances,
-                                passportCounts,
-                                passportNumbers,
-                                validHomes,
-                                today,
+                                trip = trip,
+                                world = ready.world,
+                                docs = ready.docs,
+                                allowances = ready.allowances,
+                                passportCounts = passportCounts,
+                                passportNumbers = passportNumbers,
+                                validHomes = validHomes,
+                                today = today,
                                 expanded = trip.id in expandedTrips,
-                                onExpand = { onToggleExpanded(trip.id) },
-                                onEdit = { editingTrip = trip },
+                                onExpand = {
+                                    onToggleExpanded(trip.id)
+                                },
+                                onEdit = {
+                                    editingTrip = trip
+                                },
                                 onEnd = {},
-                                onDelete = { deletingTrip = trip },
-                                flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second
-                                    ?: 0
+                                onDelete = {
+                                    deletingTrip = trip
+                                },
+                                flashTrigger =
+                                    flashTrip
+                                        ?.takeIf { it.first == trip.id }
+                                        ?.second
+                                        ?: 0,
                             )
                         }
                     }
+
                     if (sections.current.isNotEmpty()) {
                         item(key = "header-current") {
-                            SectionLabel(
-                                "Current"
-                            )
+                            SectionLabel("Current")
                         }
-                        items(sections.current, key = { it.id }) { trip ->
+
+                        items(
+                            items = sections.current,
+                            key = { it.id }
+                        ) { trip ->
                             TripCard(
-                                trip,
-                                ready.world,
-                                ready.docs,
-                                ready.allowances,
-                                passportCounts,
-                                passportNumbers,
-                                validHomes,
-                                today,
+                                trip = trip,
+                                world = ready.world,
+                                docs = ready.docs,
+                                allowances = ready.allowances,
+                                passportCounts = passportCounts,
+                                passportNumbers = passportNumbers,
+                                validHomes = validHomes,
+                                today = today,
                                 expanded = trip.id in expandedTrips,
-                                onExpand = { onToggleExpanded(trip.id) },
-                                onEdit = { editingTrip = trip },
-                                onEnd = { endingTrip = trip },
-                                onDelete = { deletingTrip = trip },
-                                flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second
-                                    ?: 0
+                                onExpand = {
+                                    onToggleExpanded(trip.id)
+                                },
+                                onEdit = {
+                                    editingTrip = trip
+                                },
+                                onEnd = {
+                                    endingTrip = trip
+                                },
+                                onDelete = {
+                                    deletingTrip = trip
+                                },
+                                flashTrigger =
+                                    flashTrip
+                                        ?.takeIf { it.first == trip.id }
+                                        ?.second
+                                        ?: 0,
                             )
                         }
                     }
+
                     if (sections.previous.isNotEmpty()) {
                         item(key = "header-previous") {
-                            SectionLabel(
-                                "Previous"
-                            )
+                            SectionLabel("Previous")
                         }
-                        items(sections.previous, key = { it.id }) { trip ->
+
+                        items(
+                            items = sections.previous,
+                            key = { it.id }
+                        ) { trip ->
                             TripCard(
-                                trip,
-                                ready.world,
-                                ready.docs,
-                                ready.allowances,
-                                passportCounts,
-                                passportNumbers,
-                                validHomes,
-                                today,
+                                trip = trip,
+                                world = ready.world,
+                                docs = ready.docs,
+                                allowances = ready.allowances,
+                                passportCounts = passportCounts,
+                                passportNumbers = passportNumbers,
+                                validHomes = validHomes,
+                                today = today,
                                 expanded = trip.id in expandedTrips,
-                                onExpand = { onToggleExpanded(trip.id) },
-                                onEdit = { editingTrip = trip },
+                                onExpand = {
+                                    onToggleExpanded(trip.id)
+                                },
+                                onEdit = {
+                                    editingTrip = trip
+                                },
                                 onEnd = {},
-                                onDelete = { deletingTrip = trip },
-                                flashTrigger = flashTrip?.takeIf { it.first == trip.id }?.second
-                                    ?: 0
+                                onDelete = {
+                                    deletingTrip = trip
+                                },
+                                flashTrigger =
+                                    flashTrip
+                                        ?.takeIf { it.first == trip.id }
+                                        ?.second
+                                        ?: 0,
                             )
                         }
+                    }
+                } else {
+                    item(key = "empty") {
+                        EmptyState(
+                            "No trips yet. Add your first trip to start tracking allowances."
+                        )
                     }
                 }
             }
         }
+        AddButtonRow("Add trip") { showAdd = true }
     }
 
     if (showAdd) {
@@ -356,389 +394,6 @@ fun TripsScreen(
         )
     }
 }
-
-private fun zoneLabel(rule: StayRule?, fallback: String): String = when {
-    rule == null -> fallback
-    rule.zoneName.isNotBlank() -> rule.zoneName
-    rule.countries.size == 1 -> fallback
-    else -> rule.displayName
-}
-
-// The allowance display (ring kit, AllowanceSection, AllowanceCard) lives in UiKit — shared with
-// the Documents tab.
-
-private fun tripTitle(trip: Trip, world: WorldData): String {
-    val names = TripModel.sortedStops(trip.stops).map { world.countries[it.countryIso2]?.name ?: it.countryIso2 }
-    return when {
-        names.size <= 1 -> names.firstOrNull().orEmpty()
-        names.first() == names.last() -> if (names.toSet().size == 1) names.first() else "${names.first()} → … → ${names.last()}"
-        else -> "${names.first()} → ${names.last()}"
-    }
-}
-
-/** One expanded stop's derived display values, computed once per trip row (P3-43). */
-private data class StopRow(
-    val countryName: String,
-    val zoneLabel: String,
-    val docLabel: String?,
-    val zoneAllowance: AllowanceSnapshot?,
-)
-
-/** Everything a TripCard derives per trip, computed once per publish (P3-43) so a card's row
- *  doesn't re-derive on every scroll-frame recomposition (amplified by P1-14). */
-private data class TripCardRow(
-    val sortedStops: List<TripStop>,
-    val stops: List<StopRow>,
-    val title: String,
-    val stopCountLabel: String?,
-    val docLabels: String,
-    val zones: List<String>,
-    val relatedAllowance: AllowanceSnapshot?,
-    val allowanceHint: String?,
-    val zoneAllowances: List<AllowanceSnapshot>,
-    val noDocZoneTitles: Set<String>,
-)
-
-@Composable
-private fun TripCard(
-    trip: Trip,
-    world: WorldData,
-    docs: List<Document>,
-    allowances: List<AllowanceSnapshot>,
-    // Hoisted once per publish at the screen level and shared by every card (P3-43): identical
-    // across all trip cards, so computing them per card (the old `remember(docs)`s) wasted N-1 of
-    // the N lookups on every recomposition.
-    passportCounts: Map<String, Int>,
-    passportNumbers: Map<String, Int>,
-    validHomes: Set<String>,
-    today: LocalDate,
-    expanded: Boolean,
-    onExpand: () -> Unit,
-    onEdit: () -> Unit,
-    onEnd: () -> Unit,
-    onDelete: () -> Unit,
-    flashTrigger: Int = 0,
-) {
-    // P3-43: derive the whole row once per (trip, world, docs, allowances, today) instead of on
-    // every recomposition. These inputs are stable across scroll-frame recompositions (P1-14), so
-    // the row is built once per publish and then read as plain values.
-    val row = remember(trip, world, docs, allowances, today) {
-        val sortedStops = TripModel.sortedStops(trip.stops)
-        val zoneAllowances = TripModel.zoneAllowancesFor(trip, allowances)
-        val zoneByTitle = zoneAllowances.associateBy { it.title }
-        val stops = sortedStops.map { stop ->
-            val countryName = world.countries[stop.countryIso2]?.name ?: stop.countryIso2
-            // Stay windows resolve against the passports that are not expired (P2-30).
-            val zoneLabel = zoneLabel(world.stayRuleFor(stop.countryIso2, validHomes, today), countryName)
-            StopRow(
-                countryName = countryName,
-                zoneLabel = zoneLabel,
-                docLabel = stop.documentId?.let { id -> docs.firstOrNull { it.id == id }?.displayLabel(passportCounts, passportNumbers) ?: id },
-                zoneAllowance = zoneByTitle[zoneLabel],
-            )
-        }
-        val relatedAllowance = allowances.firstOrNull { it.currentTripId == trip.id && !it.key.startsWith("doc:") }
-            ?: allowances.firstOrNull { it.currentTripId == trip.id }
-            ?: allowances.firstOrNull { it.relevantTripIds.contains(trip.id) && !it.key.startsWith("doc:") }
-            ?: allowances.firstOrNull { it.relevantTripIds.contains(trip.id) }
-        TripCardRow(
-            sortedStops = sortedStops,
-            stops = stops,
-            title = tripTitle(trip, world),
-            stopCountLabel = if (sortedStops.size > 1) "${sortedStops.size} stops" else null,
-            docLabels = stops.mapNotNull { it.docLabel }.distinct().joinToString(", "),
-            zones = stops.map { it.zoneLabel }.distinct(),
-            relatedAllowance = relatedAllowance,
-            allowanceHint = when {
-                relatedAllowance?.overstayDays != null && relatedAllowance.overstayDays > 0 -> "-${relatedAllowance.overstayDays} Days OVERSTAYING!"
-                relatedAllowance?.remainingDays != null -> if (relatedAllowance.remainingDays == 1) "1 day left" else "${relatedAllowance.remainingDays} days left"
-                relatedAllowance?.entryRemaining != null -> "${relatedAllowance.entryRemaining} ${if (relatedAllowance.entryRemaining == 1) "entry" else "entries"} left"
-                else -> null
-            },
-            zoneAllowances = zoneAllowances,
-            noDocZoneTitles = stops.filter { it.docLabel == null }.map { it.zoneLabel }.toSet(),
-        )
-    }
-    val allowanceHintColor = row.relatedAllowance?.let {
-        ringColor(
-            it,
-            LocalEffectiveDarkTheme.current
-        )
-    } ?: MaterialTheme.colorScheme.onSurfaceVariant
-    _root_ide_package_.com.cbkres.visavole.ui.VisaListCard(
-        onClick = onExpand,
-        flashTrigger = flashTrigger,
-        actions = {
-            IconButton(onClick = onEdit) {
-                Icon(Icons.Filled.Edit, contentDescription = "Edit")
-            }
-            if (trip.statusAt(today) == TripStatus.ONGOING) {
-                IconButton(onClick = onEnd) {
-                    Icon(Icons.Filled.DateRange, contentDescription = "End trip")
-                }
-            }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Close, contentDescription = "Delete")
-            }
-        },
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            StatusPill(
-                trip.statusAt(today).label,
-                MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                row.title,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = if (expanded) "−" else "+",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Text(
-            buildString {
-                append(trip.firstArrival)
-                append(" → ")
-                append(trip.finalDeparture ?: "ongoing")
-                row.stopCountLabel?.let {
-                    append(" · ")
-                    append(it)
-                }
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        // Top-aligned: expanded zone lists can wrap to several lines, and the hint pill should
-        // stay on the first line instead of floating at the middle of the block.
-        Row(
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            if (row.zones.isNotEmpty()) {
-                Text(
-                    row.zones.joinToString(", "),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = if (expanded) Int.MAX_VALUE else 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            // Multi-zone trips swap the single (ambiguous) pill for a cycling one that names each
-            // zone in turn; once expanded the cycling pill hides and a static per-zone pill is shown
-            // in the expanded block instead. A zone whose stop has no document shows "no valid doc"
-            // in place of its allowance. Single-zone trips keep the original pill unchanged.
-            when {
-                row.zoneAllowances.size > 1 && !expanded -> CyclingZonePill(
-                    row.zoneAllowances,
-                    row.noDocZoneTitles
-                )
-
-                row.zoneAllowances.size <= 1 -> {
-                    val noDoc = row.zoneAllowances.firstOrNull()?.title in row.noDocZoneTitles
-                    if (noDoc) StatusPill(
-                        "no valid doc",
-                        severityColor(
-                            Severity.BAD,
-                            LocalEffectiveDarkTheme.current
-                        )
-                    )
-                    else row.allowanceHint?.let {
-                        StatusPill(
-                            it,
-                            allowanceHintColor
-                        )
-                    }
-                }
-            }
-        }
-        AnimatedVisibility(
-            visible = expanded,
-            enter = fadeIn(tween(150)) + expandVertically(tween(150)),
-            exit = fadeOut(tween(150)) + shrinkVertically(tween(150)),
-        ) {
-            Column {
-                Spacer(Modifier.height(12.dp))
-                row.sortedStops.forEachIndexed { index, stop ->
-                    val sr = row.stops[index]
-                    Column(Modifier.padding(vertical = 6.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                "${index + 1}.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                sr.countryName,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                sr.zoneLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            // Multi-zone trips tag each stop with its own zone's allowance (compact form —
-                            // the country/zone is already named in the row), so no pill is piled at the
-                            // bottom. Single-zone trips keep the one header pill instead.
-                            if (row.zoneAllowances.size > 1) {
-                                sr.zoneAllowance?.let { a ->
-                                    if (sr.docLabel == null) {
-                                        StatusPill(
-                                            "no valid doc",
-                                            severityColor(
-                                                Severity.BAD,
-                                                LocalEffectiveDarkTheme.current
-                                            )
-                                        )
-                                    } else {
-                                        zoneHint(a)?.let { h ->
-                                            StatusPill(
-                                                h,
-                                                ringColor(
-                                                    a,
-                                                    LocalEffectiveDarkTheme.current
-                                                )
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Text(
-                            "${stop.arrival} → ${stop.departure ?: "open"}${sr.docLabel?.let { " · $it" } ?: " · No document"}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                if (trip.note != null) {
-                    Text(trip.note!!, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-        if (!expanded) {
-            if (trip.note != null) {
-                Text(
-                    trip.note!!,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (row.docLabels.isNotEmpty()) {
-                Text(
-                    row.docLabels,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-/**
- * The compact allowance wording a zone shows (no destination prefix — the destination is named by
- * [labeledZoneHint], or, in the expanded stop list, by the stop's own row): "76 days left",
- * "-3 Days OVERSTAYING!", "5 entries left".
- */
-private fun zoneHint(a: AllowanceSnapshot): String? = when {
-    a.overstayDays > 0 -> "-${a.overstayDays} Days OVERSTAYING!"
-    a.remainingDays != null -> if (a.remainingDays == 1) "1 day left" else "${a.remainingDays} days left"
-    a.entryRemaining != null -> "${a.entryRemaining} ${if (a.entryRemaining == 1) "entry" else "entries"} left"
-    else -> null
-}
-
-/**
- * The cycling-pill face text: the zone's short name (ISO-2 code for a single-country zone, else the
- * zone name) naming the destination, then [zoneHint] — e.g. "US: 76 days left",
- * "Schengen Area: 76 days left", "GB: -3 Days OVERSTAYING!".
- */
-private fun labeledZoneHint(a: AllowanceSnapshot): String {
-    val name = a.shortTitle ?: a.title
-    val hint = zoneHint(a) ?: return name
-    return "$name: $hint"
-}
-
-/**
- * A single allowance pill that cycles through a multi-zone trip's zones in turn, mirroring the
- * allowance ring's face-rotator (5 s cadence + crossfade). The invisible "ghost" faces pin the box
- * to the widest face so swapping never shifts the row, and the merged TalkBack label reads every
- * zone at once instead of re-announcing on each flip. A zone in [noDocZoneTitles] (a stop with no
- * document) shows "no valid doc" in place of its allowance, in the status red.
- */
-@Composable
-private fun CyclingZonePill(zones: List<AllowanceSnapshot>, noDocZoneTitles: Set<String>) {
-    val isDark = LocalEffectiveDarkTheme.current
-    val error = severityColor(
-        Severity.BAD,
-        isDark
-    )
-    var face by remember(zones) { mutableStateOf(0) }
-    LaunchedEffect(zones) {
-        if (zones.size < 2) {
-            face = 0
-            return@LaunchedEffect
-        }
-        while (true) {
-            // The main face (the active stop's zone, first in the list) lingers 10 s so it reads as
-            // primary; the others get the standard 5 s cadence.
-            delay(if (face == 0) 10_000 else 5_000)
-            face = (face + 1) % zones.size
-        }
-    }
-    fun faceText(a: AllowanceSnapshot) =
-        if (a.title in noDocZoneTitles) "${a.shortTitle ?: a.title}: no valid doc" else labeledZoneHint(a)
-    fun faceColor(a: AllowanceSnapshot) =
-        if (a.title in noDocZoneTitles) error else _root_ide_package_.com.cbkres.visavole.ui.ringColor(
-            a,
-            isDark
-        )
-    Box(
-        modifier = Modifier.semantics(mergeDescendants = true) {
-            contentDescription = zones.joinToString("; ") { faceText(it) }
-        },
-    ) {
-        zones.forEach { a ->
-            StatusPill(
-                faceText(a),
-                faceColor(a),
-                modifier = Modifier.alpha(0f)
-            )
-        }
-        Crossfade(targetState = face, animationSpec = tween(300)) { i ->
-            StatusPill(
-                faceText(zones[i]),
-                faceColor(zones[i])
-            )
-        }
-    }
-}
-
-private val TripStatus.label: String
-    get() = when (this) {
-        TripStatus.UPCOMING -> "Upcoming"
-        TripStatus.ONGOING -> "Ongoing"
-        TripStatus.PREVIOUS -> "Completed"
-    }
 
 private data class StopSnapshot(val stops: List<TripStop>)
 
@@ -959,9 +614,6 @@ private fun AddTripDialog(
         val conflict = ongoingConflict ?: return
         ongoingConflict = null
         if (closePrevious) {
-            // Re-evaluate against the list where the previous trip is already closed: the cap
-            // rule is then quiet and its mutation is gone. The EndTrip mutation only reaches the
-            // ViewModel when this trip is actually saved (atomically with the candidate).
             val closedTrips = ready.trips.map {
                 if (it.id == conflict.previous.id) TripModel.closeTrip(it, conflict.end) else it
             }
@@ -1269,19 +921,6 @@ private fun AddTripDialog(
     }
 }
 
-/** Display label for [doc]; when the holder keeps several passports of one nationality, append a
- * stable "(N)" (e.g. "Passport · United Kingdom (2)") so it's clear which passport a stop refers to. */
-private fun Document.displayLabel(counts: Map<String, Int>, numbers: Map<String, Int>): String {
-    val iso = (kind as? DocKind.Passport)?.iso2 ?: return label
-    val n = numbers[id] ?: return label
-    return if ((counts[iso] ?: 0) >= 2) "$label  ($n)" else label
-}
-
-/** Width-safe [displayLabel] for the collapsed preview field: a passport drops the "Passport · "
- * prefix so the nationality and "(N)" number both fit (e.g. "United Kingdom (1)"). */
-private fun Document.compactDisplayLabel(counts: Map<String, Int>, numbers: Map<String, Int>): String =
-    displayLabel(counts, numbers).removePrefix("Passport · ")
-
 @Composable
 private fun StopRow(
     stop: TripStop,
@@ -1412,7 +1051,7 @@ private fun OngoingConflictDialog(
         onDismiss = onDismiss,
         content = {
             Text(
-                "“${tripTitle(conflict.previous, world)}” is still open. Close it on ${conflict.end} and add this trip, or keep both.",
+                "“${TripPresentation(conflict.previous, world)}” is still open. Close it on ${conflict.end} and add this trip, or keep both.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1491,7 +1130,6 @@ private fun StopEditorDialog(
     var showArrival by remember { mutableStateOf(false) }
     var showDeparture by remember { mutableStateOf(initiallyEditingDeparture) }
     var pendingAccessWarning by remember { mutableStateOf<TripWarning?>(null) }
-    // Mirror the map's country-card: only offer documents that actually unlock the destination.
     val relevantDocs = remember(stop.countryIso2, stop.arrival, docs, trips) {
         if (stop.countryIso2 in world.countries) {
             AccessModel.relevantDocuments(stop.countryIso2, docs, world, stop.arrival, trips)
@@ -1640,7 +1278,6 @@ private fun StopEditorDialog(
                 showArrival = false
             },
             onDismiss = { showArrival = false },
-            // The arrival may not come after the (already set) departure.
             maxDate = stop.departure,
         )
     }
@@ -1657,7 +1294,6 @@ private fun StopEditorDialog(
             onSecondary = if (isFinal) ({
                 stop = stop.copy(departure = null); showDeparture = false
             }) else null,
-            // The departure may not precede the arrival.
             minDate = stop.arrival,
         )
     }
