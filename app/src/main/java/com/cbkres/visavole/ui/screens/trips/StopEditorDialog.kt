@@ -43,8 +43,8 @@ import com.cbkres.visavole.domain.WarningSeverity
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.ui.hazeAlphas
-import com.cbkres.visavole.ui.screens.documents.CountryPicker
-import com.cbkres.visavole.ui.screens.documents.SelectionField
+import com.cbkres.visavole.ui.components.forms.CountryPicker
+import com.cbkres.visavole.ui.components.forms.SelectionField
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import com.cbkres.visavole.ui.screens.map.Severity
 import com.cbkres.visavole.ui.screens.map.severityColor
