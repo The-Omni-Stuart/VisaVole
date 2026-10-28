@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui.components
+package com.cbkres.visavole.ui.components.statuscard
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui.components
+package com.cbkres.visavole.ui.components.statuscard
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -26,7 +26,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.ui.HazeBox
-import com.cbkres.visavole.ui.allowanceSummary
 import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.ringColor
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme

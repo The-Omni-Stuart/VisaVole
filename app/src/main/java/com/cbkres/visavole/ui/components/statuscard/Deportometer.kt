@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui.components
+package com.cbkres.visavole.ui.components.statuscard
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
@@ -30,7 +30,6 @@ import com.cbkres.visavole.domain.AllowanceKind
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.AllowanceStatus
 import com.cbkres.visavole.ui.allowanceFraction
-import com.cbkres.visavole.ui.allowanceSummary
 import com.cbkres.visavole.ui.entriesRemainingPhrase
 import com.cbkres.visavole.ui.ringColor
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme

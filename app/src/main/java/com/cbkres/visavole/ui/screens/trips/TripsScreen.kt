@@ -38,9 +38,9 @@ import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.ScreenHeader
 import com.cbkres.visavole.ui.SectionLabel
 import com.cbkres.visavole.ui.animateItemToCenter
-import com.cbkres.visavole.ui.components.AllowanceFocus
-import com.cbkres.visavole.ui.components.FlashTrigger
-import com.cbkres.visavole.ui.components.StatusCard
+import com.cbkres.visavole.ui.components.statuscard.AllowanceFocus
+import com.cbkres.visavole.ui.components.statuscard.FlashTrigger
+import com.cbkres.visavole.ui.components.statuscard.StatusCard
 import com.cbkres.visavole.ui.toUtcMillis
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

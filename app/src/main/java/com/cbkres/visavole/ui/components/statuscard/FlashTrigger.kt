@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui.components
+package com.cbkres.visavole.ui.components.statuscard
 
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue

@@ -45,9 +45,9 @@ import com.cbkres.visavole.ui.ScreenHeader
 import com.cbkres.visavole.ui.SectionLabel
 import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.animateItemToCenter
-import com.cbkres.visavole.ui.components.AllowanceFocus
-import com.cbkres.visavole.ui.components.FlashTrigger
-import com.cbkres.visavole.ui.components.StatusCard
+import com.cbkres.visavole.ui.components.statuscard.AllowanceFocus
+import com.cbkres.visavole.ui.components.statuscard.FlashTrigger
+import com.cbkres.visavole.ui.components.statuscard.StatusCard
 import com.cbkres.visavole.ui.docTitle
 import com.cbkres.visavole.ui.docTypeBadge
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme

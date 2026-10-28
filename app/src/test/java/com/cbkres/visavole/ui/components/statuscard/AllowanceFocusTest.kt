@@ -1,4 +1,4 @@
-package com.cbkres.visavole.ui.components
+package com.cbkres.visavole.ui.components.statuscard
 
 import com.cbkres.visavole.domain.AllowanceKind
 import com.cbkres.visavole.domain.AllowanceSnapshot
