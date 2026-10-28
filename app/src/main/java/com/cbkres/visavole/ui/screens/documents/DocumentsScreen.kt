@@ -33,7 +33,6 @@ import com.cbkres.visavole.domain.GuardContext
 import com.cbkres.visavole.domain.GuardEngine
 import com.cbkres.visavole.domain.GuardFinding
 import com.cbkres.visavole.domain.GuardResult
-import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.docCategory
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
@@ -46,6 +45,8 @@ import com.cbkres.visavole.ui.ScreenHeader
 import com.cbkres.visavole.ui.SectionLabel
 import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.animateItemToCenter
+import com.cbkres.visavole.ui.components.AllowanceFocus
+import com.cbkres.visavole.ui.components.FlashTrigger
 import com.cbkres.visavole.ui.components.StatusCard
 import com.cbkres.visavole.ui.docTitle
 import com.cbkres.visavole.ui.docTypeBadge
@@ -68,13 +69,14 @@ fun DocumentsScreen(
     var editing by remember { mutableStateOf<Document?>(null) }
     var blockedRemove by remember { mutableStateOf<GuardFinding?>(null) }
     var removingDoc by remember { mutableStateOf<Document?>(null) }
-    // Which document's allowance the top display is focused on (null = the primary one).
-    var focusedAllowance by remember { mutableStateOf<String?>(null) }
+    // Shared tab-top display state (the same pair the Trips tab uses): which document's allowance
+    // the top display is focused on (null = the primary one), and the ring-tap flash counters —
+    // each tap bumps the card's counter, which makes that card's VisaListCard play its one-shot
+    // "look here" ripple.
+    val focus = remember { AllowanceFocus() }
+    val flashes = remember { FlashTrigger() }
     // The document list's viewport height, in px — lets a tapped ring centre its card on screen.
     var listViewportPx by remember { mutableStateOf(0) }
-    // The document card a ring tap just centred, with a per-document counter: each tap bumps the
-    // second half, which makes that card's VisaListCard play its one-shot "look here" ripple.
-    var flashDoc by remember { mutableStateOf<Pair<String, Int>?>(null) }
     val today = ready.today
     // One shared guard context for the whole screen; every add/remove/star decision below goes
     // through the same GuardEngine the ViewModel backstops with.
@@ -131,15 +133,10 @@ fun DocumentsScreen(
                     }
                 }
             }
-            // Effective focus: honor the tapped card only while that allowance still exists, so a
-            // focused doc that is deleted or lapses falls back to the primary display instead of
-            // leaving a dead key behind.
-            val effectiveFocusAllowance = remember(docAllowances, focusedAllowance) {
-                focusedAllowance?.takeIf { key -> docAllowances.any { it.key == key } }
-            }
-            val docPrimary = remember(docAllowances, effectiveFocusAllowance) {
-                TripModel.primaryAllowance(docAllowances, effectiveFocusAllowance)
-            }
+            // Effective focus + primary display — the dead-key fallback and the urgency pick are
+            // AllowanceFocus's rules, shared with the Trips tab.
+            val effectiveFocusAllowance = focus.effectiveFocusKey(docAllowances)
+            val docPrimary = focus.primaryAllowance(docAllowances)
             // How many VALID (non-expired) passports the user holds of each nationality. The primary
             // star only makes sense when two or more valid passports of the same country compete.
             val validPassportIsoCounts = remember(active) {
@@ -175,12 +172,7 @@ fun DocumentsScreen(
                             allowances = docAllowances,
                             primary = docPrimary,
                             focusedKey = effectiveFocusAllowance,
-                            // Toggle (matching Trips): re-tapping the focused card returns to the
-                            // primary document. Set-only, the old code, trapped the user on a
-                            // secondary doc with no way back.
-                            onFocus = {
-                                focusedAllowance = if (focusedAllowance == it) null else it
-                            },
+                            onFocus = focus::toggle,
                             titleRow = { a ->
                                 val doc =
                                     ready.docs.firstOrNull { d -> d.id == a.key.removePrefix("doc:") }
@@ -223,18 +215,16 @@ fun DocumentsScreen(
                                     if (index != null) {
                                         // Fire the flash only once the centring scroll has settled, so it
                                         // lands on the card wherever it sits in the list — not while the
-                                        // card is still off-screen mid-scroll.
+                                        // card is still off-screen mid-scroll. Clear the trigger once
+                                        // the ripple has had time to play (~600 ms: a 300 ms held press
+                                        // then a 300 ms release fade) — FlashTrigger.expire only
+                                        // clears if no newer tap took over, so a card re-entering the
+                                        // composition never replays a spent flash.
                                         scope.launch {
                                             docsListState.animateItemToCenter(index, listViewportPx)
-                                            val n = (flashDoc?.takeIf { it.first == doc.id }?.second
-                                                ?: 0) + 1
-                                            flashDoc = doc.id to n
-                                            // Clear the trigger once the ripple has had time to play (~600 ms:
-                                            // a 300 ms held press then a 300 ms release fade): a card
-                                            // re-entering the composition with the trigger still set would
-                                            // replay the flash.
+                                            val n = flashes.trigger(doc.id)
                                             delay(900)
-                                            if (flashDoc == (doc.id to n)) flashDoc = null
+                                            flashes.expire(doc.id, n)
                                         }
                                     }
                                 }
@@ -281,7 +271,7 @@ fun DocumentsScreen(
                                 },
                                 onEdit = { editing = doc },
                                 onStar = star,
-                                flashTrigger = flashDoc?.takeIf { it.first == doc.id }?.second ?: 0,
+                                flashTrigger = flashes.countFor(doc.id),
                             )
                         }
                     }
@@ -322,7 +312,7 @@ fun DocumentsScreen(
                                 },
                                 onEdit = { editing = doc },
                                 onStar = null,
-                                flashTrigger = flashDoc?.takeIf { it.first == doc.id }?.second ?: 0,
+                                flashTrigger = flashes.countFor(doc.id),
                             )
                         }
                     }

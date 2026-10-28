@@ -31,14 +31,15 @@ import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.ringColor
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 
-// TODO: Make this more generic since it's used for document expiery as well
-
 /**
  * The tab-top allowance display, shared by the Trips tab (zone allowances) and the Documents tab
  * (documents with an expiry): the focused allowance's ring and summary up top, with the rest as a
  * horizontally scrollable card row beneath it. Tapping the ring fires [onRingClick] (the screens
  * scroll the matching document/trip into view); [titleRow] replaces the plain title text — the
  * Documents tab renders its type badge pill plus the country name there.
+ *
+ * Pure display: the focus and flash behaviour both tabs share lives in [AllowanceFocus] and
+ * [FlashTrigger], which the screens hold and read from.
  */
 @Composable
 internal fun StatusCard(

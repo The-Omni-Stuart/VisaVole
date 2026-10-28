@@ -28,7 +28,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.AccessModel
 import com.cbkres.visavole.domain.Trip
-import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.ui.AccessViewModel
@@ -39,6 +38,8 @@ import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.ScreenHeader
 import com.cbkres.visavole.ui.SectionLabel
 import com.cbkres.visavole.ui.animateItemToCenter
+import com.cbkres.visavole.ui.components.AllowanceFocus
+import com.cbkres.visavole.ui.components.FlashTrigger
 import com.cbkres.visavole.ui.components.StatusCard
 import com.cbkres.visavole.ui.toUtcMillis
 import kotlinx.coroutines.delay
@@ -57,20 +58,16 @@ fun TripsScreen(
 ) {
     val scope = rememberCoroutineScope()
     val today = ready.today
-    var focusedKey by remember { mutableStateOf<String?>(null) }
+    // Shared tab-top display state: switcher focus (with the toggle + dead-key rules) and the
+    // ring-tap flash counters, one holder pair per screen (the same pair the Documents tab uses).
+    val focus = remember { AllowanceFocus() }
+    val flashes = remember { FlashTrigger() }
     var listViewportPx by remember { mutableStateOf(0) }
-    var flashTrip by remember { mutableStateOf<Pair<String, Int>?>(null) }
     var showAdd by remember { mutableStateOf(false) }
     var editingTrip by remember { mutableStateOf<Trip?>(null) }
     var deletingTrip by remember { mutableStateOf<Trip?>(null) }
     var endingTrip by remember { mutableStateOf<Trip?>(null) }
     val zoneAllowances = remember(ready.allowances) { ready.allowances.filter { !it.key.startsWith("doc:") } }
-    val effectiveFocusKey = remember(zoneAllowances, focusedKey) {
-        focusedKey?.takeIf { key -> zoneAllowances.any { it.key == key } }
-    }
-    val primary = remember(zoneAllowances, effectiveFocusKey) {
-        TripModel.primaryAllowance(zoneAllowances, effectiveFocusKey)
-    }
     val passportCounts = remember(ready.docs) { passportCountsByIso(ready.docs) }
     val passportNumbers = remember(ready.docs) { passportNumbers(ready.docs) }
     val validHomes = remember(ready.docs, ready.world, today) { AccessModel.validHomeCountries(ready.docs, ready.world, today) }
@@ -118,11 +115,9 @@ fun TripsScreen(
                     item(key = "allowances") {
                         StatusCard(
                             allowances = zoneAllowances,
-                            primary = primary,
-                            focusedKey = effectiveFocusKey,
-                            onFocus = {
-                                focusedKey = if (focusedKey == it) null else it
-                            },
+                            primary = focus.primaryAllowance(zoneAllowances),
+                            focusedKey = focus.effectiveFocusKey(zoneAllowances),
+                            onFocus = focus::toggle,
                             onRingClick = { snap ->
                                 val trip =
                                     (snap.currentTripId ?: snap.relevantTripIds.firstOrNull())
@@ -146,18 +141,12 @@ fun TripsScreen(
                                                 listViewportPx
                                             )
 
-                                            val flashCount =
-                                                (flashTrip
-                                                    ?.takeIf { it.first == trip.id }
-                                                    ?.second ?: 0) + 1
-
-                                            flashTrip = trip.id to flashCount
-
+                                            // Flash once the centring scroll has settled; clear the
+                                            // trigger once the ripple has played, but only if no
+                                            // newer tap took over (FlashTrigger.expire's rule).
+                                            val n = flashes.trigger(trip.id)
                                             delay(900)
-
-                                            if (flashTrip == trip.id to flashCount) {
-                                                flashTrip = null
-                                            }
+                                            flashes.expire(trip.id, n)
                                         }
                                     }
                                 }
@@ -199,11 +188,7 @@ fun TripsScreen(
                                 onDelete = {
                                     deletingTrip = trip
                                 },
-                                flashTrigger =
-                                    flashTrip
-                                        ?.takeIf { it.first == trip.id }
-                                        ?.second
-                                        ?: 0,
+                                flashTrigger = flashes.countFor(trip.id),
                             )
                         }
                     }
@@ -239,11 +224,7 @@ fun TripsScreen(
                                 onDelete = {
                                     deletingTrip = trip
                                 },
-                                flashTrigger =
-                                    flashTrip
-                                        ?.takeIf { it.first == trip.id }
-                                        ?.second
-                                        ?: 0,
+                                flashTrigger = flashes.countFor(trip.id),
                             )
                         }
                     }
@@ -277,11 +258,7 @@ fun TripsScreen(
                                 onDelete = {
                                     deletingTrip = trip
                                 },
-                                flashTrigger =
-                                    flashTrip
-                                        ?.takeIf { it.first == trip.id }
-                                        ?.second
-                                        ?: 0,
+                                flashTrigger = flashes.countFor(trip.id),
                             )
                         }
                     }
