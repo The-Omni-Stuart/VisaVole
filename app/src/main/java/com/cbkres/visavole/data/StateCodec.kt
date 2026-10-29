@@ -22,7 +22,7 @@ data class PersistedState(
 
 /**
  * Encode/decode [PersistedState] in the JSON layout the app persists to its state file. This is
- * the single source of truth for the on-disk format: the ViewModel persists through [encode] and
+ * the single source of truth for the on-disk format: the store persists through [encode] and
  * restores through [decode], and backups are validated with the same [decode], so anything the
  * app wrote is a valid backup and any valid backup is loadable by the app.
  */

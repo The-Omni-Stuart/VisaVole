@@ -67,6 +67,11 @@ android {
     buildFeatures {
         compose = true
     }
+    testOptions {
+        // JVM unit tests hit android.util.Log in the persistence layer; make its static methods
+        // return defaults instead of throwing "not mocked" (production logging is unaffected).
+        unitTests.isReturnDefaultValues = true
+    }
     androidResources {
         // Keep the bundled SQLite DB stored (uncompressed) so it can be opened via a file
         // descriptor and its size compared on launch to detect bundled-data refreshes.

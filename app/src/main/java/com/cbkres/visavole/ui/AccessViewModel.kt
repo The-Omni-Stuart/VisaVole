@@ -8,9 +8,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.cbkres.visavole.data.BackupManager
 import com.cbkres.visavole.data.PersistedState
-import com.cbkres.visavole.data.StateCodec
 import com.cbkres.visavole.data.VisaDb
 import com.cbkres.visavole.data.VisaRepository
+import com.cbkres.visavole.data.VisaStateStore
 import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.data.WorldGeometry
 import com.cbkres.visavole.data.WorldMapData
@@ -46,7 +46,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.time.LocalDate
 import java.time.ZoneOffset
 
@@ -63,6 +62,11 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     private val context: Context = app
     private val repository = VisaRepository(VisaDb(context))
     private val backup = BackupManager(context)
+    // The persistence subsystem: snapshots of docs/trips are handed to VisaStateStore, which owns
+    // the ordered IO write queue and the corrupted-file handling. viewModelScope preserves the
+    // writer's existing lifecycle (including the limitation that pending writes may be cancelled
+    // if the scope ends).
+    private val stateStore = VisaStateStore(file = backup.stateFile, scope = viewModelScope)
     @Volatile private var world: WorldData? = null
     private val geometry: WorldMapData by lazy { WorldGeometry.load(context) }
     // Built once on the IO thread at load time and shipped via AppState.Ready (P3-40).
@@ -86,21 +90,8 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     private var reloadGeneration = 0
     // P3-48: persisted state is read off the main thread, once, before the first world load.
     @Volatile private var stateRead = false
-    // P3-48: ordered queue of encoded state strings. Declared before init so the writer launched
-    // below can reference it (Kotlin runs property initializers + init blocks in source order, and
-    // viewModelScope's Main.immediate runs the launch synchronously during construction). Drained
-    // in FIFO order on the IO dispatcher so rapid mutations hit disk in the order they happened
-    // (each write is the full state, so the last one wins) and the UI thread never does disk I/O.
-    private val persistQueue = Channel<String>(Channel.UNLIMITED)
 
     init {
-        // P3-48: ordered persistence writer — drains persistQueue in FIFO order on the IO dispatcher,
-        // so the UI thread never does the disk write (and rapid mutations apply in order).
-        viewModelScope.launch {
-            for (text in persistQueue) {
-                withContext(Dispatchers.IO) { writeFile(text) }
-            }
-        }
         launchLoad()
     }
 
@@ -116,7 +107,11 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
                     // home countries from the loaded docs. retryLoad skips it — by then the in-memory
                     // state (and the async writes it triggered) is already authoritative.
                     if (!stateRead) {
-                        readPersisted()
+                        stateStore.load()?.let { saved ->
+                            primaryDocId = saved.primaryDocId
+                            docs = saved.docs.toMutableList()
+                            trips = saved.trips.toMutableList()
+                        }
                         stateRead = true
                     }
                     val initialHomes = AccessModel.homeCountries(docs)
@@ -425,98 +420,20 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         snack("Backup restored.")
     }
 
-    // ---- persistence (JSON in the app's files dir, formatted by StateCodec) ----
-    private val file get() = backup.stateFile
+    // ---- persistence (JSON snapshot handed to VisaStateStore, encoded by StateCodec) ----
 
-    /** Set when the state file exists but cannot be read or quarantined; while set, persist()
-     *  refuses to run, because writing would overwrite the user's only copy of the data. */
-    @Volatile private var stateFileBlocked = false
-
-    // P3-56: mtime of the state file as of our last write (or the read at startup). If it advances
-    // on its own before the next persist(), something else (e.g. a pushed A/B fixture) modified the
-    // file while we were running, and persist() would silently clobber that change.
-    @Volatile private var lastPersistMs: Long = 0L
-
+    /**
+     * Snapshots the live state for the store. The [.toList]s are load-bearing: they freeze the
+     * mutable docs/trips so the async writer serializes exactly this moment's content.
+     */
     private fun persist() {
-        if (stateFileBlocked) {
-            Log.e(TAG, "Refusing to persist: unreadable state file $file still present (overwriting it would lose the user's data)")
-            return
-        }
-        // P3-48: encode on the main thread (cheap, KBs) and hand the text to the ordered IO writer,
-        // so the disk write no longer runs on the UI thread on the exact frame of the tap.
-        val text = runCatching {
-            StateCodec.encode(PersistedState(primaryDocId, docs.toList(), trips.toList()))
-        }.getOrElse { e ->
-            Log.e(TAG, "Could not encode state for $file", e)
-            return
-        }
-        persistQueue.trySend(text)
-    }
-
-    /** Ordered IO writer (P3-48): tmp-write + atomic rename for one encoded state. */
-    private fun writeFile(text: String) {
-        // P3-56: flag the A/B fixture race — the file changed on disk since we last wrote it, so we
-        // are about to overwrite a change made by something else (e.g. an adb push of a state file).
-        val currentMtime = file.lastModified()
-        if (currentMtime > lastPersistMs) {
-            Log.w(TAG, "State file $file modified since our last write (mtime $currentMtime > $lastPersistMs); overwriting with in-memory state")
-        }
-        try {
-            // Write to a sibling temp file and rename over the target: the rename is atomic, so a
-            // process death mid-write leaves the previous file intact instead of truncated JSON.
-            val tmp = File(file.parentFile, "${file.name}.tmp")
-            tmp.writeText(text)
-            if (!tmp.renameTo(file)) {
-                tmp.copyTo(file, overwrite = true)
-                tmp.delete()
-            }
-            lastPersistMs = file.lastModified()
-        } catch (e: Exception) {
-            Log.e(TAG, "Could not persist state to $file", e)
-        }
-    }
-
-    private fun readPersisted() {
-        val f = file
-        try {
-            if (!f.exists()) return
-            // P3-56: baseline the mtime we read so the first persist() doesn't false-positive on a
-            // pre-existing (older) file.
-            lastPersistMs = f.lastModified()
-            val state = StateCodec.decode(f.readText())
-            primaryDocId = state.primaryDocId
-            docs = state.docs.toMutableList()
-            trips = state.trips.toMutableList()
-        } catch (e: Exception) {
-            // Never start empty on top of a file we could not read: the next persist() would
-            // overwrite it and the user's data would be gone for good. Quarantine it instead,
-            // so it can be inspected or recovered later.
-            Log.e(TAG, "Could not decode state file $f; quarantining", e)
-            val quarantine = File(f.parentFile, "${f.name}.corrupt-${System.currentTimeMillis()}")
-            if (f.renameTo(quarantine)) {
-                Log.w(TAG, "Quarantined unreadable state file as $quarantine")
-            } else {
-                // Renaming failed: copy the file aside best-effort, keep the original untouched
-                // and BLOCK persisting for this process — writing would destroy the user's data.
-                try {
-                    f.copyTo(quarantine, overwrite = false)
-                    Log.w(TAG, "Copied unreadable state file to $quarantine")
-                } catch (copyError: Exception) {
-                    Log.e(TAG, "Could not copy $f to $quarantine", copyError)
-                }
-                stateFileBlocked = true
-                Log.e(TAG, "Unreadable state file $f could not be quarantined; persisting disabled for this process")
-            }
-            // P3-29: cap the quarantine files so repeated decode failures don't accumulate forever.
-            pruneQuarantined(f.parentFile)
-        }
-    }
-
-    /** P3-29: keep only the newest [keep] quarantine files so a run of decode failures doesn't fill
-     *  the files dir. Names end in `.corrupt-<epoch-millis>`, so sorting by name is newest-first. */
-    private fun pruneQuarantined(dir: File, keep: Int = 3) {
-        val files = dir.listFiles { f -> f.isFile && f.name.contains(".corrupt-") }?.sortedByDescending { it.name } ?: return
-        for (old in files.drop(keep)) runCatching { old.delete() }
+        stateStore.save(
+            PersistedState(
+                primaryDocId = primaryDocId,
+                docs = docs.toList(),
+                trips = trips.toList(),
+            ),
+        )
     }
 
     companion object {
