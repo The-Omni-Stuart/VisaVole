@@ -37,10 +37,10 @@ import com.cbkres.visavole.domain.docCategory
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.ui.AccessViewModel
-import com.cbkres.visavole.ui.AppState
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.animateItemToCenter
+import com.cbkres.visavole.ui.app.AppState
 import com.cbkres.visavole.ui.components.statuscard.AllowanceFocus
 import com.cbkres.visavole.ui.components.statuscard.FlashTrigger
 import com.cbkres.visavole.ui.components.statuscard.StatusCard

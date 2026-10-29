@@ -43,7 +43,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import com.cbkres.visavole.ui.AccessViewModel
-import com.cbkres.visavole.ui.AppState
 import com.cbkres.visavole.ui.VisaSnackbarHost
 import com.cbkres.visavole.ui.screens.documents.DocumentsScreen
 import com.cbkres.visavole.ui.screens.map.MapScreen
@@ -135,7 +134,7 @@ internal fun MainScaffold(
                 },
             )
         },
-        snackbarHost = { VisaSnackbarHost(snackbarHostState) }, // Q: Is this ever used?
+        snackbarHost = { VisaSnackbarHost(snackbarHostState) },
         bottomBar = {
             // Settings is a full-screen overlay, so the persistent nav bar hides while it's open.
             // expand/collapse is a *size* animation (not just an offset), so the Scaffold's content

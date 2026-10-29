@@ -53,7 +53,7 @@ import com.cbkres.visavole.domain.TripStop
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.ui.AccessViewModel
-import com.cbkres.visavole.ui.AppState
+import com.cbkres.visavole.ui.app.AppState
 import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import com.cbkres.visavole.ui.screens.map.SAVABLE_DANGER_CODES

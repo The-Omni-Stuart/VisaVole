@@ -8,7 +8,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cbkres.visavole.ui.AccessViewModel
-import com.cbkres.visavole.ui.AppState
 import com.cbkres.visavole.ui.screens.ErrorScreen
 import com.cbkres.visavole.ui.screens.LoadingScreen
 import com.cbkres.visavole.ui.screens.onboarding.OnboardingScreen

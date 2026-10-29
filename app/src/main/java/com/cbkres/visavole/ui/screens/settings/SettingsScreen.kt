@@ -49,7 +49,7 @@ import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.data.BackupManager
 import com.cbkres.visavole.data.PersistedState
 import com.cbkres.visavole.ui.AccessViewModel
-import com.cbkres.visavole.ui.AppState
+import com.cbkres.visavole.ui.app.AppState
 import com.cbkres.visavole.ui.theme.ThemePrefs
 import kotlin.math.roundToInt
 
