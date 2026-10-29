@@ -49,9 +49,9 @@ import com.cbkres.visavole.domain.AccessModel
 import com.cbkres.visavole.domain.DocAccess
 import com.cbkres.visavole.ui.AppState
 import com.cbkres.visavole.ui.CountryRow
-import com.cbkres.visavole.ui.EmptyState
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.hazeAlphas
+import com.cbkres.visavole.ui.screens.EmptyState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

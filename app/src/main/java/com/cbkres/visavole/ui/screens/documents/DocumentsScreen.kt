@@ -37,12 +37,8 @@ import com.cbkres.visavole.domain.docCategory
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.ui.AccessViewModel
-import com.cbkres.visavole.ui.AddButtonRow
 import com.cbkres.visavole.ui.AppState
-import com.cbkres.visavole.ui.EmptyState
 import com.cbkres.visavole.ui.HazeBox
-import com.cbkres.visavole.ui.ScreenHeader
-import com.cbkres.visavole.ui.SectionLabel
 import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.animateItemToCenter
 import com.cbkres.visavole.ui.components.statuscard.AllowanceFocus
@@ -50,6 +46,10 @@ import com.cbkres.visavole.ui.components.statuscard.FlashTrigger
 import com.cbkres.visavole.ui.components.statuscard.StatusCard
 import com.cbkres.visavole.ui.docTitle
 import com.cbkres.visavole.ui.docTypeBadge
+import com.cbkres.visavole.ui.screens.AddButtonRow
+import com.cbkres.visavole.ui.screens.EmptyState
+import com.cbkres.visavole.ui.screens.ScreenHeader
+import com.cbkres.visavole.ui.screens.SectionLabel
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
