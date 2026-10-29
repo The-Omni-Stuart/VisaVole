@@ -14,9 +14,7 @@ import com.cbkres.visavole.data.VisaStateStore
 import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.data.WorldGeometry
 import com.cbkres.visavole.data.WorldMapData
-import com.cbkres.visavole.domain.Access
 import com.cbkres.visavole.domain.AccessModel
-import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.DocStatus
 import com.cbkres.visavole.domain.Document

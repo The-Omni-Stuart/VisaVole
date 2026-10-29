@@ -4,9 +4,6 @@ import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripStop
-import java.io.File
-import java.nio.file.Files
-import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -18,6 +15,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.io.File
+import java.nio.file.Files
+import java.time.LocalDate
 
 /**
  * Tests for [VisaStateStore] at its public seam — `load()`/`save(PersistedState)` — verified
