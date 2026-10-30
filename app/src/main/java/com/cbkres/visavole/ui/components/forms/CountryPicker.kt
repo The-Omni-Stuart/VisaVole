@@ -18,6 +18,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.data.Country
+import com.cbkres.visavole.domain.searchCountries
 import com.cbkres.visavole.ui.CountryRow
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.hazeAlphas
@@ -33,12 +34,12 @@ internal fun CountryPicker(
     label: String,
 ) {
     val listState = rememberLazyListState()
-    val q = query.trim().lowercase()
-    val list = countries.entries
-        .filter { q.isEmpty() || it.value.name.lowercase().contains(q) || it.key.lowercase() == q }
-        .sortedBy { it.value.name }
+    // Blank query shows the full alphabetical list; otherwise the shared ranked matching
+    // (diacritic folding, word initials, typo tolerance) applies.
+    val list = if (query.isBlank()) countries.values.sortedBy { it.name }
+    else searchCountries(countries, query)
     LaunchedEffect(list, selected) {
-        val selectedIndex = list.indexOfFirst { selected.contains(it.key) }
+        val selectedIndex = list.indexOfFirst { selected.contains(it.iso2) }
         if (selectedIndex < 0) return@LaunchedEffect
         // Scroll only when the selection is off-screen (e.g. opening in edit mode). Tapping an
         // already-visible country must not yank it to the top of the list.
@@ -67,12 +68,12 @@ internal fun CountryPicker(
                 modifier = Modifier.fillMaxSize()
             ) {
                 LazyColumn(state = listState, modifier = Modifier.padding(4.dp)) {
-                    items(list, key = { it.key }) { entry ->
+                    items(list, key = { it.iso2 }) { entry ->
                         CountryRow(
-                            name = entry.value.name,
-                            onClick = { onToggle(entry.key) },
-                            iso = entry.key,
-                            selected = selected.contains(entry.key),
+                            name = entry.name,
+                            onClick = { onToggle(entry.iso2) },
+                            iso = entry.iso2,
+                            selected = selected.contains(entry.iso2),
                         )
                     }
                 }

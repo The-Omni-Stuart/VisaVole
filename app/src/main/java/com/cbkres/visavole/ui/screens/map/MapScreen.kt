@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.AccessLevel
 import com.cbkres.visavole.domain.AccessModel
 import com.cbkres.visavole.domain.DocAccess
+import com.cbkres.visavole.domain.searchCountries
 import com.cbkres.visavole.ui.CountryRow
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.app.AppState
@@ -85,14 +86,7 @@ internal fun MapScreen(
     // mid-fade right after the user picks a country.
     var shownQuery by remember { mutableStateOf(query) }
     if (query.isNotBlank() && query != shownQuery) shownQuery = query
-    val matches = remember(shownQuery, s.world) {
-        val q = shownQuery.trim().lowercase()
-        if (q.isEmpty()) emptyList()
-        else s.world.countries.values
-            .filter { it.name.lowercase().contains(q) || it.iso2.lowercase() == q }
-            .sortedBy { it.name }
-            .take(20)
-    }
+    val matches = remember(shownQuery, s.world) { searchCountries(s.world.countries, shownQuery) }
     // Stable identity: a fresh lambda on every recomposition would make WorldMapCanvas re-run
     // and repaint every country for the whole duration of the card slide (P1-13).
     val pick: (String?) -> Unit = remember {

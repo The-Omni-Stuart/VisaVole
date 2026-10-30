@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.data.Country
 import com.cbkres.visavole.domain.GuardFinding
+import com.cbkres.visavole.domain.searchCountries
 import com.cbkres.visavole.ui.CountryRow
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.VisaDatePickerDialog
@@ -56,13 +57,12 @@ fun OnboardingScreen(
     var showExpiryPicker by rememberSaveable { mutableStateOf(false) }
     var validFromMillis by rememberSaveable { mutableStateOf<Long?>(null) }
     var addError by remember { mutableStateOf<String?>(null) }
-    val q = query.trim().lowercase()
-    // P3-44: remember the 203-entry filter+sort so it only re-runs when the query or the country
-    // set changes, not on every recomposition (every scroll frame via P1-14).
-    val list = remember(countries, q) {
-        countries.entries
-            .filter { q.isEmpty() || it.value.name.lowercase().contains(q) || it.key.lowercase() == q }
-            .sortedBy { it.value.name }
+    // P3-44: remember the country list so it only re-runs when the query or the country set
+    // changes, not on every recomposition (every scroll frame via P1-14). Blank query shows
+    // the full alphabetical list; otherwise the shared ranked matching applies.
+    val list = remember(countries, query) {
+        if (query.isBlank()) countries.values.sortedBy { it.name }
+        else searchCountries(countries, query)
     }
 
     Surface(
@@ -120,16 +120,16 @@ fun OnboardingScreen(
                             .padding(4.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        items(list, key = { it.key }) { entry ->
+                        items(list, key = { it.iso2 }) { entry ->
                             CountryRow(
-                                name = entry.value.name,
+                                name = entry.name,
                                 onClick = {
-                                    pendingIso = entry.key
+                                    pendingIso = entry.iso2
                                     addError = null
                                     validFromMillis = null
                                     showValidityDialog = true
                                 },
-                                iso = entry.key,
+                                iso = entry.iso2,
                             )
                         }
                     }
