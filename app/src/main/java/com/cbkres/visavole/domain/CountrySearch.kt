@@ -19,7 +19,7 @@ internal fun searchCountries(countries: Map<String, Country>, query: String): Li
 }
 
 /**
- * The strongest way [query] matches [country], or null for no match: 0 exact ISO code,
+ * The strongest way the query matches [country], or null for no match: 0 exact ISO code,
  * 1 folded substring, 2 word initials, 3 subsequence, 4 near-miss edit distance.
  */
 private fun rankMatch(q: String, country: Country): Int? {

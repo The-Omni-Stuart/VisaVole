@@ -187,7 +187,7 @@ internal fun CountryRow(
  * [flashTrigger] replays the SAME ripple the card body shows on a real tap whenever it changes to
  * a new non-zero value — the "look here" flash for a card the list just scrolled to. It drives the
  * theme's [LocalIndication] (the exact bounded ripple the body's [clickable] uses) from a dedicated
- * [flashSource] by emitting a press at the card's centre, so the ring-tap flash and the card-tap
+ * `flashSource` by emitting a press at the card's centre, so the ring-tap flash and the card-tap
  * ripple look identical. There is no extra start delay: the trigger already fires only once the
  * centring scroll has settled, so the ripple begins with (near-)zero latency on the trigger.
  */
@@ -291,7 +291,7 @@ internal fun VisaDatePickerDialog(
 
 /**
  * The app's snackbar host: the stock M3 snackbar is a flat full-width bar with square corners and
- * no margin, so this re-skins it with the card vocabulary — a tonal [surfaceContainerHigh] surface,
+ * no margin, so this re-skins it with the card vocabulary — a tonal `surfaceContainerHigh` surface,
  * 16.dp rounded corners, horizontal margins, and a tonal elevation that reads in light and dark.
  */
 @Composable
