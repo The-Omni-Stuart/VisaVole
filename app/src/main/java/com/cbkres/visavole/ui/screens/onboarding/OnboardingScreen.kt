@@ -179,7 +179,7 @@ internal fun OnboardingScreen(
     }
 
     if (showExpiryPicker) {
-        val minExpiry = (validFromMillis?.let { it.toUtcIsoDate().let(LocalDate::parse) } ?: today)
+        val minExpiry = (validFromMillis?.toUtcIsoDate()?.let(LocalDate::parse) ?: today)
             .takeIf { it.isAfter(today) } ?: today
         VisaDatePickerDialog(
             initialMillis = today.toUtcMillis(),
