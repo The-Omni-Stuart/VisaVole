@@ -78,7 +78,9 @@ internal class VisaStateStore(
                 Log.e(TAG, "Unreadable state file $f could not be quarantined; persisting disabled for this process")
             }
             // P3-29: cap the quarantine files so repeated decode failures don't accumulate forever.
-            pruneQuarantined(f.parentFile)
+            // parentFile is @Nullable in java.io.File (null only for a parentless path, which the
+            // caller's filesDir-based path never is), so prune only when there is a directory.
+            f.parentFile?.let { pruneQuarantined(it) }
             return null
         }
     }
