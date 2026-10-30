@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -46,6 +45,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.createBitmap
+import androidx.core.net.toUri
 import com.cbkres.visavole.data.BackupManager
 import com.cbkres.visavole.data.PersistedState
 import com.cbkres.visavole.ui.AccessViewModel
@@ -278,7 +279,7 @@ private fun AppIcon() {
     val iconBitmap = remember(iconRes, size) {
         runCatching {
             val drawable = context.getDrawable(iconRes) ?: throw IllegalStateException("no app icon")
-            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val bitmap = createBitmap(size, size, Bitmap.Config.ARGB_8888)
             drawable.setBounds(0, 0, size, size)
             drawable.draw(Canvas(bitmap))
             bitmap.asImageBitmap()
@@ -303,7 +304,7 @@ private fun openUrl(context: Context, url: String) {
         // A bare ACTION_VIEW with NO mime type is the correct way to open a web URL: the https
         // scheme routes it to a browser. (P3-24 first added type="text/html", but on a real device
         // that made the intent match text/html handlers — a notes app — instead of the browser.)
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
     }.onFailure {
         // A device without a browser would otherwise be a silent no-op.
         Toast.makeText(context, "Couldn't open this link — no browser available?", Toast.LENGTH_SHORT).show()
