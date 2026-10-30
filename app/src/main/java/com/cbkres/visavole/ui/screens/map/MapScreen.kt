@@ -103,7 +103,8 @@ internal fun MapScreen(
     var lastStableCardH by remember { mutableStateOf(0.dp) }
     var legendH by remember { mutableStateOf(0.dp) }
     val selName = selected?.let { iso -> s.world.countries[iso]?.name ?: s.geometry.countries[iso]?.name ?: iso }
-    val cardVisible = selected != null && selName != null
+    // selName falls back to the ISO code, so it is null exactly when nothing is selected.
+    val cardVisible = selected != null
     // The bottom padding the map's floating UI keeps between itself and the card/legend: the
     // measured card height plus 24dp while a card is up, the legend height plus 8dp otherwise.
     val controlsTargetBottomPadding =
@@ -195,7 +196,6 @@ internal fun MapScreen(
                 var daysLabel by remember(selected) { mutableStateOf<String?>(null) }
 
                 LaunchedEffect(selected, s.homeCountries, s.access, s.world, s.docs, s.trips, validHomes) {
-                    if (selected == null) return@LaunchedEffect
                     val (b, dl) = withContext(Dispatchers.Default) {
                         val stayRule = when {
                             selected in s.homeCountries -> null
