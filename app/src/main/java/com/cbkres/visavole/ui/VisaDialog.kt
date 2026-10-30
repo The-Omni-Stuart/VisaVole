@@ -32,7 +32,7 @@ import androidx.compose.ui.window.DialogProperties
  * Cancel button to discard).
  */
 @Composable
-fun VisaDialog(
+internal fun VisaDialog(
     onDismissRequest: () -> Unit,
     width: Dp = 340.dp,
     maxHeight: Dp? = null,

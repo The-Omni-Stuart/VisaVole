@@ -47,7 +47,7 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 
 @Composable
-fun TripsScreen(
+internal fun TripsScreen(
     vm: AccessViewModel,
     ready: AppState.Ready,
     scrollState: LazyListState,

@@ -40,7 +40,7 @@ import com.cbkres.visavole.ui.hazeAlphas
 
 
 @Composable
-fun CountryDetailCard(
+internal fun CountryDetailCard(
     countryName: String,
     access: Access?,
     breakdown: List<DocAccess>?,

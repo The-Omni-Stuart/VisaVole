@@ -40,7 +40,7 @@ import java.time.LocalDate
 
 /** First-run setup: add the traveller's first passport (required to compute the map). */
 @Composable
-fun OnboardingScreen(
+internal fun OnboardingScreen(
     countries: Map<String, Country>,
     today: LocalDate,
     onAddPassport: (String, String?, String?) -> List<GuardFinding>, // (iso, validFrom, expiry)

@@ -46,7 +46,7 @@ data class Document(
 )
 
 /** A brand-new passport for [iso2]; [countryName] (from the world data) drives the default label. */
-fun passportDocument(
+internal fun passportDocument(
     iso2: String,
     countryName: String?,
     expiry: String? = null,
@@ -55,7 +55,7 @@ fun passportDocument(
 ): Document = Document(id, "Passport · ${countryName ?: iso2}", DocKind.Passport(iso2), expiry, validFrom)
 
 /** The document's entry type, if it carries one; passports and residence documents return null. */
-fun Document.entryType(): String? = when (val k = kind) {
+internal fun Document.entryType(): String? = when (val k = kind) {
     is DocKind.Passport -> null
     is DocKind.Holding -> k.entryType
     is DocKind.Custom -> if (k.kind == "visa" || k.kind == "permit") k.entryType else null
@@ -70,7 +70,7 @@ fun Document.entryType(): String? = when (val k = kind) {
  * residence-minimum-gated benefits apply, so an in-place class upgrade with unchanged dates is an
  * edit, not a duplicate.
  */
-fun Document.duplicateSignature(): String = when (val k = kind) {
+internal fun Document.duplicateSignature(): String = when (val k = kind) {
     is DocKind.Passport ->
         "P|${k.iso2}|${validFrom.orEmpty()}|${expiry.orEmpty()}"
     is DocKind.Holding ->
@@ -91,7 +91,7 @@ fun Document.duplicateSignature(): String = when (val k = kind) {
  * which would silently change what the trip was entered with and how its stay allowance is
  * calculated.
  */
-fun Document.identityKey(): String = when (val k = kind) {
+internal fun Document.identityKey(): String = when (val k = kind) {
     is DocKind.Passport -> "P|${k.iso2}"
     is DocKind.Holding -> "H|${k.holdingId}"
     is DocKind.Custom ->
@@ -103,7 +103,7 @@ fun Document.identityKey(): String = when (val k = kind) {
  * "residence" or "visa". Passports return null — their multiplicity is allowed (they are numbered
  * instead and governed by [duplicateSignature]).
  */
-fun Document.docCategory(world: WorldData): String? = when (val k = kind) {
+internal fun Document.docCategory(world: WorldData): String? = when (val k = kind) {
     is DocKind.Passport -> null
     is DocKind.Holding -> {
         val h = world.holdings[k.holdingId]
@@ -120,7 +120,7 @@ fun Document.docCategory(world: WorldData): String? = when (val k = kind) {
  * bloc document doesn't claim non-Schengen members), or a custom document's explicit
  * [DocKind.Custom.countries].
  */
-fun Document.coveredCountries(world: WorldData): Set<String> = when (val k = kind) {
+internal fun Document.coveredCountries(world: WorldData): Set<String> = when (val k = kind) {
     is DocKind.Passport -> setOf(k.iso2)
     is DocKind.Holding -> world.holdingTravelCoverage(k.holdingId)
     is DocKind.Custom -> k.countries
@@ -132,14 +132,14 @@ fun Document.coveredCountries(world: WorldData): Set<String> = when (val k = kin
  * valid and expired alike — keeps each one identifiable (e.g. still "(2)") even after it lapses, at
  * which point it is further distinguished by its expiry date.
  */
-fun passportNumbers(docs: List<Document>): Map<String, Int> =
+internal fun passportNumbers(docs: List<Document>): Map<String, Int> =
     docs.filter { it.kind is DocKind.Passport }
         .groupBy { (it.kind as DocKind.Passport).iso2 }
         .flatMap { (_, list) -> list.mapIndexed { i, d -> d.id to (i + 1) } }
         .toMap()
 
 /** The total number of passports held (valid and expired) per nationality. */
-fun passportCountsByIso(docs: List<Document>): Map<String, Int> =
+internal fun passportCountsByIso(docs: List<Document>): Map<String, Int> =
     docs.filter { it.kind is DocKind.Passport }
         .groupingBy { (it.kind as DocKind.Passport).iso2 }
         .eachCount()

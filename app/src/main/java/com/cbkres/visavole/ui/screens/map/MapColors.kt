@@ -67,14 +67,14 @@ private fun paletteFor(level: AccessLevel?): LevelPalette =
     level?.let { LEVEL_PALETTES[it] } ?: NO_DATA_PALETTE
 
 /** The bright canvas choropleth for a level; home / own-visa overrides go through [mapFill]. */
-fun colorFor(level: AccessLevel?): Color = paletteFor(level).fill
+internal fun colorFor(level: AccessLevel?): Color = paletteFor(level).fill
 
 /**
  * The one place the map's special cases are decided: the traveller's home country and a
  * short-term visa's own country override the level palette; everything else is the level's
  * fill. [isOwn] means the country is one of the traveller's own-visa countries.
  */
-fun mapFill(level: AccessLevel?, isHome: Boolean = false, isOwn: Boolean = false): Color = when {
+internal fun mapFill(level: AccessLevel?, isHome: Boolean = false, isOwn: Boolean = false): Color = when {
     isHome -> HOME
     level == AccessLevel.COVERED && isOwn -> COVERED_OWN
     else -> colorFor(level)
@@ -85,7 +85,7 @@ fun mapFill(level: AccessLevel?, isHome: Boolean = false, isOwn: Boolean = false
  * shade is theme-aware (P1-12): [isDark] picks the brighter [LevelPalette.darkTone] on a near-black
  * surface so the text keeps AA contrast, and the darker [LevelPalette.tone] on a light one.
  */
-fun statusTone(level: AccessLevel?, isDark: Boolean, isHome: Boolean = false, isOwn: Boolean = false): Color = when {
+internal fun statusTone(level: AccessLevel?, isDark: Boolean, isHome: Boolean = false, isOwn: Boolean = false): Color = when {
     isHome -> if (isDark) HOME_DARK else HOME
     level == AccessLevel.COVERED && isOwn -> if (isDark) COVERED_OWN_DARK else COVERED_OWN
     else -> paletteFor(level).let { if (isDark) it.darkTone else it.tone }
@@ -112,7 +112,7 @@ enum class Severity { OK, CAUTION, WARN, BAD }
  * surfaces, so the text keeps ≥4.5:1 in both themes. (The old single amber `#CA8A04` failed AA as
  * light-theme text; it now only appears in the dark set, where it passes.)
  */
-fun severityColor(severity: Severity, isDark: Boolean): Color = if (isDark) {
+internal fun severityColor(severity: Severity, isDark: Boolean): Color = if (isDark) {
     when (severity) {
         Severity.OK -> Color(0xFF4ADE80)      // green-400
         Severity.CAUTION -> Color(0xFFFBBF24) // amber-400

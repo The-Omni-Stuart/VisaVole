@@ -58,7 +58,7 @@ import kotlinx.coroutines.launch
 private const val EXPIRY_WATCH_DAYS = 730
 
 @Composable
-fun DocumentsScreen(
+internal fun DocumentsScreen(
     vm: AccessViewModel,
     ready: AppState.Ready,
     scrollState: LazyListState,

@@ -20,7 +20,7 @@ enum class ResidenceClass(val id: String, val label: String) {
  * The effective residence class of a document: null for passports and visa/permit documents; for
  * residence documents the stored class, or the default inferred from its known holding.
  */
-fun Document.residenceClassFor(world: WorldData): ResidenceClass? = when (val k = kind) {
+internal fun Document.residenceClassFor(world: WorldData): ResidenceClass? = when (val k = kind) {
     is DocKind.Passport -> null
     is DocKind.Holding -> {
         val h = world.holdings[k.holdingId] ?: return null
@@ -36,7 +36,7 @@ fun Document.residenceClassFor(world: WorldData): ResidenceClass? = when (val k 
  * The default residence class for a known holding; permanent-residency documents default to
  * PERMANENT, the long-term Singapore permit to LONG_TERM, everything else to TEMPORARY.
  */
-fun defaultResidenceClassFor(holdingId: String?, isResidenceCustom: Boolean): ResidenceClass = when {
+internal fun defaultResidenceClassFor(holdingId: String?, isResidenceCustom: Boolean): ResidenceClass = when {
     holdingId in setOf("us-green-card", "ca-pr", "au-pr") -> ResidenceClass.PERMANENT
     holdingId == "sg-visa" -> ResidenceClass.LONG_TERM
     else -> ResidenceClass.TEMPORARY

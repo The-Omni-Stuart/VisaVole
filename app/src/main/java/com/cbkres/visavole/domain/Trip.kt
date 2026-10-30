@@ -55,7 +55,7 @@ data class TripSections(
  * another document or the trip is removed. Ending a trip does not free its document —
  * the stop keeps its [TripStop.documentId].
  */
-fun referencedDocumentIds(trips: List<Trip>): Set<String> =
+internal fun referencedDocumentIds(trips: List<Trip>): Set<String> =
     trips.flatMap { t -> t.stops.mapNotNull { s -> s.documentId } }.toSet()
 
 enum class AllowanceKind {

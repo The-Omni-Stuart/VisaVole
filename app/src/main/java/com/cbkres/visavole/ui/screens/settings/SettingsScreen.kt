@@ -67,7 +67,7 @@ private const val LICENSE_URL = "https://github.com/The-Omni-Stuart/VisaVole/blo
 // (which shows the back arrow), so there are no doubled status-bar insets and the content starts
 // exactly where the other tabs' content starts.
 @Composable
-fun SettingsScreen(
+internal fun SettingsScreen(
     vm: AccessViewModel,
     ready: AppState.Ready,
     themeMode: ThemePrefs.Mode,

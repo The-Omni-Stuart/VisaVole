@@ -131,7 +131,7 @@ internal fun docTitle(doc: Document, world: WorldData): String {
  * instead of squeezing a weighted sibling; [bold] raises weight for terminal states (e.g. expired).
  */
 @Composable
-fun StatusPill(
+internal fun StatusPill(
     text: String,
     color: Color,
     bold: Boolean = false,
@@ -159,7 +159,7 @@ fun StatusPill(
 
 /** A tappable country row: optional selection tick, name (weighted), optional ISO tag. */
 @Composable
-fun CountryRow(
+internal fun CountryRow(
     name: String,
     onClick: () -> Unit,
     iso: String? = null,
@@ -192,7 +192,7 @@ fun CountryRow(
  * centring scroll has settled, so the ripple begins with (near-)zero latency on the trigger.
  */
 @Composable
-fun VisaListCard(
+internal fun VisaListCard(
     onClick: (() -> Unit)? = null,
     actions: @Composable () -> Unit = {},
     flashTrigger: Int = 0,
@@ -239,7 +239,7 @@ fun VisaListCard(
  *  leave both null for an unbounded picker. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VisaDatePickerDialog(
+internal fun VisaDatePickerDialog(
     initialMillis: Long,
     confirmLabel: String,
     onConfirm: (LocalDate?) -> Unit,
@@ -295,7 +295,7 @@ fun VisaDatePickerDialog(
  * 16.dp rounded corners, horizontal margins, and a tonal elevation that reads in light and dark.
  */
 @Composable
-fun VisaSnackbarHost(hostState: SnackbarHostState, modifier: Modifier = Modifier) {
+internal fun VisaSnackbarHost(hostState: SnackbarHostState, modifier: Modifier = Modifier) {
     SnackbarHost(
         hostState = hostState,
         modifier = modifier,
@@ -387,7 +387,7 @@ internal fun entriesRemainingPhrase(remaining: Int?): String = when (remaining) 
  * A relative scroll clamps at the content ends, so the first/last item settles at the nearest
  * reachable position (it can no longer be pinned to an edge ~160 px off-centre).
  */
-suspend fun LazyListState.animateItemToCenter(index: Int, viewportHeightPx: Int) {
+internal suspend fun LazyListState.animateItemToCenter(index: Int, viewportHeightPx: Int) {
     animateScrollToItem(index)
     withFrameNanos { }
     val item = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return

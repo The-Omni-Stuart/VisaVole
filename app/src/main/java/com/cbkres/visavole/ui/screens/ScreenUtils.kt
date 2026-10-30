@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 
 /** Small overline heading above a list section (e.g. "Upcoming", "Active"). */
 @Composable
-fun SectionLabel(text: String, modifier: Modifier = Modifier) {
+internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
         text,
         style = MaterialTheme.typography.labelMedium,
