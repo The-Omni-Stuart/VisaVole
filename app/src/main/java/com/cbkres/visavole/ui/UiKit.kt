@@ -134,12 +134,12 @@ internal fun docTitle(doc: Document, world: WorldData): String {
 internal fun StatusPill(
     text: String,
     color: Color,
+    modifier: Modifier = Modifier,
     bold: Boolean = false,
     maxWidth: Dp? = null,
     style: TextStyle = MaterialTheme.typography.labelSmall,
     contentPadding: PaddingValues = PaddingValues(horizontal = 8.dp, vertical = 3.dp),
     fontWeight: FontWeight? = null,
-    modifier: Modifier = Modifier,
 ) {
     val weight = fontWeight ?: (if (bold) FontWeight.Bold else FontWeight.SemiBold)
     Surface(
@@ -162,9 +162,9 @@ internal fun StatusPill(
 internal fun CountryRow(
     name: String,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
     iso: String? = null,
     selected: Boolean = false,
-    modifier: Modifier = Modifier,
 ) {
     Row(
         // minHeight keeps every country/search row on a ≥48dp touch target regardless of text style.
@@ -193,10 +193,10 @@ internal fun CountryRow(
  */
 @Composable
 internal fun VisaListCard(
+    modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     actions: @Composable () -> Unit = {},
     flashTrigger: Int = 0,
-    modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     // Clip the press ripple to the card's rounded shape so a tap doesn't flash a square.
@@ -211,7 +211,7 @@ internal fun VisaListCard(
         delay(300)
         flashSource.emit(PressInteraction.Release(press))
     }
-    val cardModifier = Modifier
+    val cardModifier = modifier
         .fillMaxWidth()
         .onSizeChanged { flashCenter = Offset(it.width / 2f, it.height / 2f) }
         .clip(shape)
