@@ -127,7 +127,6 @@ data class EntryStatus(
 )
 
 enum class WarningSeverity {
-    INFO,
     WARNING,
     DANGER,
 }
