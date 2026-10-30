@@ -32,6 +32,7 @@ import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.HazeBox
+import com.cbkres.visavole.ui.VisaDatePickerDialog
 import com.cbkres.visavole.ui.animateItemToCenter
 import com.cbkres.visavole.ui.app.AppState
 import com.cbkres.visavole.ui.components.statuscard.AllowanceFocus
@@ -311,7 +312,7 @@ internal fun TripsScreen(
 // TODO: Investing this
 @Composable
 private fun EndTripDialog(today: LocalDate, onConfirm: (LocalDate) -> Unit, onDismiss: () -> Unit) {
-    _root_ide_package_.com.cbkres.visavole.ui.VisaDatePickerDialog(
+    VisaDatePickerDialog(
         initialMillis = today.toUtcMillis(),
         confirmLabel = "End",
         onConfirm = { date -> date?.let(onConfirm) },

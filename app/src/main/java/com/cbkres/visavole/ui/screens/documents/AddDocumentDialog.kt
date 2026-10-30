@@ -50,6 +50,9 @@ import com.cbkres.visavole.domain.ResidenceClass
 import com.cbkres.visavole.domain.defaultResidenceClassFor
 import com.cbkres.visavole.domain.duplicateSignature
 import com.cbkres.visavole.domain.passportDocument
+import com.cbkres.visavole.ui.HazeBox
+import com.cbkres.visavole.ui.VisaDatePickerDialog
+import com.cbkres.visavole.ui.VisaDialog
 import com.cbkres.visavole.ui.components.forms.CountryPicker
 import com.cbkres.visavole.ui.components.forms.SelectionField
 import com.cbkres.visavole.ui.hazeAlphas
@@ -258,7 +261,7 @@ internal fun AddDocumentDialog(
         onDismiss()
     }
 
-    _root_ide_package_.com.cbkres.visavole.ui.VisaDialog(
+    VisaDialog(
         onDismissRequest = onDismiss,
         width = 400.dp,
         maxHeight = (LocalConfiguration.current.screenHeightDp - 96).dp,
@@ -266,7 +269,7 @@ internal fun AddDocumentDialog(
     ) {
         val docDialogScroll = rememberScrollState()
         val (docTop, docEnd) = docDialogScroll.hazeAlphas()
-        _root_ide_package_.com.cbkres.visavole.ui.HazeBox(
+        HazeBox(
             docTop,
             docEnd,
             MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -540,7 +543,7 @@ private fun ValidityPeriodField(
         Text(validityLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
     if (showValidFromPicker) {
-        _root_ide_package_.com.cbkres.visavole.ui.VisaDatePickerDialog(
+        VisaDatePickerDialog(
             initialMillis = validFromDate ?: todayMillis,
             confirmLabel = "Next",
             onConfirm = { date ->
@@ -561,7 +564,7 @@ private fun ValidityPeriodField(
     }
     if (showValidToPicker) {
         val fallbackTo = maxOf(validFromDate ?: todayMillis, todayMillis)
-        _root_ide_package_.com.cbkres.visavole.ui.VisaDatePickerDialog(
+        VisaDatePickerDialog(
             initialMillis = expiryDate ?: fallbackTo,
             confirmLabel = "Done",
             onConfirm = { date ->

@@ -31,7 +31,9 @@ import com.cbkres.visavole.domain.ExpiryReason
 import com.cbkres.visavole.domain.entryType
 import com.cbkres.visavole.domain.residenceClassFor
 import com.cbkres.visavole.ui.StatusPill
+import com.cbkres.visavole.ui.VisaListCard
 import com.cbkres.visavole.ui.docTitle
+import com.cbkres.visavole.ui.docTypeBadge
 import com.cbkres.visavole.ui.screens.map.DIM_ALPHA
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import com.cbkres.visavole.ui.screens.map.Severity
@@ -57,12 +59,12 @@ internal fun DocumentCard(
 ) {
     val isPassport = doc.kind is DocKind.Passport
     val surface = MaterialTheme.colorScheme.onSurface
-    val (typeLabel, typeTone) = _root_ide_package_.com.cbkres.visavole.ui.docTypeBadge(
+    val (typeLabel, typeTone) = docTypeBadge(
         doc,
         world,
         LocalEffectiveDarkTheme.current
     )
-    _root_ide_package_.com.cbkres.visavole.ui.VisaListCard(
+    VisaListCard(
         flashTrigger = flashTrigger,
         actions = {
             if (onStar != null) {
@@ -232,7 +234,7 @@ private fun ExpiryStatusPill(
     }
     // Long pills (e.g. "Replaced by <label>") must wrap instead of squeezing the card's weighted
     // text column; the cap keeps the title column readable for the longest labels.
-    _root_ide_package_.com.cbkres.visavole.ui.StatusPill(
+    StatusPill(
         text,
         severityColor(
             severity,

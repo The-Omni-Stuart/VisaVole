@@ -53,6 +53,8 @@ import com.cbkres.visavole.domain.TripStop
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.ui.AccessViewModel
+import com.cbkres.visavole.ui.HazeBox
+import com.cbkres.visavole.ui.VisaDialog
 import com.cbkres.visavole.ui.app.AppState
 import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
@@ -247,7 +249,7 @@ internal fun AddTripDialog(
         gapError = null
     }
 
-    _root_ide_package_.com.cbkres.visavole.ui.VisaDialog(
+    VisaDialog(
         onDismissRequest = onDismiss,
         width = 400.dp,
         maxHeight = (LocalConfiguration.current.screenHeightDp - 96).dp,
@@ -447,7 +449,7 @@ private fun TripStopList(
 ) {
     val stopsScroll = rememberScrollState()
     val (stopsTop, stopsEnd) = stopsScroll.hazeAlphas()
-    _root_ide_package_.com.cbkres.visavole.ui.HazeBox(
+    HazeBox(
         stopsTop,
         stopsEnd,
         MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -547,7 +549,7 @@ private fun GapDialog(
     onSplit: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    _root_ide_package_.com.cbkres.visavole.ui.VisaDialog(onDismissRequest = onDismiss) {
+    VisaDialog(onDismissRequest = onDismiss) {
         Column(Modifier.padding(20.dp)) {
             Text("Gap between stops", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(12.dp))
@@ -594,7 +596,7 @@ private fun OngoingConfirmDialog(
     onDone: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    _root_ide_package_.com.cbkres.visavole.ui.VisaDialog(onDismissRequest = onDismiss) {
+    VisaDialog(onDismissRequest = onDismiss) {
         Column(Modifier.padding(20.dp)) {
             Text("No final departure", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(12.dp))

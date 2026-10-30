@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.cbkres.visavole.ui.VisaDialog
 
 @Composable
 internal fun TripAlertDialog(
@@ -30,7 +31,7 @@ internal fun TripAlertDialog(
     onDismiss: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    _root_ide_package_.com.cbkres.visavole.ui.VisaDialog(onDismissRequest = onDismiss) {
+    VisaDialog(onDismissRequest = onDismiss) {
         Column(Modifier.padding(20.dp)) {
             Text(title, style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(12.dp))

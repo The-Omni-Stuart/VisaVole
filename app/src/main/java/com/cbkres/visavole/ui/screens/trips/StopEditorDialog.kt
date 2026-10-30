@@ -42,6 +42,9 @@ import com.cbkres.visavole.domain.TripWarning
 import com.cbkres.visavole.domain.WarningSeverity
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
+import com.cbkres.visavole.ui.HazeBox
+import com.cbkres.visavole.ui.VisaDatePickerDialog
+import com.cbkres.visavole.ui.VisaDialog
 import com.cbkres.visavole.ui.components.forms.CountryPicker
 import com.cbkres.visavole.ui.components.forms.SelectionField
 import com.cbkres.visavole.ui.hazeAlphas
@@ -103,7 +106,7 @@ internal fun StopEditorDialog(
     val countrySelected = stop.countryIso2 in world.countries
     val passportCounts = remember(docs) { passportCountsByIso(docs) }
     val passportNumbers = remember(docs) { passportNumbers(docs) }
-    _root_ide_package_.com.cbkres.visavole.ui.VisaDialog(
+    VisaDialog(
         onDismissRequest = onDismiss,
         width = 400.dp,
         maxHeight = (LocalConfiguration.current.screenHeightDp - 96).dp,
@@ -111,7 +114,7 @@ internal fun StopEditorDialog(
     ) {
         val stopDialogScroll = rememberScrollState()
         val (stopTop, stopEnd) = stopDialogScroll.hazeAlphas()
-        _root_ide_package_.com.cbkres.visavole.ui.HazeBox(
+        HazeBox(
             stopTop,
             stopEnd,
             MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -211,7 +214,7 @@ internal fun StopEditorDialog(
     }
 
     if (showArrival) {
-        _root_ide_package_.com.cbkres.visavole.ui.VisaDatePickerDialog(
+        VisaDatePickerDialog(
             initialMillis = stop.arrival.toUtcMillis(),
             confirmLabel = "Done",
             onConfirm = { date ->
@@ -223,7 +226,7 @@ internal fun StopEditorDialog(
         )
     }
     if (showDeparture) {
-        _root_ide_package_.com.cbkres.visavole.ui.VisaDatePickerDialog(
+        VisaDatePickerDialog(
             initialMillis = stop.departure?.toUtcMillis() ?: stop.arrival.toUtcMillis(),
             confirmLabel = "Done",
             onConfirm = { date ->

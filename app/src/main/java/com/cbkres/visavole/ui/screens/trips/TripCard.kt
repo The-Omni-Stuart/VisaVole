@@ -45,6 +45,7 @@ import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.TripStatus
 import com.cbkres.visavole.domain.TripStop
 import com.cbkres.visavole.ui.StatusPill
+import com.cbkres.visavole.ui.VisaListCard
 import com.cbkres.visavole.ui.ringColor
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import com.cbkres.visavole.ui.screens.map.Severity
@@ -146,7 +147,7 @@ internal fun TripCard(
             LocalEffectiveDarkTheme.current
         )
     } ?: MaterialTheme.colorScheme.onSurfaceVariant
-    _root_ide_package_.com.cbkres.visavole.ui.VisaListCard(
+    VisaListCard(
         onClick = onExpand,
         flashTrigger = flashTrigger,
         actions = {
@@ -378,7 +379,7 @@ private fun CyclingZonePill(zones: List<AllowanceSnapshot>, noDocZoneTitles: Set
     fun faceText(a: AllowanceSnapshot) =
         if (a.title in noDocZoneTitles) "${a.shortTitle ?: a.title}: no valid doc" else labeledZoneHint(a)
     fun faceColor(a: AllowanceSnapshot) =
-        if (a.title in noDocZoneTitles) error else _root_ide_package_.com.cbkres.visavole.ui.ringColor(
+        if (a.title in noDocZoneTitles) error else ringColor(
             a,
             isDark
         )

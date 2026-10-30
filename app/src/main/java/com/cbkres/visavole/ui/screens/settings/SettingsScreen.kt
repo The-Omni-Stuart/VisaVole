@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.data.BackupManager
 import com.cbkres.visavole.data.PersistedState
 import com.cbkres.visavole.ui.AccessViewModel
+import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.app.AppState
 import com.cbkres.visavole.ui.theme.ThemePrefs
 import kotlin.math.roundToInt
@@ -91,7 +92,7 @@ internal fun SettingsScreen(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> if (uri != null) vm.prepareRestore(uri) { pendingRestore = it } }
 
-    _root_ide_package_.com.cbkres.visavole.ui.HazeBox(
+    HazeBox(
         settingsScroll,
         MaterialTheme.colorScheme.background,
         modifier = modifier
