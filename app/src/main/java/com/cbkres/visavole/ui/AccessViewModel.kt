@@ -1,10 +1,10 @@
 package com.cbkres.visavole.ui
 
 import android.app.Application
-import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.application
 import androidx.lifecycle.viewModelScope
 import com.cbkres.visavole.data.BackupManager
 import com.cbkres.visavole.data.PersistedState
@@ -57,16 +57,15 @@ import java.time.ZoneOffset
  */
 class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val context: Context = app
-    private val repository = VisaRepository(VisaDb(context))
-    private val backup = BackupManager(context)
+    private val repository = VisaRepository(VisaDb(application))
+    private val backup = BackupManager(application)
     // The persistence subsystem: snapshots of docs/trips are handed to VisaStateStore, which owns
     // the ordered IO write queue and the corrupted-file handling. viewModelScope preserves the
     // writer's existing lifecycle (including the limitation that pending writes may be cancelled
     // if the scope ends).
     private val stateStore = VisaStateStore(file = backup.stateFile, scope = viewModelScope)
     @Volatile private var world: WorldData? = null
-    private val geometry: WorldMapData by lazy { WorldGeometry.load(context) }
+    private val geometry: WorldMapData by lazy { WorldGeometry.load(application) }
     // Built once on the IO thread at load time and shipped via AppState.Ready (P3-40).
     @Volatile private var shapes: List<IsoShape>? = null
     @Volatile private var focus: Map<String, Focus>? = null
