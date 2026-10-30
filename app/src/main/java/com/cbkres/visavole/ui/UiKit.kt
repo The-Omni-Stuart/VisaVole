@@ -68,6 +68,7 @@ import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import kotlin.time.Duration.Companion.milliseconds
 
 // --- Date helpers (one canonical copy; previously duplicated in Trips/Documents/Onboarding) ---
 
@@ -208,7 +209,7 @@ internal fun VisaListCard(
         if (flashTrigger == 0) return@LaunchedEffect
         val press = PressInteraction.Press(flashCenter)
         flashSource.emit(press)
-        delay(300)
+        delay(300.milliseconds)
         flashSource.emit(PressInteraction.Release(press))
     }
     val cardModifier = modifier

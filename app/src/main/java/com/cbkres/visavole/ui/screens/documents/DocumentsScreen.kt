@@ -53,6 +53,7 @@ import com.cbkres.visavole.ui.screens.SectionLabel
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 /** 24 months in days — a passport / residence enters the top display this close to its expiry. */
 private const val EXPIRY_WATCH_DAYS = 730
@@ -223,7 +224,7 @@ internal fun DocumentsScreen(
                                         scope.launch {
                                             docsListState.animateItemToCenter(index, listViewportPx)
                                             val n = flashes.trigger(doc.id)
-                                            delay(900)
+                                            delay(900.milliseconds)
                                             flashes.expire(doc.id, n)
                                         }
                                     }

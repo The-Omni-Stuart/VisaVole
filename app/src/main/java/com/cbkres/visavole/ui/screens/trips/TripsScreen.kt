@@ -46,6 +46,7 @@ import com.cbkres.visavole.ui.toUtcMillis
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 internal fun TripsScreen(
@@ -146,7 +147,7 @@ internal fun TripsScreen(
                                             // trigger once the ripple has played, but only if no
                                             // newer tap took over (FlashTrigger.expire's rule).
                                             val n = flashes.trigger(trip.id)
-                                            delay(900)
+                                            delay(900.milliseconds)
                                             flashes.expire(trip.id, n)
                                         }
                                     }
