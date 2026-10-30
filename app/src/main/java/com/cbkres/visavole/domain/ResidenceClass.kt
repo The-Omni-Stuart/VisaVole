@@ -24,19 +24,19 @@ internal fun Document.residenceClassFor(world: WorldData): ResidenceClass? = whe
     is DocKind.Passport -> null
     is DocKind.Holding -> {
         val h = world.holdings[k.holdingId] ?: return null
-        if (h.category in RESIDENCE_LIKE_HOLDING_CATEGORIES) residenceClass ?: defaultResidenceClassFor(h.id, false)
+        if (h.category in RESIDENCE_LIKE_HOLDING_CATEGORIES) residenceClass ?: defaultResidenceClassFor(h.id)
         else null
     }
     // A custom residence inherits the holding's default class (e.g. a custom doc typed as
     // `us-green-card` defaults to PERMANENT), not a blanket TEMPORARY (P2-29).
-    is DocKind.Custom -> if (k.kind == "residence") residenceClass ?: defaultResidenceClassFor(k.holdingId, true) else null
+    is DocKind.Custom -> if (k.kind == "residence") residenceClass ?: defaultResidenceClassFor(k.holdingId) else null
 }
 
 /**
  * The default residence class for a known holding; permanent-residency documents default to
  * PERMANENT, the long-term Singapore permit to LONG_TERM, everything else to TEMPORARY.
  */
-internal fun defaultResidenceClassFor(holdingId: String?, isResidenceCustom: Boolean): ResidenceClass = when {
+internal fun defaultResidenceClassFor(holdingId: String?): ResidenceClass = when {
     holdingId in setOf("us-green-card", "ca-pr", "au-pr") -> ResidenceClass.PERMANENT
     holdingId == "sg-visa" -> ResidenceClass.LONG_TERM
     else -> ResidenceClass.TEMPORARY

@@ -187,7 +187,7 @@ internal fun AddDocumentDialog(
         if (key != lastResidenceKey) {
             lastResidenceKey = key
             if (docType == DocType.RESIDENCE) {
-                residenceClass = defaultResidenceClassFor(effectiveHolding, effectiveHolding == null)
+                residenceClass = defaultResidenceClassFor(effectiveHolding)
             }
         }
     }

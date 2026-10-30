@@ -1111,12 +1111,12 @@ class AccessModelTest {
     }
 
     @Test fun defaultResidenceClassByHolding() {
-        assertEquals(ResidenceClass.PERMANENT, defaultResidenceClassFor("us-green-card", false))
-        assertEquals(ResidenceClass.PERMANENT, defaultResidenceClassFor("ca-pr", false))
-        assertEquals(ResidenceClass.PERMANENT, defaultResidenceClassFor("au-pr", false))
-        assertEquals(ResidenceClass.LONG_TERM, defaultResidenceClassFor("sg-visa", false))
-        assertEquals(ResidenceClass.TEMPORARY, defaultResidenceClassFor("schengen-residence", false))
-        assertEquals(ResidenceClass.TEMPORARY, defaultResidenceClassFor(null, true))
+        assertEquals(ResidenceClass.PERMANENT, defaultResidenceClassFor("us-green-card"))
+        assertEquals(ResidenceClass.PERMANENT, defaultResidenceClassFor("ca-pr"))
+        assertEquals(ResidenceClass.PERMANENT, defaultResidenceClassFor("au-pr"))
+        assertEquals(ResidenceClass.LONG_TERM, defaultResidenceClassFor("sg-visa"))
+        assertEquals(ResidenceClass.TEMPORARY, defaultResidenceClassFor("schengen-residence"))
+        assertEquals(ResidenceClass.TEMPORARY, defaultResidenceClassFor(null))
     }
 
     @Test fun residenceClassForDocuments() {
