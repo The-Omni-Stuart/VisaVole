@@ -1,8 +1,8 @@
 name: Build APK
 
+# Release publishing only — ci.yml owns branch and pull-request checks, and tag pushes match none of its triggers.
 on:
   push:
-    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 
@@ -17,31 +17,32 @@ jobs:
   build:
     name: Build debug APK
     runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.version.outputs.name }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "25"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
         with:
-          # "tools" was removed from the SDK repo; skip it, keep platform-tools.
+          # Only adb is needed here; the rest of the SDK is resolved by the Gradle build.
           packages: platform-tools
 
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Run unit tests, lint and build debug APK
-        # Tests run hermetically against the committed visa_data.db — the
-        # network updateVisaDb task is opt-in (./gradlew updateVisaDb).
+        # Tests stay hermetic against the committed visa_data.db; updateVisaDb is opt-in and off the build path.
         run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
 
       - name: Extract version name
@@ -77,24 +78,22 @@ jobs:
 
   release:
     name: Build signed AAB
-    # Opt-in: set the repo VARIABLE RELEASE_ENABLED to "true" and add the
-    # secrets RELEASE_KEYSTORE_BASE64 (base64 of the .jks) and
-    # RELEASE_KEYSTORE_PASSWORD before it runs.
+    # Opt-in: needs repo variable RELEASE_ENABLED=true plus the RELEASE_KEYSTORE_BASE64 and RELEASE_KEYSTORE_PASSWORD secrets.
     needs: build
     if: startsWith(github.ref, 'refs/tags/v') && vars.RELEASE_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "25"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Restore release keystore
         run: |
