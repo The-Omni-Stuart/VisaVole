@@ -643,6 +643,38 @@ class GuardTest {
         assertTrue(r.mutations.none { it is GuardMutation.UnsupersedeDocument })
     }
 
+    @Test fun updatingArchivedDocumentDoesNotSupersedeItsReplacement() {
+        // M1: v1 is archived (superseded by live v2). Editing v1 must not supersede v2 in return —
+        // the mutual pointer would archive both documents at once.
+        val v2 = visa("v2", setOf("CA"), "multiple", "2028-01-01", "2026-09-01")
+        val v1 = visa("v1", setOf("CA"), "multiple", "2027-06-30").copy(supersededBy = "v2")
+        val r = GuardEngine.evaluate(GuardAction.UpdateDocument(v1, v1), ctx(docs = listOf(v1, v2)))
+        assertTrue("codes=${codes(r)}", r.canProceed)
+        assertTrue("mutations=${r.mutations}", r.mutations.none { it is GuardMutation.SupersedeDocument })
+        assertFalse(codes(r).contains("doc.single.perCountry"))
+    }
+
+    @Test fun editingArchivedDocumentOutOfOverlapRevivesIt() {
+        // M1: v1 is superseded by v2 (both CA). Editing v1 to cover only FR means it no longer
+        // conflicts with v2, so its stale pointer is cleared and v1 revives.
+        val v2 = visa("v2", setOf("CA"), "multiple", "2028-01-01", "2026-09-01")
+        val v1 = visa("v1", setOf("CA"), "multiple", "2027-06-30").copy(supersededBy = "v2")
+        val candidate = v1.copy(kind = DocKind.Custom(setOf("FR"), null, "visa", null, "multiple"))
+        val r = GuardEngine.evaluate(GuardAction.UpdateDocument(candidate, v1), ctx(docs = listOf(v1, v2)))
+        assertTrue("codes=${codes(r)}", r.canProceed)
+        assertEquals(listOf(GuardMutation.UnsupersedeDocument("v1")), r.mutations)
+    }
+
+    @Test fun danglingSupersessionPointerIsTreatedAsLiveAndCanSupersede() {
+        // M1 counterweight: DocStatus ignores a pointer to a deleted doc, so the document is live
+        // and must still be able to supersede an overlapping one.
+        val v1 = visa("v1", setOf("CA"), "multiple", "2027-06-30")
+        val candidate = visa("v2", setOf("CA"), "multiple", "2028-01-01", "2026-10-01").copy(supersededBy = "gone")
+        val r = add(candidate, listOf(v1))
+        assertTrue("codes=${codes(r)}", r.canProceed)
+        assertEquals(listOf(GuardMutation.SupersedeDocument("v1", "v2")), r.mutations)
+    }
+
     // ------------------------------------------------------------------
     // doc.duplicate with residenceClass (P2-7)
     // ------------------------------------------------------------------
@@ -1011,6 +1043,16 @@ class GuardTest {
         val closed = trip("t0", stop("s0", "DE", today.minusDays(10), today.minusDays(5)))
         val candidate = trip("t1", stop("s1", "CA", today, today.plusDays(5)))
         val r = addTrip(candidate, trips = listOf(closed))
+        assertFalse(r.findings.any { it.code == "trip.ongoing.cap" })
+    }
+
+    @Test fun openEndedUpcomingTripIsNotEndedByOngoingCap() {
+        // M8: an open-ended trip that has not started yet is upcoming, not ongoing — saving a
+        // running trip must not clamp its departure to its own arrival.
+        val upcoming = trip("t0", stop("s0", "CA", today.plusDays(95), null))
+        val candidate = trip("t1", stop("s1", "DE", today.minusDays(5), today.plusDays(5)))
+        val r = addTrip(candidate, trips = listOf(upcoming))
+        assertFalse("mutations=${r.mutations}", r.mutations.any { it is GuardMutation.EndTrip })
         assertFalse(r.findings.any { it.code == "trip.ongoing.cap" })
     }
 

@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -354,14 +355,18 @@ internal fun DocumentsScreen(
             onEditExisting = { showAdd = false; editing = it },
         )
     }
-    if (editing != null) {
-        AddDocumentDialog(
-            world = ready.world,
-            guard = guardCtx,
-            initial = editing,
-            onAdd = { vm.updateDocument(it) },
-            onDismiss = { editing = null },
-            onEditExisting = { editing = it },
-        )
+    // Keyed on the id: the duplicate remedy swaps the edited document in place ("Edit existing"),
+    // and the dialog's form state must not carry from one document to the next.
+    key(editing?.id) {
+        if (editing != null) {
+            AddDocumentDialog(
+                world = ready.world,
+                guard = guardCtx,
+                initial = editing,
+                onAdd = { vm.updateDocument(it) },
+                onDismiss = { editing = null },
+                onEditExisting = { editing = it },
+            )
+        }
     }
 }

@@ -1,14 +1,12 @@
 package com.cbkres.visavole.ui.screens.trips
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,16 +21,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -50,7 +41,6 @@ import com.cbkres.visavole.ui.ringColor
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import com.cbkres.visavole.ui.screens.map.Severity
 import com.cbkres.visavole.ui.screens.map.severityColor
-import kotlinx.coroutines.delay
 import java.time.LocalDate
 
 private fun zoneLabel(rule: StayRule?, fallback: String): String = when {
@@ -83,7 +73,6 @@ private data class TripCardRow(
     val relatedAllowance: AllowanceSnapshot?,
     val allowanceHint: String?,
     val zoneAllowances: List<AllowanceSnapshot>,
-    val noDocZoneTitles: Set<String>,
 )
 
 // TODO: This whole thing and the connection components should be cleaned
@@ -138,7 +127,6 @@ internal fun TripCard(
                 else -> null
             },
             zoneAllowances = zoneAllowances,
-            noDocZoneTitles = stops.filter { it.docLabel == null }.map { it.zoneLabel }.toSet(),
         )
     }
     val allowanceHintColor = row.relatedAllowance?.let {
@@ -213,13 +201,10 @@ internal fun TripCard(
                 )
             }
             when {
-                row.zoneAllowances.size > 1 && !expanded -> CyclingZonePill(
-                    row.zoneAllowances,
-                    row.noDocZoneTitles
-                )
+                row.zoneAllowances.size > 1 && !expanded -> CyclingZonePill(row.zoneAllowances)
 
                 row.zoneAllowances.size <= 1 -> {
-                    val noDoc = row.zoneAllowances.firstOrNull()?.title in row.noDocZoneTitles
+                    val noDoc = row.zoneAllowances.firstOrNull()?.noValidDoc == true
                     if (noDoc) StatusPill(
                         "no valid doc",
                         severityColor(
@@ -333,75 +318,12 @@ internal fun TripCard(
  * [labeledZoneHint], or, in the expanded stop list, by the stop's own row): "76 days left",
  * "-3 Days OVERSTAYING!", "5 entries left".
  */
-private fun zoneHint(a: AllowanceSnapshot): String? = when {
+// internal: CyclingZonePill.kt (same package) shares this helper.
+internal fun zoneHint(a: AllowanceSnapshot): String? = when {
     a.overstayDays > 0 -> "-${a.overstayDays} Days OVERSTAYING!"
     a.remainingDays != null -> if (a.remainingDays == 1) "1 day left" else "${a.remainingDays} days left"
     a.entryRemaining != null -> "${a.entryRemaining} ${if (a.entryRemaining == 1) "entry" else "entries"} left"
     else -> null
-}
-
-/**
- * The cycling-pill face text: the zone's short name (ISO-2 code for a single-country zone, else the
- * zone name) naming the destination, then [zoneHint] — e.g. "US: 76 days left",
- * "Schengen Area: 76 days left", "GB: -3 Days OVERSTAYING!".
- */
-private fun labeledZoneHint(a: AllowanceSnapshot): String {
-    val name = a.shortTitle ?: a.title
-    val hint = zoneHint(a) ?: return name
-    return "$name: $hint"
-}
-
-/**
- * A single allowance pill that cycles through a multi-zone trip's zones in turn, mirroring the
- * allowance ring's face-rotator (5 s cadence + crossfade). The invisible "ghost" faces pin the box
- * to the widest face so swapping never shifts the row, and the merged TalkBack label reads every
- * zone at once instead of re-announcing on each flip. A zone in [noDocZoneTitles] (a stop with no
- * document) shows "no valid doc" in place of its allowance, in the status red.
- */
-@Composable
-private fun CyclingZonePill(zones: List<AllowanceSnapshot>, noDocZoneTitles: Set<String>) {
-    val isDark = LocalEffectiveDarkTheme.current
-    val error = severityColor(
-        Severity.BAD,
-        isDark
-    )
-    var face by remember(zones) { mutableStateOf(0) }
-    LaunchedEffect(zones) {
-        if (zones.size < 2) {
-            face = 0
-            return@LaunchedEffect
-        }
-        while (true) {
-            delay(if (face == 0) 10_000 else 5_000)
-            face = (face + 1) % zones.size
-        }
-    }
-    fun faceText(a: AllowanceSnapshot) =
-        if (a.title in noDocZoneTitles) "${a.shortTitle ?: a.title}: no valid doc" else labeledZoneHint(a)
-    fun faceColor(a: AllowanceSnapshot) =
-        if (a.title in noDocZoneTitles) error else ringColor(
-            a,
-            isDark
-        )
-    Box(
-        modifier = Modifier.semantics(mergeDescendants = true) {
-            contentDescription = zones.joinToString("; ") { faceText(it) }
-        },
-    ) {
-        zones.forEach { a ->
-            StatusPill(
-                faceText(a),
-                faceColor(a),
-                modifier = Modifier.alpha(0f)
-            )
-        }
-        Crossfade(targetState = face, animationSpec = tween(300)) { i ->
-            StatusPill(
-                faceText(zones[i]),
-                faceColor(zones[i])
-            )
-        }
-    }
 }
 
 private val TripStatus.label: String

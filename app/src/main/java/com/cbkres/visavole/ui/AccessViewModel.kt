@@ -60,9 +60,8 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     private val repository = VisaRepository(VisaDb(application))
     private val backup = BackupManager(application)
     // The persistence subsystem: snapshots of docs/trips are handed to VisaStateStore, which owns
-    // the ordered IO write queue and the corrupted-file handling. viewModelScope preserves the
-    // writer's existing lifecycle (including the limitation that pending writes may be cancelled
-    // if the scope ends).
+    // the ordered IO write queue (flushed if the scope ends) and the corrupted-file handling.
+    // viewModelScope preserves the writer's existing lifecycle.
     private val stateStore = VisaStateStore(file = backup.stateFile, scope = viewModelScope)
     @Volatile private var world: WorldData? = null
     private val geometry: WorldMapData by lazy { WorldGeometry.load(application) }
@@ -81,10 +80,17 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         _snacks.trySend(message)
     }
 
+    /** M6: skipped records must have a voice before an edit persists the shrunken set. */
+    private fun snackUnreadableRecords(count: Int) {
+        snack("$count record${if (count == 1) "" else "s"} could not be read — your backup may be damaged")
+    }
+
     private var docs: MutableList<Document> = mutableListOf()
     private var trips: MutableList<Trip> = mutableListOf()
     private var primaryDocId: String? = null
     private var reloadGeneration = 0
+    // M6: records the pending restore's file held but could not read; voiced when the restore lands.
+    private var restoreDroppedRecords = 0
     // P3-48: persisted state is read off the main thread, once, before the first world load.
     @Volatile private var stateRead = false
 
@@ -104,10 +110,11 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
                     // home countries from the loaded docs. retryLoad skips it — by then the in-memory
                     // state (and the async writes it triggered) is already authoritative.
                     if (!stateRead) {
-                        stateStore.load()?.let { saved ->
-                            primaryDocId = saved.primaryDocId
-                            docs = saved.docs.toMutableList()
-                            trips = saved.trips.toMutableList()
+                        stateStore.load()?.let { loaded ->
+                            primaryDocId = loaded.state.primaryDocId
+                            docs = loaded.state.docs.toMutableList()
+                            trips = loaded.state.trips.toMutableList()
+                            if (loaded.droppedRecords > 0) snackUnreadableRecords(loaded.droppedRecords)
                         }
                         stateRead = true
                     }
@@ -331,6 +338,9 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Lets a dialog report a side effect it committed itself (e.g. a mid-dialog trip split). */
+    fun snackMessage(message: String) = snack(message)
+
     fun addTrip(trip: Trip, mutations: List<GuardMutation> = emptyList()) {
         if (guardBlocked(GuardAction.AddTrip(trip))) return
         applyMutations(mutations)
@@ -371,7 +381,9 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     /** Export the current data to a user-chosen location ([uri] from the SAF create-document picker). */
     fun exportBackup(uri: Uri) {
         viewModelScope.launch {
-            when (val outcome = withContext(Dispatchers.IO) { backup.exportTo(uri) }) {
+            // Snapshot on the main thread where the state lives; encoding runs inside exportTo, on IO.
+            val snapshot = snapshot()
+            when (val outcome = withContext(Dispatchers.IO) { backup.exportTo(uri, snapshot) }) {
                 is BackupManager.Outcome.Exported -> snack("Backup saved.")
                 is BackupManager.Outcome.Imported -> snack("Backup ready to restore.")
                 is BackupManager.Outcome.Failed -> snack(outcome.message)
@@ -383,7 +395,10 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     fun prepareRestore(uri: Uri, onReady: (PersistedState) -> Unit) {
         viewModelScope.launch {
             when (val outcome = withContext(Dispatchers.IO) { backup.importFrom(uri) }) {
-                is BackupManager.Outcome.Imported -> onReady(outcome.state)
+                is BackupManager.Outcome.Imported -> {
+                    restoreDroppedRecords = outcome.droppedRecords
+                    onReady(outcome.state)
+                }
                 is BackupManager.Outcome.Exported -> {}
                 is BackupManager.Outcome.Failed -> snack(outcome.message)
             }
@@ -406,6 +421,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         }
         if (violations.isNotEmpty()) {
             snack("Backup not restored — it holds ${violations.first()}.")
+            restoreDroppedRecords = 0
             return
         }
         docs = state.docs.toMutableList()
@@ -415,22 +431,26 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         persist()
         reloadWorldAndPublish()
         snack("Backup restored.")
+        // decode already counted any unreadable records during importFrom (M6): the user must
+        // know the restored set is smaller than the file appeared to hold before editing it.
+        if (restoreDroppedRecords > 0) snackUnreadableRecords(restoreDroppedRecords)
+        restoreDroppedRecords = 0
     }
 
     // ---- persistence (JSON snapshot handed to VisaStateStore, encoded by StateCodec) ----
 
     /**
-     * Snapshots the live state for the store. The [.toList]s are load-bearing: they freeze the
-     * mutable docs/trips so the async writer serializes exactly this moment's content.
+     * Snapshots the live state. The [.toList]s are load-bearing: they freeze the mutable
+     * docs/trips so the async writer (and export) serializes exactly this moment's content.
      */
+    private fun snapshot() = PersistedState(
+        primaryDocId = primaryDocId,
+        docs = docs.toList(),
+        trips = trips.toList(),
+    )
+
     private fun persist() {
-        stateStore.save(
-            PersistedState(
-                primaryDocId = primaryDocId,
-                docs = docs.toList(),
-                trips = trips.toList(),
-            ),
-        )
+        stateStore.save(snapshot())
     }
 
     companion object {

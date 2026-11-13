@@ -58,7 +58,7 @@ class VisaStateStoreTest {
         store.save(fullState)
 
         assertTrue("the saved state never reached disk", awaitUntil { diskContains(fullState) })
-        assertEquals(fullState, store.load())
+        assertEquals(fullState, store.load()?.state)
     }
 
     @Test
@@ -76,6 +76,38 @@ class VisaStateStoreTest {
             "a temp file survived the atomic-rename write",
             dir.listFiles { f: File -> f.name.endsWith(".tmp") }?.isEmpty() ?: false,
         )
+    }
+
+    @Test
+    fun queuedWritesSurviveScopeCancellation() {
+        store.save(fullState)
+        assertTrue("the saved state never reached disk", awaitUntil { diskContains(fullState) })
+
+        // Multiple enqueues widen the window: the writer consumes one per dispatch, so the last
+        // one is almost certainly still queued when the scope is cancelled below.
+        val queued = (1..8).map { n ->
+            PersistedState("doc-$n", listOf(Document("doc-$n", "Passport · $n", DocKind.Passport("CZ"))), emptyList())
+        }
+        queued.forEach { store.save(it) }
+        runBlocking { scope.coroutineContext[Job]?.cancelAndJoin() }
+
+        assertTrue(
+            "the last queued save never reached disk after the scope was cancelled",
+            diskContains(queued.last()),
+        )
+    }
+
+    @Test
+    fun loadReportsDroppedRecordsFromTheStateFile() {
+        stateFile.writeText(
+            """{"schemaVersion":3,"primaryDocId":null,
+               "docs":[{"id":"doc-1","label":"P","kind":"passport","iso2":"CZ"},"idless"],"trips":[]}""",
+        )
+
+        val loaded = store.load()
+
+        assertEquals(1, loaded?.state?.docs?.size)
+        assertEquals(1, loaded?.droppedRecords)
     }
 
     @Test
@@ -115,7 +147,7 @@ class VisaStateStoreTest {
      * file could otherwise be "recovered" away by the very poll that waits for it.
      */
     private fun diskContains(expected: PersistedState): Boolean =
-        runCatching { StateCodec.decode(stateFile.readText()) == expected }.getOrDefault(false)
+        runCatching { StateCodec.decode(stateFile.readText()).state == expected }.getOrDefault(false)
 
     /** Polls [condition] until it holds or [timeoutMs] elapses; save() hands off to an async writer. */
     private fun awaitUntil(timeoutMs: Long = 5_000, condition: () -> Boolean): Boolean {

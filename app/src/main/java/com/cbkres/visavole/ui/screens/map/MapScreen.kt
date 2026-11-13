@@ -12,6 +12,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -38,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -97,6 +101,14 @@ internal fun MapScreen(
             onSelect(iso)
         }
     }
+    // Re-picking the already-selected country from search writes an equal value, so the canvas
+    // centring effect's key would not change; this nonce bumps on every search pick so "centre
+    // on it again" works, and map taps (which never bump) cannot double-centre.
+    var recenterNonce by remember { mutableIntStateOf(0) }
+    fun pickFromSearch(iso: String) {
+        recenterNonce++
+        pick(iso)
+    }
     val density = LocalDensity.current
     var searchBarH by remember { mutableStateOf(0.dp) }
     var cardH by remember { mutableStateOf(0.dp) }
@@ -142,6 +154,7 @@ internal fun MapScreen(
             zoomState = zoomState,
             centerState = centerState,
             selected = selected,
+            recenterNonce = recenterNonce,
             onCountryTap = pick,
             homeCountries = s.homeCountries,
             ownVisaCountries = s.ownVisaCountries,
@@ -155,7 +168,7 @@ internal fun MapScreen(
             onQuery = onQuery,
             // P3-16: the IME "Search" action picks the first match (previously it only hid the
             // keyboard, leaving the dropdown open with nothing selected).
-            onSearch = { matches.firstOrNull()?.let { pick(it.iso2) } ?: keyboardController?.hide() },
+            onSearch = { matches.firstOrNull()?.let { pickFromSearch(it.iso2) } ?: keyboardController?.hide() },
             onFocusChanged = { searchFocused = it },
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -290,15 +303,11 @@ internal fun MapScreen(
                     .fillMaxWidth()
                     .onSizeChanged { legendH = Dp(it.height / density.density) },
             ) {
-                // Home countries are their own "Your country" swatch, so exclude them from the
-                // per-level buckets — otherwise a home country (level FREEDOM) is double-counted
-                // in both (P3-15). Null levels (no documented rule) are kept so the slate swatch
-                // has a real count.
+                // Homes are their own "Your country" swatch, so legendCounts keeps them out of the
+                // level buckets and out of the slate count (P3-15); the slate row counts what the
+                // canvas can actually paint (the geometry set, incl. e.g. AQ which has no DB row).
                 MapLegend(
-                    s.access.entries
-                        .filter { it.key !in s.homeCountries }
-                        .groupBy { it.value.level }
-                        .mapValues { it.value.size },
+                    legendCounts(s.geometry.countries.keys, s.access, s.homeCountries),
                     s.homeCountries.size,
                 )
             }
@@ -317,7 +326,20 @@ internal fun MapScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp)
                     .offset(y = searchBarH)
-                    .heightIn(max = 240.dp),
+                    .heightIn(max = 240.dp)
+                    // Pointer sink for taps landing on the dropdown's empty space or padding:
+                    // without a node here the hit test continues down to the map canvas, which
+                    // accepts already-consumed downs and would select a country behind the list.
+                    // Consuming only the release keeps the inner scroll and rows working.
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            awaitFirstDown()
+                            do {
+                                val event = awaitPointerEvent()
+                                event.changes.forEach { if (!it.pressed) it.consume() }
+                            } while (event.changes.any { it.pressed })
+                        }
+                    },
             ) {
                 val searchScroll = rememberScrollState()
                 val (searchTop, searchEnd) = searchScroll.hazeAlphas()
@@ -328,7 +350,7 @@ internal fun MapScreen(
                             EmptyState("No matching countries", modifier = Modifier.padding(horizontal = 10.dp))
                         } else {
                             matches.forEach { c ->
-                                CountryRow(name = c.name, onClick = { pick(c.iso2) })
+                                CountryRow(name = c.name, onClick = { pickFromSearch(c.iso2) })
                             }
                         }
                     }

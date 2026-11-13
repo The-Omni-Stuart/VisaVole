@@ -19,9 +19,32 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.cbkres.visavole.domain.Access
 import com.cbkres.visavole.domain.AccessLevel
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.hazeAlphas
+
+/**
+ * The legend's numbers: per-level counts over the non-home access entries (homes get their own
+ * swatch), plus the null-key slate count — what the canvas actually paints slate: a country in
+ * the drawable [drawableIso] geometry set that is not a home and has no access entry, or an
+ * UNKNOWN one (MapColors has no UNKNOWN palette, so those fill slate too).
+ */
+internal fun legendCounts(
+    drawableIso: Set<String>,
+    access: Map<String, Access>,
+    homeCountries: Set<String>,
+): Map<AccessLevel?, Int> {
+    val levels = access.entries
+        .filter { it.key !in homeCountries }
+        .groupBy { it.value.level }
+        .mapValues { it.value.size }
+    val slate = (drawableIso - homeCountries).count { iso ->
+        val level = access[iso]?.level
+        level == null || level == AccessLevel.UNKNOWN
+    }
+    return levels + ((null as AccessLevel?) to slate)
+}
 
 @Composable
 internal fun MapLegend(counts: Map<AccessLevel?, Int>, homeCount: Int = 1) {

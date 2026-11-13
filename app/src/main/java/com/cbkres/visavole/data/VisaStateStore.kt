@@ -3,10 +3,14 @@ package com.cbkres.visavole.data
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+
+/** [VisaStateStore.load]'s result: the file's [state] plus [droppedRecords] records it could not read. */
+data class LoadedState(val state: PersistedState, val droppedRecords: Int)
 
 /**
  * Reads and writes snapshots of the user's [PersistedState] to the app-private state file.
@@ -38,8 +42,26 @@ internal class VisaStateStore(
         // P3-48: ordered persistence writer — drains persistQueue in FIFO order on the IO dispatcher,
         // so the UI thread never does the disk write (and rapid mutations apply in order).
         scope.launch {
-            for (text in persistQueue) {
-                withContext(Dispatchers.IO) { writeFile(text) }
+            var inFlight: String? = null
+            try {
+                for (text in persistQueue) {
+                    inFlight = text
+                    withContext(Dispatchers.IO) { writeFile(text) }
+                    inFlight = null
+                }
+            } finally {
+                // Cancellation used to strand every queued write: flush what remains (including an
+                // item whose write was interrupted) so the last edit survives the scope ending.
+                val tail = buildList {
+                    inFlight?.let { add(it) }
+                    while (true) {
+                        val text = persistQueue.tryReceive().getOrNull() ?: break
+                        add(text)
+                    }
+                }
+                if (tail.isNotEmpty()) {
+                    withContext(NonCancellable + Dispatchers.IO) { tail.forEach { writeFile(it) } }
+                }
             }
         }
     }
@@ -47,16 +69,19 @@ internal class VisaStateStore(
     /**
      * Reads the persisted state, or null when there is no state file (fresh install) or it could
      * not be read. A file that cannot be decoded is quarantined rather than ignored, so the next
-     * write can never destroy the user's only copy of the data. Must be called on an IO dispatcher.
+     * write can never destroy the user's only copy of the data. Partially readable files carry
+     * their unreadable-record count (M6) so the caller can warn the user. Must be called on an
+     * IO dispatcher.
      */
-    fun load(): PersistedState? {
+    fun load(): LoadedState? {
         val f = file
         try {
             if (!f.exists()) return null
             // P3-56: baseline the mtime we read so the first persist() doesn't false-positive on a
             // pre-existing (older) file.
             lastPersistMs = f.lastModified()
-            return StateCodec.decode(f.readText())
+            val decoded = StateCodec.decode(f.readText())
+            return LoadedState(decoded.state, decoded.droppedRecords)
         } catch (e: Exception) {
             // Never start empty on top of a file we could not read: the next persist() would
             // overwrite it and the user's data would be gone for good. Quarantine it instead,

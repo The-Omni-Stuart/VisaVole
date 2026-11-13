@@ -170,35 +170,42 @@ internal fun MainScaffold(
         },
     ) { pad ->
         Box(Modifier.fillMaxSize().padding(pad)) {
-            when (tab) {
-                0 -> MapScreen(
-                    s,
-                    selected,
-                    { selected = it },
-                    query = mapQuery,
-                    onQuery = { mapQuery = it },
-                    shapes = mapShapes,
-                    focus = mapFocus,
-                    zoomState = mapZoom,
-                    centerState = mapCenter,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                1 -> DocumentsScreen(
-                    vm,
-                    s,
-                    scrollState = docsScroll,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                2 -> TripsScreen(
-                    vm,
-                    s,
-                    scrollState = tripsScroll,
-                    expandedTrips = expandedTrips,
-                    onToggleExpanded = { id -> if (id in expandedTrips) expandedTrips.remove(id) else expandedTrips.add(id) },
-                    // P3-20: a deleted trip's id would otherwise linger in the saveable list forever.
-                    onTripDeleted = { id -> expandedTrips.remove(id) },
-                    modifier = Modifier.fillMaxSize(),
-                )
+            // The tabs stay out of composition while Settings is up: the overlay would otherwise
+            // leak taps through to the map (WorldMapCanvas accepts already-consumed events) and
+            // the Trips tab's animators (Deportometer pulse, zone-pill rotation) would keep
+            // running unseen. Everything that must survive this is hoisted above the when(), so
+            // reopening a tab behaves exactly like returning to it from another tab.
+            if (!showSettings) {
+                when (tab) {
+                    0 -> MapScreen(
+                        s,
+                        selected,
+                        { selected = it },
+                        query = mapQuery,
+                        onQuery = { mapQuery = it },
+                        shapes = mapShapes,
+                        focus = mapFocus,
+                        zoomState = mapZoom,
+                        centerState = mapCenter,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    1 -> DocumentsScreen(
+                        vm,
+                        s,
+                        scrollState = docsScroll,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    2 -> TripsScreen(
+                        vm,
+                        s,
+                        scrollState = tripsScroll,
+                        expandedTrips = expandedTrips,
+                        onToggleExpanded = { id -> if (id in expandedTrips) expandedTrips.remove(id) else expandedTrips.add(id) },
+                        // P3-20: a deleted trip's id would otherwise linger in the saveable list forever.
+                        onTripDeleted = { id -> expandedTrips.remove(id) },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
             if (showSettings) {
                 SettingsScreen(

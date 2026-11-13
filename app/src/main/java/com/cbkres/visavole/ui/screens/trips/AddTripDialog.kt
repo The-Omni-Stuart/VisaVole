@@ -90,8 +90,15 @@ internal fun AddTripDialog(
     var saveWarnings by remember { mutableStateOf<Pair<List<GuardFinding>, Boolean>?>(null) }
     var pendingMutations by remember { mutableStateOf<List<GuardMutation>>(emptyList()) }
     var ongoingConflict by remember { mutableStateOf<OngoingConflict?>(null) }
+    var splitCommitted by remember { mutableStateOf(false) }
+    var showSplitExitConfirm by remember { mutableStateOf(false) }
 
     fun candidate(): Trip = Trip(currentTripId, stops, note.ifBlank { null })
+
+    // A split already committed its first half, so leaving is a discard, not a clean cancel.
+    fun requestDismiss() {
+        if (splitCommitted) showSplitExitConfirm = true else onDismiss()
+    }
 
     fun save(trip: Trip = candidate()) {
         if (isEditingExisting) vm.updateTrip(trip, pendingMutations) else vm.addTrip(trip, pendingMutations)
@@ -239,6 +246,8 @@ internal fun AddTripDialog(
             return
         }
         if (isEditingExisting) vm.updateTrip(leftTrip) else vm.addTrip(leftTrip)
+        splitCommitted = true
+        vm.snackMessage("First half saved — the rest continues as a new trip")
         stops = rightStops
         note = rightNote ?: ""
         currentTripId = UUID.randomUUID().toString()
@@ -250,7 +259,7 @@ internal fun AddTripDialog(
     }
 
     VisaDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { requestDismiss() },
         width = 400.dp,
         maxHeight = (LocalConfiguration.current.screenHeightDp - 96).dp,
         dismissable = false,
@@ -269,8 +278,8 @@ internal fun AddTripDialog(
                 maxHeight = (LocalConfiguration.current.screenHeightDp * 0.45f).dp,
                 onEdit = { editingStopId = it.id },
                 onRemove = { stop ->
+                    lastStopSnapshot = StopSnapshot(stops)
                     stops = stops.filter { it.id != stop.id }
-                    lastStopSnapshot = null
                     refreshGap()
                 },
             )
@@ -304,7 +313,7 @@ internal fun AddTripDialog(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+                OutlinedButton(onClick = { requestDismiss() }) { Text("Cancel") }
                 Spacer(Modifier.width(12.dp))
                 Button(onClick = { trySave() }, enabled = stops.isNotEmpty()) {
                     Text(if (isEditingExisting) "Save" else "Add")
@@ -333,10 +342,10 @@ internal fun AddTripDialog(
                     applyStop(updated)
                 },
                 onRemove = {
+                    lastStopSnapshot = StopSnapshot(stops)
                     stops = stops.filter { it.id != id }
                     editingStopId = null
                     departureFocusStopId = null
-                    lastStopSnapshot = null
                     refreshGap()
                 },
                 onDismiss = {
@@ -402,15 +411,20 @@ internal fun AddTripDialog(
         if (prev != null && next != null && departure != null) {
             val prevName = ready.world.countries[prev.countryIso2]?.name ?: prev.countryIso2
             val nextName = ready.world.countries[next.countryIso2]?.name ?: next.countryIso2
+            val canUndo = lastStopSnapshot != null
             GapDialog(
                 details = "$departure → ${next.arrival}",
-                message = "There is a gap between $prevName and $nextName. You can keep both stops in this trip, cancel the last stop change, or end this trip and start a new trip after the gap.",
+                message = if (canUndo)
+                    "There is a gap between $prevName and $nextName. You can keep both stops in this trip, undo the last change, or end this trip and start a new trip after the gap."
+                else
+                    "There is a gap between $prevName and $nextName. You can keep both stops in this trip or end this trip and start a new trip after the gap.",
                 error = gapError,
+                canUndo = canUndo,
                 onKeepGap = {
                     lastStopSnapshot = null
                     gapIndex = null
                 },
-                onCancel = { cancelLastStopChange() },
+                onUndo = { cancelLastStopChange() },
                 onSplit = { splitGap() },
                 onDismiss = {
                     lastStopSnapshot = null
@@ -432,6 +446,16 @@ internal fun AddTripDialog(
                 onDismiss()
             },
             onDismiss = { saveWarnings = null },
+        )
+    }
+    if (showSplitExitConfirm) {
+        TripAlertDialog(
+            title = "Discard the new trip?",
+            confirmLabel = "Discard",
+            onConfirm = onDismiss,
+            dismissLabel = "Keep editing",
+            onDismiss = { showSplitExitConfirm = false },
+            content = { Text("The first half was already saved. The stops still in the form will be lost.") },
         )
     }
 }
@@ -544,8 +568,9 @@ private fun GapDialog(
     details: String,
     message: String,
     error: String?,
+    canUndo: Boolean,
     onKeepGap: () -> Unit,
-    onCancel: () -> Unit,
+    onUndo: () -> Unit,
     onSplit: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -577,8 +602,10 @@ private fun GapDialog(
                 OutlinedButton(onClick = onKeepGap, modifier = Modifier.weight(1f)) {
                     Text("Keep gap")
                 }
-                OutlinedButton(onClick = onCancel, modifier = Modifier.weight(1f)) {
-                    Text("Cancel")
+                if (canUndo) {
+                    OutlinedButton(onClick = onUndo, modifier = Modifier.weight(1f)) {
+                        Text("Undo last change")
+                    }
                 }
             }
             Spacer(Modifier.height(12.dp))
@@ -679,7 +706,7 @@ private fun SaveWarningsDialog(
         confirmLabel = if (canSave) "Save anyway" else null,
         confirmEnabled = canSave,
         onConfirm = onConfirm,
-        neutralLabel = if (canSave) null else "Back",
+        neutralLabel = if (canSave) null else "Discard",
         onNeutral = onBack,
         dismissLabel = "Edit",
         onDismiss = onDismiss,

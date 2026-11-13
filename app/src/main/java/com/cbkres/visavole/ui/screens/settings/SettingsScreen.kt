@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -145,17 +146,21 @@ internal fun SettingsScreen(
                     }
                 }
             }
-            Spacer(Modifier.height(12.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    "Dynamic color",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(checked = dynamicColor, onCheckedChange = onDynamicColorChanged)
+            // Dynamic colour needs Android S+ (the same gate as VisaVoleTheme in Theme.kt); on
+            // Android 9-11 the switch would be a visible no-op.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        "Dynamic color",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(checked = dynamicColor, onCheckedChange = onDynamicColorChanged)
+                }
             }
             Spacer(Modifier.height(48.dp))
 

@@ -185,27 +185,33 @@ object GuardEngine {
      * `doc.supersession.stale` (P2-5) — the candidate's identity changed (countries/kind) so it no
      * longer overlaps a document it previously superseded; that document is revived by clearing the
      * stale pointer. Without this, an update to the replacement would leave the old doc archived
-     * forever ("Replaced by …") even though the two no longer conflict.
+     * forever ("Replaced by …") even though the two no longer conflict. Editing an archived
+     * candidate out of overlap with its own replacement revives the candidate the same way.
      */
     private fun staleSupersessionRule(action: GuardAction, candidate: Document, ctx: GuardContext): GuardResult? {
         if (action !is GuardAction.UpdateDocument) return null
-        val stale = ctx.docs.filter { d ->
-            d.supersededBy == candidate.id &&
-                (d.docCategory(ctx.world) != candidate.docCategory(ctx.world) ||
-                    d.coveredCountries(ctx.world).none { it in candidate.coveredCountries(ctx.world) })
-        }
-        if (stale.isEmpty()) return null
+        val stale = ctx.docs.filter { it.supersededBy == candidate.id && !supersessionMatches(it, candidate, ctx.world) }
+        val replacement = candidate.supersededBy?.let { id -> ctx.docs.firstOrNull { it.id == id } }
+        // (pointer holder to clear) to (doc named in the message) — always the non-candidate side.
+        val revived = stale.map { it to it } +
+            listOfNotNull(replacement?.takeUnless { supersessionMatches(candidate, it, ctx.world) }?.let { candidate to it })
+        if (revived.isEmpty()) return null
         return GuardResult(
-            findings = stale.map {
+            findings = revived.map { (_, other) ->
                 GuardFinding(
                     "doc.supersession.stale", GuardSeverity.WARN, "Replaced document revived",
-                    "This document no longer overlaps your ${it.label}, so it is no longer superseded " +
+                    "This document no longer overlaps your ${other.label}, so it is no longer superseded " +
                         "and becomes valid again.",
                 )
             },
-            mutations = stale.map { GuardMutation.UnsupersedeDocument(it.id) },
+            mutations = revived.map { (holder, _) -> GuardMutation.UnsupersedeDocument(holder.id) },
         )
     }
+
+    /** Whether an archived doc still conflicts with the replacement it points at (P2-5's predicate). */
+    private fun supersessionMatches(archived: Document, replacement: Document, world: WorldData): Boolean =
+        archived.docCategory(world) == replacement.docCategory(world) &&
+            archived.coveredCountries(world).any { it in replacement.coveredCountries(world) }
 
     /** `doc.passport.unknownCountry` — a passport whose nationality isn't in the world data. */
     private fun passportUnknownCountryRule(candidate: Document, ctx: GuardContext): GuardResult? {
@@ -480,6 +486,8 @@ object GuardEngine {
      * replaces the old hard block).
      */
     private fun singlePerCountryRule(candidate: Document, ctx: GuardContext): GuardResult? {
+        // M1: an archived doc cannot replace a live one; a dangling pointer counts as live, as in DocStatus.
+        if (candidate.supersededBy != null && ctx.docs.any { it.id == candidate.supersededBy }) return null
         val category = candidate.docCategory(ctx.world) ?: return null
         val oldOnes = supersessionTargets(candidate, ctx)
         if (oldOnes.isEmpty()) return null
@@ -642,13 +650,14 @@ object GuardEngine {
 
     /**
      * `trip.ongoing.cap` (MUTATE+WARN) — at most one ongoing trip. Saving a new ongoing trip emits
-     * a [GuardMutation.EndTrip] for the open trip with the earliest start; the UI confirms it and
-     * "keep both" simply declines the mutation (see §13.4).
+     * a [GuardMutation.EndTrip] for the ongoing trip with the earliest start; the UI confirms it
+     * and "keep both" simply declines the mutation (see §13.4).
      */
     private fun ongoingCapRule(candidate: Trip, ctx: GuardContext): GuardResult? {
         if (candidate.statusAt(ctx.today) != TripStatus.ONGOING) return null
+        // M8: only trips ongoing at today may be ended — clamping an open-ended upcoming trip kills it.
         val previous = ctx.trips
-            .filter { it.id != candidate.id && it.isOpen }
+            .filter { it.id != candidate.id && it.statusAt(ctx.today) == TripStatus.ONGOING }
             .minByOrNull { it.firstArrival }
             ?: return null
         // P3-7: the "firstArrival after today" branch is unreachable (this rule only runs on

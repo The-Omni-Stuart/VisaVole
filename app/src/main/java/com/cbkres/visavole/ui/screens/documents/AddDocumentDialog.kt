@@ -138,6 +138,7 @@ internal fun AddDocumentDialog(
     } // null=auto, ""=none, else holding id
     var entryType by remember { mutableStateOf(initCustom?.entryType ?: "multiple") } // "single" | "double" | "multiple" (visa only)
     var residenceClass by remember { mutableStateOf(initial?.residenceClass ?: ResidenceClass.TEMPORARY) } // residence only
+    var residenceClassEdited by remember { mutableStateOf(false) } // an explicit pick, vs the TEMPORARY fallback on a doc that stored no class
     var expiryDate by remember { mutableStateOf(initial?.expiry?.toUtcMillis()) }
     var validFromDate by remember { mutableStateOf(initial?.validFrom?.toUtcMillis()) }
     // P3-55: a validity period is both-or-neither. When a save is attempted with exactly one date
@@ -148,12 +149,14 @@ internal fun AddDocumentDialog(
     // Guard-driven dialog state: [blocked] is the blocking finding shown to the user,
     // [blockedDuplicate] the existing document an "Edit existing" button can jump to,
     // [pendingMutationDoc]/[pendingMutationWarn] the pending action + its accompanying mutation
-    // awaiting confirmation, and [multiCountryDoc] the visa awaiting the multi-country confirm.
+    // awaiting confirmation, [multiCountryDoc] the visa awaiting the multi-country confirm, and
+    // [saveWarnings] a pending action + the guard warnings no other confirm covered.
     var blocked by remember { mutableStateOf<GuardFinding?>(null) }
     var blockedDuplicate by remember { mutableStateOf<Document?>(null) }
     var pendingMutationDoc by remember { mutableStateOf<Document?>(null) }
     var pendingMutationWarn by remember { mutableStateOf<GuardFinding?>(null) }
     var multiCountryDoc by remember { mutableStateOf<Document?>(null) }
+    var saveWarnings by remember { mutableStateOf<Pair<Document, List<GuardFinding>>?>(null) }
 
     // A residence/visa earns short-stay travel, not freedom of movement — infer the visa-free
     // travel bloc (e.g. Schengen for an EU residence) rather than the freedom-of-movement bloc.
@@ -188,6 +191,7 @@ internal fun AddDocumentDialog(
             lastResidenceKey = key
             if (docType == DocType.RESIDENCE) {
                 residenceClass = defaultResidenceClassFor(effectiveHolding)
+                residenceClassEdited = true
             }
         }
     }
@@ -208,6 +212,8 @@ internal fun AddDocumentDialog(
 
     fun build(): Document {
         val id = initial?.id ?: UUID.randomUUID().toString()
+        // An edit must carry the supersession pointer through, or saving revives the archived doc.
+        val supersededBy = initial?.supersededBy
         val exp = expiryOrNull
         val vfrom = validFromOrNull
         return when {
@@ -218,14 +224,16 @@ internal fun AddDocumentDialog(
             initHolding != null && customIso.isEmpty() -> {
                 val h = holdingChoice!!
                 val label = (world.holdings[h]?.name ?: h) + residenceClass.let { " · ${it.label}" }
-                Document(id, label, DocKind.Holding(h), exp, vfrom, residenceClass)
+                // Keep what the dialog cannot change (entry type) or never touched (stored class).
+                val rc = if (residenceClassEdited) residenceClass else initial?.residenceClass
+                Document(id, label, DocKind.Holding(h, initHolding.entryType), exp, vfrom, rc, supersededBy)
             }
             else -> {
                 val names = customIso.joinToString(", ") { countries[it]?.name ?: it }.take(80)
                 val typeSuffix = effectiveHolding?.let { hid -> " (${world.holdings[hid]?.name ?: hid})" } ?: ""
                 val entry = if (docType == DocType.VISA) entryType else null
                 val rc = if (docType == DocType.RESIDENCE) residenceClass else null
-                Document(id, "${docType.label}: $names$typeSuffix", DocKind.Custom(customIso, effectiveBloc, docType.kind, effectiveHolding, entry), exp, vfrom, rc)
+                Document(id, "${docType.label}: $names$typeSuffix", DocKind.Custom(customIso, effectiveBloc, docType.kind, effectiveHolding, entry), exp, vfrom, rc, supersededBy)
             }
         }
     }
@@ -255,6 +263,14 @@ internal fun AddDocumentDialog(
             pendingMutationDoc = doc
             pendingMutationWarn = result.warnings.firstOrNull { it.code == "doc.single.perCountry" }
                 ?: result.warnings.firstOrNull()
+            return
+        }
+        // Any remaining warning (e.g. doc.inUse.entriesPlanned) must reach the user before the
+        // edit commits. The multi-country warning is excluded: its own confirm already ran for
+        // this evaluate call — "Save anyway" there re-runs with skipMultiCountry.
+        val unconfirmed = result.warnings.filterNot { it.code == "doc.visa.multiCountry" }
+        if (unconfirmed.isNotEmpty()) {
+            saveWarnings = doc to unconfirmed
             return
         }
         onAdd(doc)
@@ -375,7 +391,7 @@ internal fun AddDocumentDialog(
                             ResidenceClass.entries.forEach { rc ->
                                 DropdownMenuItem(
                                     text = { Text(rc.label) },
-                                    onClick = { residenceClass = rc; onSelected() },
+                                    onClick = { residenceClass = rc; residenceClassEdited = true; onSelected() },
                                 )
                             }
                         }
@@ -528,8 +544,9 @@ private fun ValidityPeriodField(
             showValidToPicker = reopenPicker != 1
         }
     }
-    // Bound the pickers to a coherent validity period: the start may not come after the end,
-    // and a document being (re)dated may not already be expired.
+    // Bound the pickers to a coherent validity period: the start may not come after the end, and
+    // a fresh expiry may not land in the past — but a stored expiry already in the past stays
+    // selectable so it can be corrected or extended instead of only cleared.
     val today = todayMillis.toUtcIsoDate().let(LocalDate::parse)
     val validFrom = validFromDate?.toUtcIsoDate()?.let(LocalDate::parse)
     val expiry = expiryDate?.toUtcIsoDate()?.let(LocalDate::parse)
@@ -577,8 +594,13 @@ private fun ValidityPeriodField(
                 onExpiry(null)
                 showValidToPicker = false
             },
-            // The expiry may not precede the start nor already be in the past.
-            minDate = if (validFrom != null && validFrom.isAfter(today)) validFrom else today,
+            // The expiry may not precede the start; a stored expiry already in the past is floored
+            // at itself so it can be corrected rather than only cleared.
+            minDate = when {
+                expiry != null && expiry.isBefore(today) -> expiry
+                validFrom != null && validFrom.isAfter(today) -> validFrom
+                else -> today
+            },
         )
     }
 }
@@ -618,6 +640,33 @@ private fun MultiCountryConfirmDialog(
                 },
             )
         },
+    )
+}
+
+/** Confirms a save whose guard run produced warnings none of the other confirms covered. */
+@Composable
+private fun SaveWarningsDialog(
+    warnings: List<GuardFinding>,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Check document") },
+        text = {
+            Column {
+                warnings.forEach { f ->
+                    Text(
+                        "${f.title}: ${f.message}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = severityColor(Severity.WARN, LocalEffectiveDarkTheme.current),
+                        modifier = Modifier.padding(vertical = 3.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Save anyway") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Edit") } },
     )
 }
 

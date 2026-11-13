@@ -213,6 +213,9 @@ internal fun WorldMapCanvas(
     zoomState: MutableFloatState,
     centerState: MutableState<Offset>,
     selected: String?,
+    // Bumped by search picks so re-picking the already-selected country re-runs the centring
+    // tween even though `selected` does not change (map taps never bump it).
+    recenterNonce: Int = 0,
     onCountryTap: (String?) -> Unit,
     homeCountries: Set<String> = emptySet(),
     ownVisaCountries: Set<String> = emptySet(),
@@ -263,7 +266,7 @@ internal fun WorldMapCanvas(
     var centeringJob by remember { mutableStateOf<Job?>(null) }
 
     // Smoothly centre and zoom in when a country becomes selected.
-    LaunchedEffect(selected, canvasSize, topInsetPx, centeringBottomInsetPx) {
+    LaunchedEffect(selected, recenterNonce, canvasSize, topInsetPx, centeringBottomInsetPx) {
         if (selected == null || canvasSize.width <= 0f) return@LaunchedEffect
         val f = focus[selected] ?: return@LaunchedEffect
         centeringJob = coroutineContext[Job]

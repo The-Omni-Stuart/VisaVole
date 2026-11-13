@@ -21,6 +21,13 @@ data class PersistedState(
 )
 
 /**
+ * [StateCodec.decode]'s result: the readable [state], plus [droppedRecords] — how many docs,
+ * stops and trips the file held but could not be read (0 for a clean file). Silently skipping
+ * damaged records was M6: the user must hear about them before an edit persists the shrunken set.
+ */
+data class DecodedState(val state: PersistedState, val droppedRecords: Int)
+
+/**
  * Encode/decode [PersistedState] in the JSON layout the app persists to its state file. This is
  * the single source of truth for the on-disk format: the store persists through [encode] and
  * restores through [decode], and backups are validated with the same [decode], so anything the
@@ -44,9 +51,11 @@ object StateCodec {
 
     /** Decode persisted state. Tolerant of a partially corrupt file: malformed docs, stops and
      *  trips are skipped rather than failing the whole load, so one bad entry can never wipe the
-     *  rest of the user's data. A [SCHEMA_VERSION] written by a NEWER app is rejected outright
-     *  (the caller quarantines the file) rather than risking a misread. */
-    fun decode(text: String): PersistedState {
+     *  rest of the user's data — each skipped record is counted in [DecodedState.droppedRecords]
+     *  (a trip whose every stop was skipped counts once more, as is a trip left with no stops).
+     *  A [SCHEMA_VERSION] written by a NEWER app is rejected outright (the caller quarantines the
+     *  file) rather than risking a misread. */
+    fun decode(text: String): DecodedState {
         val root = JSONObject(text)
         if (root.optInt("schemaVersion", 0) > SCHEMA_VERSION) {
             throw IllegalArgumentException(
@@ -56,40 +65,53 @@ object StateCodec {
         val primaryDocId = root.strOrNull("primaryDocId")
         val arr = root.optJSONArray("docs") ?: JSONArray()
         // Duplicate ids (e.g. from a hand-edited backup) would crash the lists — items are keyed
-        // on id — and make an edit delete both twins, so the first occurrence wins.
+        // on id — and make an edit delete both twins, so the first occurrence wins. Dedupes are
+        // deliberate merges, not damage, so only unreadable records count as dropped.
         val list = mutableListOf<Document>()
         val seenDocIds = mutableSetOf<String>()
+        var dropped = 0
         for (i in 0 until arr.length()) {
-            runCatching { jsonToDoc(arr.getJSONObject(i)) }.getOrNull()
-                ?.takeIf { seenDocIds.add(it.id) }
-                ?.let { list.add(it) }
+            val doc = runCatching { jsonToDoc(arr.getJSONObject(i)) }.getOrNull()
+            if (doc == null) {
+                dropped++
+            } else if (seenDocIds.add(doc.id)) {
+                list.add(doc)
+            }
         }
         val tripArr = root.optJSONArray("trips") ?: JSONArray()
         val tripList = mutableListOf<Trip>()
         val seenTripIds = mutableSetOf<String>()
         for (i in 0 until tripArr.length()) {
-            runCatching { tripArr.getJSONObject(i) }.getOrNull()?.let { o ->
-                val stops = mutableListOf<TripStop>()
-                val stopArr = o.optJSONArray("stops") ?: JSONArray()
-                for (j in 0 until stopArr.length()) {
-                    val so = runCatching { stopArr.getJSONObject(j) }.getOrNull() ?: continue
-                    // A missing/null country is garbage (getString would mint "null"): drop the stop.
-                    val country = so.strOrNull("country") ?: continue
+            val o = runCatching { tripArr.getJSONObject(i) }.getOrNull()
+            if (o == null) {
+                dropped++
+                continue
+            }
+            val stops = mutableListOf<TripStop>()
+            val stopArr = o.optJSONArray("stops") ?: JSONArray()
+            for (j in 0 until stopArr.length()) {
+                val so = runCatching { stopArr.getJSONObject(j) }.getOrNull()
+                // A missing/null country is garbage (getString would mint "null"): drop the stop.
+                val country = so?.strOrNull("country")
+                val stop = country?.let {
                     runCatching {
                         TripStop(
                             so.optString("id").ifBlank { UUID.randomUUID().toString() },
-                            country,
+                            it,
                             LocalDate.parse(so.getString("arrival")),
-                            so.strOrNull("departure")?.let { LocalDate.parse(it) },
+                            so.strOrNull("departure")?.let { d -> LocalDate.parse(d) },
                             so.strOrNull("documentId"),
                         )
-                    }.getOrNull()?.let { stops.add(it) }
+                    }.getOrNull()
                 }
-                if (stops.isNotEmpty()) {
-                    val trip = Trip(o.optString("id").ifBlank { UUID.randomUUID().toString() }, stops, o.strOrNull("note"))
-                    if (seenTripIds.add(trip.id)) tripList.add(trip)
-                }
+                if (stop == null) dropped++ else stops.add(stop)
             }
+            if (stops.isEmpty()) {
+                dropped++
+                continue
+            }
+            val trip = Trip(o.optString("id").ifBlank { UUID.randomUUID().toString() }, stops, o.strOrNull("note"))
+            if (seenTripIds.add(trip.id)) tripList.add(trip)
         }
         // Backups and hand-edited state files are trusted input but never passed through the
         // guard, so the invariants the mutation paths maintain are re-established here (the
@@ -101,7 +123,7 @@ object StateCodec {
             val ref = d.supersededBy
             if (ref != null && (ref == d.id || ref !in ids)) d.copy(supersededBy = null) else d
         }
-        return PersistedState(primaryDocId, cleanedDocs, tripList)
+        return DecodedState(PersistedState(primaryDocId, cleanedDocs, tripList), dropped)
     }
 
     private fun docToJson(d: Document): JSONObject = JSONObject().apply {

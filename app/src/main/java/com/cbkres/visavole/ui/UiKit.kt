@@ -237,7 +237,8 @@ internal fun VisaListCard(
 /** M3 date picker with the app's button vocabulary; [onConfirm] receives the chosen date (or
  *  null) and the caller is responsible for closing. [secondaryLabel] replaces "Cancel" (e.g. "Clear").
  *  [minDate]/[maxDate] bound the selectable range (dates outside are dimmed and cannot be chosen);
- *  leave both null for an unbounded picker. */
+ *  leave both null for an unbounded picker. Confirm stays disabled while the selection — possibly
+ *  the untouched initial date — sits outside the bounds, so no call site can confirm an illegal date. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun VisaDatePickerDialog(
@@ -271,10 +272,16 @@ internal fun VisaDatePickerDialog(
         initialSelectedDateMillis = initialMillis,
         selectableDates = selectableDates,
     )
+    // The state keeps an initial date outside the bounds as the current selection until the user
+    // taps another day, so gate Confirm on the selection rather than trusting it blindly.
+    val selected = state.selectedDateMillis?.toUtcIsoDate()?.let(LocalDate::parse)
+    val inBounds = selected == null ||
+        (minDate == null || !selected.isBefore(minDate)) &&
+        (maxDate == null || !selected.isAfter(maxDate))
     DatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = { onConfirm(state.selectedDateMillis?.toUtcIsoDate()?.let(LocalDate::parse)) }) {
+            TextButton(onClick = { onConfirm(selected) }, enabled = inBounds) {
                 Text(confirmLabel)
             }
         },

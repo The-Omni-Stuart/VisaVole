@@ -56,8 +56,57 @@ class StateCodecTest {
     )
 
     @Test
+    fun cleanFileReportsNoDroppedRecords() {
+        assertEquals(0, StateCodec.decode(StateCodec.encode(fullState)).droppedRecords)
+    }
+
+    @Test
+    fun malformedDocIsCountedAsDropped() {
+        // Same tolerance as corruptDocEntriesAreSkippedButValidDocsSurvive — but the silent skip
+        // must be counted so the user hears about it (M6).
+        val json = """
+            {"schemaVersion":3,"primaryDocId":"doc-passport",
+             "docs":[42,
+                     {"id":"doc-passport","label":"P","kind":"passport","iso2":"CZ","expiry":"2031-05-01"},
+                     {"id":"doc-broken","label":"B"}],
+             "trips":[]}
+        """.trimIndent()
+        val decoded = StateCodec.decode(json)
+        assertEquals(1, decoded.state.docs.size)
+        assertEquals(2, decoded.droppedRecords)
+    }
+
+    @Test
+    fun malformedStopIsCountedAsDropped() {
+        val json = """
+            {"schemaVersion":3,"primaryDocId":null,"docs":[],
+             "trips":[{"id":"trip-1","note":"keep me",
+                       "stops":[
+                         {"id":"bad","arrival":"not-a-date"},
+                         {"id":"stop-ok","country":"FR","arrival":"2026-10-05","departure":"2026-10-12","documentId":null}
+                       ]}]}
+        """.trimIndent()
+        val decoded = StateCodec.decode(json)
+        assertEquals(1, decoded.state.trips.single().stops.size)
+        assertEquals(1, decoded.droppedRecords)
+    }
+
+    @Test
+    fun wholeTripDropIsCountedAsDropped() {
+        // A trip whose every stop is garbage is itself a lost record: 1 bad stop + the trip itself.
+        val json = """
+            {"schemaVersion":3,"primaryDocId":null,"docs":[],
+             "trips":[{"id":"trip-1","note":null,
+                       "stops":[{"id":"bad","arrival":"nope"}]}]}
+        """.trimIndent()
+        val decoded = StateCodec.decode(json)
+        assertTrue(decoded.state.trips.isEmpty())
+        assertEquals(2, decoded.droppedRecords)
+    }
+
+    @Test
     fun roundTripPreservesEverything() {
-        assertEquals(fullState, StateCodec.decode(StateCodec.encode(fullState)))
+        assertEquals(fullState, StateCodec.decode(StateCodec.encode(fullState)).state)
     }
 
     @Test
@@ -71,7 +120,7 @@ class StateCodecTest {
                 emptyList(),
             ),
         )
-        val decoded = StateCodec.decode(text)
+        val decoded = StateCodec.decode(text).state
         assertEquals(2, decoded.docs.size)
         assertEquals("Passport · Czech Republic", decoded.docs.first { it.id == "doc-passport" }.label)
     }
@@ -85,7 +134,7 @@ class StateCodecTest {
                 listOf(trip, trip.copy(note = "Twin trip")),
             ),
         )
-        val decoded = StateCodec.decode(text)
+        val decoded = StateCodec.decode(text).state
         assertEquals(1, decoded.trips.size)
         assertEquals("Berlin then Paris", decoded.trips.first().note)
     }
@@ -93,7 +142,7 @@ class StateCodecTest {
     @Test
     fun roundTripWithNullPrimaryAndEmptyCollections() {
         val state = PersistedState(null, emptyList(), emptyList())
-        val decoded = StateCodec.decode(StateCodec.encode(state))
+        val decoded = StateCodec.decode(StateCodec.encode(state)).state
         assertNull(decoded.primaryDocId)
         assertTrue(decoded.docs.isEmpty())
         assertTrue(decoded.trips.isEmpty())
@@ -118,7 +167,7 @@ class StateCodecTest {
                       "expiry":"null","validFrom":null,"residenceClass":null,"supersededBy":null}],
              "trips":[]}
         """.trimIndent()
-        val state = StateCodec.decode(json)
+        val state = StateCodec.decode(json).state
         assertNull(state.docs.first().expiry)
         assertEquals("doc-passport", state.primaryDocId)
     }
@@ -130,7 +179,7 @@ class StateCodecTest {
              "trips":[{"id":"trip-1","note":null,
                        "stops":[{"country":"DE","arrival":"2026-10-01","departure":null,"documentId":null}]}]}
         """.trimIndent()
-        val state = StateCodec.decode(json)
+        val state = StateCodec.decode(json).state
         val stop = state.trips.single().stops.single()
         assertNotNull(stop.id)
         assertTrue(stop.id.isNotBlank())
@@ -144,7 +193,7 @@ class StateCodecTest {
              "trips":[{"id":"","note":null,
                        "stops":[{"id":"s1","country":"DE","arrival":"2026-10-01","departure":null,"documentId":null}]}]}
         """.trimIndent()
-        val state = StateCodec.decode(json)
+        val state = StateCodec.decode(json).state
         val trip = state.trips.single()
         assertNotNull(trip.id)
         assertTrue(trip.id.isNotBlank())
@@ -160,7 +209,7 @@ class StateCodecTest {
                          {"id":"stop-ok","country":"FR","arrival":"2026-10-05","departure":"2026-10-12","documentId":null}
                        ]}]}
         """.trimIndent()
-        val state = StateCodec.decode(json)
+        val state = StateCodec.decode(json).state
         val stops = state.trips.single().stops
         assertEquals(1, stops.size)
         assertEquals("FR", stops.single().countryIso2)
@@ -173,7 +222,7 @@ class StateCodecTest {
              "trips":[{"id":"trip-1","note":null,
                        "stops":[{"id":"bad","arrival":"nope"}]}]}
         """.trimIndent()
-        assertTrue(StateCodec.decode(json).trips.isEmpty())
+        assertTrue(StateCodec.decode(json).state.trips.isEmpty())
     }
 
     @Test
@@ -197,7 +246,7 @@ class StateCodecTest {
                      {"id":"doc-broken","label":"B"}],
              "trips":[]}
         """.trimIndent()
-        val state = StateCodec.decode(json)
+        val state = StateCodec.decode(json).state
         assertEquals(1, state.docs.size)
         assertEquals("doc-passport", state.docs.single().id)
         assertEquals("doc-passport", state.primaryDocId)
@@ -214,7 +263,7 @@ class StateCodecTest {
                {"id":"doc-passport","label":"P","kind":"passport","iso2":"CZ"}
              ],"trips":[]}
         """.trimIndent()
-        val state = StateCodec.decode(json)
+        val state = StateCodec.decode(json).state
         assertEquals(1, state.docs.size)
         assertEquals("doc-passport", state.docs.single().id)
     }
@@ -226,7 +275,7 @@ class StateCodecTest {
              "docs":[{"id":"doc-1","label":"P","kind":"passport","iso2":null}],
              "trips":[]}
         """.trimIndent()
-        assertTrue(StateCodec.decode(json).docs.isEmpty())
+        assertTrue(StateCodec.decode(json).state.docs.isEmpty())
     }
 
     @Test
@@ -236,7 +285,7 @@ class StateCodecTest {
               "docs":[{"id":"doc-1","label":"H","kind":"holding","holdingId":null,"entryType":null}],
               "trips":[]}
         """.trimIndent()
-        assertTrue(StateCodec.decode(json).docs.isEmpty())
+        assertTrue(StateCodec.decode(json).state.docs.isEmpty())
     }
 
     @Test
@@ -252,7 +301,7 @@ class StateCodecTest {
                {"id":"doc-good","label":"C","kind":"passport","iso2":"CZ","expiry":"2031-05-01","validFrom":"2021-05-01"}
              ],"trips":[]}
         """.trimIndent()
-        val state = StateCodec.decode(json)
+        val state = StateCodec.decode(json).state
         assertEquals(1, state.docs.size)
         assertEquals("doc-good", state.docs.single().id)
     }
@@ -264,7 +313,7 @@ class StateCodecTest {
         val json = """
             {"schemaVersion":3,"primaryDocId":null,"docs":42,"trips":"oops"}
         """.trimIndent()
-        val state = StateCodec.decode(json)
+        val state = StateCodec.decode(json).state
         assertTrue(state.docs.isEmpty())
         assertTrue(state.trips.isEmpty())
     }
@@ -280,7 +329,7 @@ class StateCodecTest {
                {"id":"doc-good","label":"B","kind":"passport","iso2":"CZ","expiry":"2031-05-01"}
              ],"trips":[]}
         """.trimIndent()
-        val state = StateCodec.decode(json)
+        val state = StateCodec.decode(json).state
         assertEquals(1, state.docs.size)
         assertEquals("doc-good", state.docs.single().id)
     }
@@ -296,7 +345,7 @@ class StateCodecTest {
                {"id":"doc-keep","label":"Keep","kind":"passport","iso2":"CZ","supersededBy":null}
              ],"trips":[]}
         """.trimIndent()
-        val state = StateCodec.decode(json)
+        val state = StateCodec.decode(json).state
         assertNull(state.docs.first { it.id == "doc-old" }.supersededBy)
         assertEquals(2, state.docs.size)
     }
@@ -310,7 +359,7 @@ class StateCodecTest {
              "docs":[{"id":"doc-1","label":"Self","kind":"passport","iso2":"CZ","supersededBy":"doc-1"}],
              "trips":[]}
         """.trimIndent()
-        val state = StateCodec.decode(json)
+        val state = StateCodec.decode(json).state
         assertEquals(1, state.docs.size)
         assertNull(state.docs.single().supersededBy)
     }
@@ -324,7 +373,7 @@ class StateCodecTest {
                {"id":"doc-new","label":"New","kind":"passport","iso2":"CZ","supersededBy":null}
              ],"trips":[]}
         """.trimIndent()
-        assertEquals("doc-new", StateCodec.decode(json).docs.first { it.id == "doc-old" }.supersededBy)
+        assertEquals("doc-new", StateCodec.decode(json).state.docs.first { it.id == "doc-old" }.supersededBy)
     }
 
     @Test
@@ -337,7 +386,7 @@ class StateCodecTest {
                          {"id":"stop-ok","country":"FR","arrival":"2026-10-05","departure":null,"documentId":null}
                        ]}]}
         """.trimIndent()
-        val stops = StateCodec.decode(json).trips.single().stops
+        val stops = StateCodec.decode(json).state.trips.single().stops
         assertEquals(1, stops.size)
         assertEquals("FR", stops.single().countryIso2)
     }
@@ -349,7 +398,7 @@ class StateCodecTest {
         val json = """
             {"schemaVersion":3,"primaryDocId":"doc-gone","docs":[],"trips":[]}
         """.trimIndent()
-        assertEquals("doc-gone", StateCodec.decode(json).primaryDocId)
+        assertEquals("doc-gone", StateCodec.decode(json).state.primaryDocId)
     }
 
     @Test
@@ -376,7 +425,7 @@ class StateCodecTest {
              "docs":[{"id":"doc-passport","label":"P","kind":"passport","iso2":"CZ"}],
              "trips":[]}
         """.trimIndent()
-        val state = StateCodec.decode(json)
+        val state = StateCodec.decode(json).state
         assertEquals(1, state.docs.size)
         assertEquals("doc-passport", state.primaryDocId)
     }
