@@ -1,6 +1,5 @@
 package com.cbkres.visavole.domain
 
-import com.cbkres.visavole.data.Country
 import java.text.Normalizer
 import java.util.Locale
 

@@ -27,14 +27,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.cbkres.visavole.data.StayRule
-import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.Document
+import com.cbkres.visavole.domain.StayRule
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.TripStatus
 import com.cbkres.visavole.domain.TripStop
+import com.cbkres.visavole.domain.WorldData
 import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.VisaListCard
 import com.cbkres.visavole.ui.ringColor

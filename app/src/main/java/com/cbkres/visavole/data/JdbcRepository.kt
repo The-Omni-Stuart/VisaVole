@@ -1,28 +1,65 @@
 package com.cbkres.visavole.data
 
+import com.cbkres.visavole.domain.Benefit
+import com.cbkres.visavole.domain.Corridor
+import com.cbkres.visavole.domain.Country
+import com.cbkres.visavole.domain.Holding
+import com.cbkres.visavole.domain.Regime
+import com.cbkres.visavole.domain.StayRule
+import com.cbkres.visavole.domain.VisaDbMeta
+import com.cbkres.visavole.domain.WorldData
 import java.io.File
 import java.sql.Connection
 import java.sql.DriverManager
 
+/** Chunk size for the passport-filtered baseline query; SQLite's variable limit is 999. */
+internal const val BASELINE_CHUNK = 500
+
 /**
  * JVM mirror of [VisaRepository]: loads the same [WorldData] from a SQLite file via JDBC
  * (xerial sqlite-jdbc), running the identical queries so unit tests validate the real schema.
+ * With [homePassports] set it runs the same passport-filtered, chunked baseline query the
+ * Android loader uses (empty set loads nothing, like Android); unset it reads the whole table
+ * so unit tests see every corridor.
  * Uses plain string parsing for the members array (no org.json, which is Android-only at runtime).
  */
 object JdbcRepository {
 
-    fun load(dbFile: File): WorldData =
-        DriverManager.getConnection("jdbc:sqlite:" + dbFile.absolutePath).use { load(it) }
+    fun load(dbFile: File, homePassports: Set<String>? = null): WorldData =
+        DriverManager.getConnection("jdbc:sqlite:" + dbFile.absolutePath).use { load(it, homePassports) }
 
-    fun load(conn: Connection): WorldData {
+    fun load(conn: Connection, homePassports: Set<String>? = null): WorldData {
         val countries = loadCountries(conn)
-        val baseline = loadBaseline(conn)
+        val baseline = loadBaseline(conn, homePassports)
         val regimes = loadRegimes(conn)
         val holdings = loadHoldings(conn)
         val benefits = loadBenefits(conn)
         val stayRules = loadStayRules(conn)
-        return WorldData(countries, baseline, regimes, holdings, benefits, stayRules)
+        return WorldData(countries, baseline, regimes, holdings, benefits, stayRules, loadVisaDbMeta(conn))
     }
+
+    /** The `meta` audit dates plus the two shared expiry probes; an absent `meta` table degrades to defaults. */
+    private fun loadVisaDbMeta(c: Connection): VisaDbMeta {
+        val values = HashMap<String, String>()
+        runCatching {
+            c.createStatement().use { st ->
+                st.executeQuery(SQL_META_FRESHNESS).use { rs ->
+                    while (rs.next()) values[rs.getString("key")] = rs.getString("value")
+                }
+            }
+        }
+        val (from, to) = lapsingSoonWindow()
+        val lapsed = countQuery(c, SQL_STAY_RULES_LAPSED, listOf(from))
+        val lapsingSoon = countQuery(c, SQL_STAY_RULES_LAPSING_SOON, listOf(from, to))
+        return visaDbMeta(values, lapsed, lapsingSoon)
+    }
+
+    private fun countQuery(c: Connection, sql: String, args: List<String>): Int = runCatching {
+        c.prepareStatement(sql).use { ps ->
+            args.forEachIndexed { i, a -> ps.setString(i + 1, a) }
+            ps.executeQuery().use { rs -> if (rs.next()) rs.getInt(1) else 0 }
+        }
+    }.getOrDefault(0)
 
     private fun loadCountries(c: Connection): Map<String, Country> {
         val out = HashMap<String, Country>()
@@ -34,15 +71,28 @@ object JdbcRepository {
         return out
     }
 
-    private fun loadBaseline(c: Connection): Map<String, List<Corridor>> {
+    private fun loadBaseline(c: Connection, homePassports: Set<String>?): Map<String, List<Corridor>> {
+        if (homePassports != null && homePassports.isEmpty()) return emptyMap()
         val out = HashMap<String, MutableList<Corridor>>()
-        c.createStatement().use { st ->
-            st.executeQuery("SELECT passport, destination, type, days FROM visa_rules").use { rs ->
-                while (rs.next()) {
-                    val p = rs.getString("passport")
-                    val d = rs.getInt("days")
-                    val days = if (rs.wasNull()) null else d
-                    out.getOrPut(p) { mutableListOf() }.add(Corridor(p, rs.getString("destination"), rs.getString("type"), days))
+        // Unfiltered reads the whole table; filtered runs the same chunked IN query as Android.
+        val queries: List<Pair<String, List<String>>> = if (homePassports == null) {
+            listOf("SELECT passport, destination, type, days FROM visa_rules" to emptyList())
+        } else {
+            homePassports.sorted().chunked(BASELINE_CHUNK).map { chunk ->
+                val placeholders = chunk.joinToString(",") { "?" }
+                "SELECT passport, destination, type, days FROM visa_rules WHERE passport IN ($placeholders)" to chunk
+            }
+        }
+        for ((sql, args) in queries) {
+            c.prepareStatement(sql).use { ps ->
+                args.forEachIndexed { i, a -> ps.setString(i + 1, a) }
+                ps.executeQuery().use { rs ->
+                    while (rs.next()) {
+                        val p = rs.getString("passport")
+                        val d = rs.getInt("days")
+                        val days = if (rs.wasNull()) null else d
+                        out.getOrPut(p) { mutableListOf() }.add(Corridor(p, rs.getString("destination"), rs.getString("type"), days))
+                    }
                 }
             }
         }

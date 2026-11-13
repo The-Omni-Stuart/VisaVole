@@ -32,7 +32,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.domain.AccessModel
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.Trip
@@ -40,6 +39,7 @@ import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.TripStop
 import com.cbkres.visavole.domain.TripWarning
 import com.cbkres.visavole.domain.WarningSeverity
+import com.cbkres.visavole.domain.WorldData
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.ui.HazeBox

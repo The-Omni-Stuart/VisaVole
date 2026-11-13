@@ -11,7 +11,6 @@ import com.cbkres.visavole.data.PersistedState
 import com.cbkres.visavole.data.VisaDb
 import com.cbkres.visavole.data.VisaRepository
 import com.cbkres.visavole.data.VisaStateStore
-import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.data.WorldGeometry
 import com.cbkres.visavole.data.WorldMapData
 import com.cbkres.visavole.domain.AccessModel
@@ -29,6 +28,7 @@ import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripCalculation
 import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.TripSections
+import com.cbkres.visavole.domain.WorldData
 import com.cbkres.visavole.domain.passportDocument
 import com.cbkres.visavole.domain.residenceClassFor
 import com.cbkres.visavole.ui.app.AppState

@@ -1,9 +1,5 @@
 package com.cbkres.visavole.domain
 
-import com.cbkres.visavole.data.Benefit
-import com.cbkres.visavole.data.Regime
-import com.cbkres.visavole.data.StayRule
-import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.domain.AccessLevel.COVERED
 import com.cbkres.visavole.domain.AccessLevel.ETA
 import com.cbkres.visavole.domain.AccessLevel.E_VISA

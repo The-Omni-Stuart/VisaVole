@@ -22,12 +22,12 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.DocStatus
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.EntryState
 import com.cbkres.visavole.domain.ExpiryReason
+import com.cbkres.visavole.domain.WorldData
 import com.cbkres.visavole.domain.entryType
 import com.cbkres.visavole.domain.residenceClassFor
 import com.cbkres.visavole.ui.StatusPill

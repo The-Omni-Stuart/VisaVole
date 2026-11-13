@@ -1,0 +1,175 @@
+package com.cbkres.visavole.ui.screens.map
+
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import com.cbkres.visavole.data.WorldMapData
+import kotlin.math.abs
+import kotlin.math.hypot
+
+// Geometric centre, so an exact world fit keeps equal margins on both map edges.
+internal const val DEFAULT_CENTER_X_FRACTION = 0.5f
+
+/**
+ * Per-country focus margin as a fraction of the world width (default 7%). A small mainland would
+ * otherwise pull a nearby-but-separate territory into the tap-to-zoom focus: the UK's Gibraltar sits
+ * only ~4% of the world width south of Great Britain, while its immediate islands (Hebrides, Orkney,
+ * Shetland) are all within ~2%. Tightening GB to 3% keeps those islands and drops Gibraltar, so
+ * tapping the UK centres on the home islands instead of zooming out over the Mediterranean.
+ */
+internal val FOCUS_MARGIN_OVERRIDE: Map<String, Float> = mapOf("GB" to 0.03f)
+
+// Public (not internal) so AccessViewModel can pre-build these on the IO thread and ship them
+// via the public AppState.Ready; they are pure geometry data.
+data class IsoShape(
+    val iso: String,
+    val rings: List<FloatArray>,
+    val path: Path,
+    val area: Float,
+    val bbox: BBox,
+)
+
+internal data class DrawShape(
+    val iso: String,
+    val path: Path,
+    val bbox: BBox,
+    val fill: Color,
+)
+
+// Public (see IsoShape) — carried by IsoShape/Focus on the public AppState.Ready.
+data class BBox(
+    val minX: Float,
+    val minY: Float,
+    val maxX: Float,
+    val maxY: Float,
+) {
+    val cx get() = (minX + maxX) / 2f
+    val cy get() = (minY + maxY) / 2f
+    val w get() = (maxX - minX).coerceAtLeast(1f)
+    val h get() = (maxY - minY).coerceAtLeast(1f)
+
+    fun intersectsViewport(left: Float, top: Float, right: Float, bottom: Float): Boolean =
+        maxX >= left && minX <= right && maxY >= top && minY <= bottom
+
+    fun contains(x: Float, y: Float): Boolean =
+        x >= minX && x <= maxX && y >= minY && y <= maxY
+}
+
+/** The world point to centre on, plus the bbox used to choose the zoom level for it.
+ *  Public (see IsoShape) — carried on the public AppState.Ready. */
+data class Focus(val point: Offset, val bbox: BBox)
+
+internal fun buildShapes(geometry: WorldMapData): List<IsoShape> =
+    geometry.countries.map { (iso, shape) ->
+        val path = Path()
+        var area = 0f
+        for (ring in shape.rings) {
+            for (i in ring.indices step 2) {
+                val x = ring[i]
+                val y = ring[i + 1]
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            path.close()
+            area += polygonArea(ring)
+        }
+        IsoShape(iso, shape.rings, path, area, bboxOf(shape.rings))
+    }
+
+/**
+ * Focus = the country's main body: its largest landmass ring plus any rings that sit close to it
+ * (islands hugging the mainland), but not far-flung overseas territories. The margin is tuned so
+ * a colonial power's distant holdings (e.g. the UK's Cyprus bases) don't drag the view out with
+ * them; those bits stay highlighted on the map, they just don't drive the zoom.
+ */
+internal fun buildFocus(geometry: WorldMapData): Map<String, Focus> =
+    geometry.countries.mapValues { (iso, shape) ->
+        val margin = (FOCUS_MARGIN_OVERRIDE[iso] ?: 0.07f) * geometry.width
+        val core = shape.rings.maxByOrNull { ring -> polygonArea(ring) } ?: shape.rings.first()
+        val cb = bboxOf(listOf(core))
+        val exMinX = cb.minX - margin
+        val exMinY = cb.minY - margin
+        val exMaxX = cb.maxX + margin
+        val exMaxY = cb.maxY + margin
+        val included = shape.rings.filter { ring ->
+            val rb = bboxOf(listOf(ring))
+            rb.minX <= exMaxX && rb.maxX >= exMinX && rb.minY <= exMaxY && rb.maxY >= exMinY
+        }
+        val fb = bboxOf(included)
+        Focus(Offset(fb.cx, fb.cy), fb)
+    }
+
+internal fun defaultCenter(geometry: WorldMapData): Offset =
+    Offset(geometry.width * DEFAULT_CENTER_X_FRACTION, geometry.height / 2f)
+
+internal fun bboxOf(rings: List<FloatArray>): BBox {
+    var minX = Float.MAX_VALUE
+    var minY = Float.MAX_VALUE
+    var maxX = -Float.MAX_VALUE
+    var maxY = -Float.MAX_VALUE
+    for (r in rings) for (i in r.indices step 2) {
+        val x = r[i]
+        val y = r[i + 1]
+        if (x < minX) minX = x
+        if (x > maxX) maxX = x
+        if (y < minY) minY = y
+        if (y > maxY) maxY = y
+    }
+    return if (minX > maxX) BBox(0f, 0f, 1f, 1f) else BBox(minX, minY, maxX, maxY)
+}
+
+internal fun distBetween(a: Offset, b: Offset): Float =
+    hypot((a.x - b.x).toDouble(), (a.y - b.y).toDouble()).toFloat()
+
+internal fun Offset.length(): Float = distBetween(this, Offset.Zero)
+
+/** Smallest-area country whose any outer ring contains the point (resolves enclaves). */
+internal fun hitTest(shapes: List<IsoShape>, px: Float, py: Float): String? {
+    var best: String? = null
+    var bestArea = Float.MAX_VALUE
+    for (s in shapes) {
+        if (s.area >= bestArea) continue
+        // bbox pre-check — skip ray-casting any ring of a country whose bbox misses the tap.
+        if (!s.bbox.contains(px, py)) continue
+        if (pointInAnyRing(s.rings, px, py)) {
+            best = s.iso
+            bestArea = s.area
+        }
+    }
+    return best
+}
+
+internal fun pointInAnyRing(rings: List<FloatArray>, x: Float, y: Float): Boolean {
+    for (ring in rings) if (pointInRing(ring, x, y)) return true
+    return false
+}
+
+internal fun pointInRing(ring: FloatArray, x: Float, y: Float): Boolean {
+    var inside = false
+    var j = ring.size - 2
+    for (i in ring.indices step 2) {
+        val piX = ring[i]
+        val piY = ring[i + 1]
+        val pjX = ring[j]
+        val pjY = ring[j + 1]
+        if ((piY > y) != (pjY > y)) {
+            val xInt = (pjX - piX) * (y - piY) / (pjY - piY) + piX
+            if (x < xInt) inside = !inside
+        }
+        j = i
+    }
+    return inside
+}
+
+internal fun polygonArea(ring: FloatArray): Float {
+    var a = 0f
+    var j = ring.size - 2
+    for (i in ring.indices step 2) {
+        val piX = ring[i]
+        val piY = ring[i + 1]
+        val pjX = ring[j]
+        val pjY = ring[j + 1]
+        a += (pjX + piX) * (pjY - piY)
+        j = i
+    }
+    return abs(a) / 2f
+}

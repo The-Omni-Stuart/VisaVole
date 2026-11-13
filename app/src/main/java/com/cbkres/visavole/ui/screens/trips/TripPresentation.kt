@@ -1,8 +1,8 @@
 package com.cbkres.visavole.ui.screens.trips
 
-import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripModel
+import com.cbkres.visavole.domain.WorldData
 
 internal fun TripPresentation(trip: Trip, world: WorldData): String {
     val names = TripModel.sortedStops(trip.stops).map { world.countries[it.countryIso2]?.name ?: it.countryIso2 }

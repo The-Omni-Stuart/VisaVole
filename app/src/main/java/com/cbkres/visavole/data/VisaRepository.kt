@@ -1,5 +1,14 @@
 package com.cbkres.visavole.data
 
+import com.cbkres.visavole.domain.Benefit
+import com.cbkres.visavole.domain.Corridor
+import com.cbkres.visavole.domain.Country
+import com.cbkres.visavole.domain.Holding
+import com.cbkres.visavole.domain.Regime
+import com.cbkres.visavole.domain.StayRule
+import com.cbkres.visavole.domain.VisaDbMeta
+import com.cbkres.visavole.domain.WorldData
+
 /**
  * Loads the bundled [VisaDb] into an in-memory [WorldData].
  *
@@ -17,8 +26,28 @@ class VisaRepository(private val db: VisaDb) {
             holdings = loadHoldings(conn),
             benefits = loadBenefits(conn),
             stayRules = loadStayRules(conn),
+            visaDbMeta = loadVisaDbMeta(conn),
         )
     }
+
+    /** The `meta` audit dates plus the two shared expiry probes; an absent `meta` table degrades to defaults. */
+    private fun loadVisaDbMeta(c: android.database.sqlite.SQLiteDatabase): VisaDbMeta {
+        val values = HashMap<String, String>()
+        runCatching {
+            c.rawQuery(SQL_META_FRESHNESS, null).use { cur ->
+                while (cur.moveToNext()) values[cur.getString(0)] = cur.getString(1)
+            }
+        }
+        val (from, to) = lapsingSoonWindow()
+        val lapsed = countQuery(c, SQL_STAY_RULES_LAPSED, arrayOf(from))
+        val lapsingSoon = countQuery(c, SQL_STAY_RULES_LAPSING_SOON, arrayOf(from, to))
+        return visaDbMeta(values, lapsed, lapsingSoon)
+    }
+
+    private fun countQuery(c: android.database.sqlite.SQLiteDatabase, sql: String, args: Array<String>): Int =
+        runCatching {
+            c.rawQuery(sql, args).use { cur -> if (cur.moveToNext()) cur.getInt(0) else 0 }
+        }.getOrDefault(0)
 
     private fun loadCountries(c: android.database.sqlite.SQLiteDatabase): Map<String, Country> {
         val out = HashMap<String, Country>()
@@ -31,7 +60,7 @@ class VisaRepository(private val db: VisaDb) {
     private fun loadBaseline(c: android.database.sqlite.SQLiteDatabase, homePassports: Set<String>): Map<String, List<Corridor>> {
         if (homePassports.isEmpty()) return emptyMap()
         val out = HashMap<String, MutableList<Corridor>>()
-        homePassports.toList().chunked(500).forEach { chunk ->
+        homePassports.toList().chunked(BASELINE_CHUNK).forEach { chunk ->
             val placeholders = chunk.joinToString(",") { "?" }
             c.rawQuery(
                 "SELECT passport, destination, type, days FROM visa_rules WHERE passport IN ($placeholders)",

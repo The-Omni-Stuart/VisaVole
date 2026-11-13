@@ -1,11 +1,5 @@
 package com.cbkres.visavole.domain
 
-import com.cbkres.visavole.data.Benefit
-import com.cbkres.visavole.data.Corridor
-import com.cbkres.visavole.data.Country
-import com.cbkres.visavole.data.Regime
-import com.cbkres.visavole.data.StayRule
-import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.domain.AccessLevel.E_VISA
 import com.cbkres.visavole.domain.AccessLevel.FREEDOM
 import com.cbkres.visavole.domain.AccessLevel.REFUSED
@@ -21,7 +15,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
-import com.cbkres.visavole.data.Holding as DataHolding
+import com.cbkres.visavole.domain.Holding as DataHolding
 
 class TripModelTest {
 

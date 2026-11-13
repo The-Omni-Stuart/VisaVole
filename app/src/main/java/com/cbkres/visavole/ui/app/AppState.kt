@@ -1,6 +1,5 @@
 package com.cbkres.visavole.ui.app
 
-import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.data.WorldMapData
 import com.cbkres.visavole.domain.Access
 import com.cbkres.visavole.domain.AllowanceSnapshot
@@ -8,6 +7,7 @@ import com.cbkres.visavole.domain.DocStatus
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripSections
+import com.cbkres.visavole.domain.WorldData
 import com.cbkres.visavole.ui.screens.map.Focus
 import com.cbkres.visavole.ui.screens.map.IsoShape
 import java.time.LocalDate

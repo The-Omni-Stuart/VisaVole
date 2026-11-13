@@ -1,11 +1,6 @@
 package com.cbkres.visavole.domain
 
-import com.cbkres.visavole.data.Benefit
-import com.cbkres.visavole.data.Corridor
 import com.cbkres.visavole.data.JdbcRepository
-import com.cbkres.visavole.data.Regime
-import com.cbkres.visavole.data.StayRule
-import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.domain.AccessLevel.COVERED
 import com.cbkres.visavole.domain.AccessLevel.ETA
 import com.cbkres.visavole.domain.AccessLevel.E_VISA
@@ -24,7 +19,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.time.LocalDate
-import com.cbkres.visavole.data.Holding as DataHolding
+import java.time.ZoneOffset
+import com.cbkres.visavole.domain.Holding as DataHolding
 
 class AccessModelTest {
 
@@ -956,9 +952,7 @@ class AccessModelTest {
 
     @Test fun realDatabaseStayRulesReflectAuditedWindows() {
         val w = JdbcRepository.load(File("src/main/assets/visa_data.db"))
-        // The TH 60-day rule carries a valid_to of 2026-09-14 (the audited scheme's expiry). Pin the
-        // reference date so this data check stays deterministic once real time passes that expiry.
-        val today = LocalDate.of(2026, 9, 1)
+        val today = LocalDate.now(ZoneOffset.UTC)
 
         assertEquals(183, w.stayRuleFor("PE", setOf("MX"), today)?.windowDays)
         assertEquals(90, w.stayRuleFor("PE", setOf("GB"), today)?.windowDays)
@@ -968,11 +962,14 @@ class AccessModelTest {
         assertEquals(180, w.stayRuleFor("PA", setOf("US"), today)?.windowDays)
         assertEquals(90, w.stayRuleFor("PA", setOf("GB"), today)?.windowDays)
 
-        assertEquals(7, w.stayRuleFor("TH", setOf("KH"), today)?.windowDays)
+        // Thai tiers per the Royal Gazette framework effective 2026-09-15: 30-day general
+        // exemption, 15-day tier (MU/SC), bilaterals 14 (KH/MM), 30 (TL), 90 (AR).
+        assertEquals(14, w.stayRuleFor("TH", setOf("KH"), today)?.windowDays)
         assertEquals(14, w.stayRuleFor("TH", setOf("MM"), today)?.windowDays)
+        assertEquals(15, w.stayRuleFor("TH", setOf("MU"), today)?.windowDays)
         assertEquals(30, w.stayRuleFor("TH", setOf("TL"), today)?.windowDays)
         assertEquals(90, w.stayRuleFor("TH", setOf("AR"), today)?.windowDays)
-        assertEquals(60, w.stayRuleFor("TH", setOf("GB"), today)?.windowDays)
+        assertEquals(30, w.stayRuleFor("TH", setOf("GB"), today)?.windowDays)
 
         val tr = w.stayRuleFor("TR", setOf("GB"), today)!!
         assertEquals(90, tr.windowDays)

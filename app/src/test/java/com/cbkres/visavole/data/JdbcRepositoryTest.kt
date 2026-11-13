@@ -9,7 +9,7 @@ import java.sql.Connection
 /**
  * Pins the PERMISSIVE parsing in [JdbcRepository] (and its Android mirror [VisaRepository], which
  * shares the queries): optional columns absent from older bundled DBs, null members arrays and
- * null numeric fields must all load instead of throwing (P2-33).
+ * null numeric fields must all load instead of throwing.
  */
 class JdbcRepositoryTest {
 
@@ -107,5 +107,41 @@ class JdbcRepositoryTest {
         assertEquals(listOf("AT", "BE"), parseIso2Array("AT, BE,"))
         // Literal "null" elements (org.json's getString on a JSON null) are skipped, not kept.
         assertEquals(listOf("AT"), parseIso2Array("[\"AT\", \"null\"]"))
+    }
+
+    // S10: both loaders must run the same baseline SQL. The JVM mirror used to read the whole
+    // table while Android ran the chunked WHERE-IN, leaving the chunking path untested.
+    @Test
+    fun filteredBaselineAcrossChunkBoundaryKeepsEveryRow() {
+        inMemory().use { c ->
+            c.createStatement().use { st ->
+                for (i in 0 until BASELINE_CHUNK + 100) {
+                    st.executeUpdate("INSERT INTO visa_rules VALUES ('P$i','DE','free',$i)")
+                }
+            }
+            val passports = (0 until BASELINE_CHUNK + 100).map { "P$it" }.toSet()
+            val filtered = JdbcRepository.load(c, homePassports = passports).baseline
+            assertEquals(BASELINE_CHUNK + 100, filtered.size)
+            assertEquals(0, filtered["P0"]?.first()?.days)
+            assertEquals(599, filtered["P599"]?.first()?.days)
+            // Passports outside the requested set are excluded by the filter, not by chunk order.
+            assertNull(filtered["CZ"])
+        }
+    }
+
+    @Test
+    fun emptyPassportSetLoadsNoCorridorsLikeAndroid() {
+        inMemory().use { c ->
+            assertTrue(JdbcRepository.load(c, homePassports = emptySet()).baseline.isEmpty())
+        }
+    }
+
+    @Test
+    fun realDbBaselineIsIdenticalFilteredOrNot() {
+        val db = java.io.File("src/main/assets/visa_data.db")
+        val all = JdbcRepository.load(db).baseline
+        val filtered = JdbcRepository.load(db, homePassports = all.keys).baseline
+        assertEquals(all.keys, filtered.keys)
+        all.forEach { (p, rows) -> assertEquals(rows.toSet(), filtered[p]?.toSet()) }
     }
 }

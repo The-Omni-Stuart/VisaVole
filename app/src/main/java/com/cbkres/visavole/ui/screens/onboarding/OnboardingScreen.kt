@@ -27,7 +27,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.cbkres.visavole.data.Country
+import com.cbkres.visavole.domain.Country
 import com.cbkres.visavole.domain.GuardFinding
 import com.cbkres.visavole.domain.searchCountries
 import com.cbkres.visavole.ui.CountryRow

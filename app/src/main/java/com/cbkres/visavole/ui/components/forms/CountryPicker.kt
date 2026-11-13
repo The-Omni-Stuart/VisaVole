@@ -17,7 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.cbkres.visavole.data.Country
+import com.cbkres.visavole.domain.Country
 import com.cbkres.visavole.domain.searchCountries
 import com.cbkres.visavole.ui.CountryRow
 import com.cbkres.visavole.ui.HazeBox

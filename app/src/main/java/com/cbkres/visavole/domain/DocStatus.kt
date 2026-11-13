@@ -1,6 +1,5 @@
 package com.cbkres.visavole.domain
 
-import com.cbkres.visavole.data.WorldData
 import java.time.LocalDate
 
 /**

@@ -12,6 +12,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,12 +22,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
@@ -44,21 +49,30 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
+import com.cbkres.visavole.R
 import com.cbkres.visavole.data.BackupManager
 import com.cbkres.visavole.data.PersistedState
+import com.cbkres.visavole.domain.FreshnessLevel
+import com.cbkres.visavole.domain.freshnessFor
 import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.app.AppState
+import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
+import com.cbkres.visavole.ui.screens.map.Severity
+import com.cbkres.visavole.ui.screens.map.severityColor
 import com.cbkres.visavole.ui.theme.ThemePrefs
 import kotlin.math.roundToInt
 
 private const val SOURCE_URL = "https://github.com/The-Omni-Stuart/VisaVole"
 private const val ISSUES_URL = "https://github.com/The-Omni-Stuart/VisaVole/issues"
 private const val LICENSE_URL = "https://github.com/The-Omni-Stuart/VisaVole/blob/main/LICENSE"
+private const val VISA_DB_URL = "https://github.com/The-Omni-Stuart/VisaDB"
 
 /**
  * The app's info + settings screen (opened from the top-bar gear). Shows the app identity and
@@ -198,7 +212,9 @@ internal fun SettingsScreen(
             ) {
                 Text("Restore from Backup")
             }
-            Spacer(Modifier.height(64.dp))
+            Spacer(Modifier.height(16.dp))
+            DataBuildRow(ready)
+            Spacer(Modifier.height(48.dp))
 
             Text(
                 "Thank you for using Visa Vole!\nMade with love in 🏴󠁧󠁢󠁳󠁣󠁴󠁿 and 🇨🇿.",
@@ -263,6 +279,89 @@ internal fun SettingsScreen(
                 TextButton(onClick = { pendingRestore = null }) { Text("Cancel") }
             },
         )
+    }
+}
+
+/**
+ * The bundled dataset's own build row, under the backup buttons: an age dot, the audit dates from
+ * the DB's `meta` table, and a warning line when the load-time probes caught lapsed or soon-lapsing
+ * stay rules. Freshness is bounded by the refresh cadence, so the copy says "data build", never
+ * "out of date" — the link opens the upstream dataset for anyone who wants to check it.
+ */
+@Composable
+private fun DataBuildRow(ready: AppState.Ready) {
+    val context = LocalContext.current
+    val isDark = LocalEffectiveDarkTheme.current
+    val meta = ready.world.visaDbMeta
+    val freshness = freshnessFor(
+        generated = meta.generated,
+        rulesVerifiedAt = meta.rulesVerifiedAt,
+        nextReview = meta.nextReview,
+        lapsedRules = meta.lapsedRules,
+        lapsingSoon = meta.lapsingSoon,
+        today = ready.today,
+    )
+    val dotColour = when (freshness.level) {
+        FreshnessLevel.GREEN -> severityColor(Severity.OK, isDark)
+        FreshnessLevel.AMBER -> severityColor(Severity.CAUTION, isDark)
+        FreshnessLevel.RED -> severityColor(Severity.BAD, isDark)
+        FreshnessLevel.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val complete = meta.generated.isNotBlank() && meta.rulesVerifiedAt.isNotBlank() && meta.nextReview.isNotBlank()
+    val body = if (complete) {
+        stringResource(R.string.settings_data_build, meta.generated, meta.rulesVerifiedAt, meta.nextReview)
+    } else {
+        stringResource(R.string.settings_data_build_unknown)
+    }
+    val suffix = listOfNotNull(
+        meta.lapsedRules.takeIf { it > 0 }
+            ?.let { pluralStringResource(R.plurals.settings_data_lapsed, it, it) },
+        meta.lapsingSoon.takeIf { it > 0 }
+            ?.let { pluralStringResource(R.plurals.settings_data_lapsing_soon, it, it) },
+    ).joinToString(stringResource(R.string.settings_data_warn_separator))
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Box(
+            Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(dotColour),
+        )
+        Spacer(Modifier.size(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                body,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (freshness.warn) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Warning,
+                        contentDescription = stringResource(R.string.settings_data_warn_icon),
+                        tint = severityColor(Severity.WARN, isDark),
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.size(6.dp))
+                    Text(
+                        suffix,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = severityColor(Severity.WARN, isDark),
+                    )
+                }
+            }
+            Text(
+                stringResource(R.string.settings_data_source),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                // Same affordance as the GPLv3 link: pad the small label to a ≥48dp touch target.
+                modifier = Modifier
+                    .padding(vertical = 16.dp, horizontal = 4.dp)
+                    .clickable { openUrl(context, VISA_DB_URL) },
+            )
+        }
     }
 }
 

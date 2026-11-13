@@ -1,14 +1,14 @@
 package com.cbkres.visavole.ui
 
-import com.cbkres.visavole.data.Corridor
-import com.cbkres.visavole.data.Country
-import com.cbkres.visavole.data.StayRule
-import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.data.WorldMapData
+import com.cbkres.visavole.domain.Corridor
+import com.cbkres.visavole.domain.Country
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.Document
+import com.cbkres.visavole.domain.StayRule
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripStop
+import com.cbkres.visavole.domain.WorldData
 import com.cbkres.visavole.ui.app.AppState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

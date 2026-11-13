@@ -1,6 +1,5 @@
 package com.cbkres.visavole.domain
 
-import com.cbkres.visavole.data.Country
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

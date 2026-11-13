@@ -49,13 +49,13 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.domain.AccessLevel
 import com.cbkres.visavole.domain.AllowanceKind
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.AllowanceStatus
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.Document
+import com.cbkres.visavole.domain.WorldData
 import com.cbkres.visavole.domain.docCategory
 import com.cbkres.visavole.ui.screens.map.HOME
 import com.cbkres.visavole.ui.screens.map.HOME_DARK

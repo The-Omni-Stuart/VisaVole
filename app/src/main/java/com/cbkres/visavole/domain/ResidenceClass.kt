@@ -1,6 +1,5 @@
 package com.cbkres.visavole.domain
 
-import com.cbkres.visavole.data.WorldData
 
 /** Holding categories the app treats as residence documents (the Residence tab). */
 val RESIDENCE_LIKE_HOLDING_CATEGORIES = setOf("residency", "long_term_visa")

@@ -1,3 +1,17 @@
 <resources>
     <string name="app_name">Visa Vole</string>
+
+    <string name="settings_data_build">Data build %1$s · rules verified %2$s · review %3$s</string>
+    <string name="settings_data_build_unknown">Data build date unknown</string>
+    <plurals name="settings_data_lapsed">
+        <item quantity="one">%1$d rule past its expiry date</item>
+        <item quantity="other">%1$d rules past their expiry date</item>
+    </plurals>
+    <plurals name="settings_data_lapsing_soon">
+        <item quantity="one">%1$d rule expiring within 30 days</item>
+        <item quantity="other">%1$d rules expiring within 30 days</item>
+    </plurals>
+    <string name="settings_data_warn_separator"> · </string>
+    <string name="settings_data_warn_icon">Expiring rules warning</string>
+    <string name="settings_data_source">View data source</string>
 </resources>

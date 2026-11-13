@@ -1,6 +1,5 @@
 package com.cbkres.visavole.domain
 
-import com.cbkres.visavole.data.WorldData
 import com.cbkres.visavole.domain.GuardContext.Companion.of
 import com.cbkres.visavole.domain.GuardEngine.inUseEntriesRule
 import com.cbkres.visavole.domain.GuardEngine.supersessionStart
