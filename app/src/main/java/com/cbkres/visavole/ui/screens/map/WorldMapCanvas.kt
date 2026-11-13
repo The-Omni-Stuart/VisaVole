@@ -196,6 +196,20 @@ internal fun defaultCenter(geometry: WorldMapData): Offset =
     Offset(geometry.width * DEFAULT_CENTER_X_FRACTION, geometry.height / 2f)
 
 /**
+ * Content identity of the map's colours: the [access]/[homeCountries]/[ownVisaCountries] sets
+ * arrive as fresh instances on every publish, so folding their content-based hashCodes (Map/Set
+ * contract, entries compared via [Access] equality) into one Int keys the `drawShapes` build by
+ * what it paints, not by instance identity. A collision would keep stale fills until the next
+ * content change — a risk bounded to one repaint.
+ */
+internal fun mapPaintKey(
+    access: Map<String, Access>,
+    homeCountries: Set<String>,
+    ownVisaCountries: Set<String>,
+): Int =
+    (access.hashCode() * 31 + homeCountries.hashCode()) * 31 + ownVisaCountries.hashCode()
+
+/**
  * Robinson world choropleth. Each country is filled by the traveller's [Access] level for it.
  *
  * The view is described by the world point sitting at the centre of the canvas ([centerWorld]) and a
@@ -239,7 +253,12 @@ internal fun WorldMapCanvas(
     } else {
         0f
     }
-    val drawShapes: List<DrawShape> = remember(shapes, access, homeCountries, ownVisaCountries) {
+    // Keyed by content (see mapPaintKey): a publish that leaves the colours equal — e.g. starring
+    // a passport — must not rebuild the ~204 fills and repaint the world.
+    val paintKey = remember(access, homeCountries, ownVisaCountries) {
+        mapPaintKey(access, homeCountries, ownVisaCountries)
+    }
+    val drawShapes: List<DrawShape> = remember(shapes, paintKey) {
         shapes.map { s ->
             val lvl = access[s.iso]?.level
             DrawShape(

@@ -40,6 +40,12 @@ data class DocStatus(
     val effectiveExpiry: LocalDate?,
     val entries: EntryStatus?,
     val notYetValid: Boolean,
+    /** The parsed own `expiry` string (null when unset or unparseable), carried so consumers like
+     *  the gate cap don't re-parse it. */
+    val expiryDate: LocalDate?,
+    /** The parsed `validFrom` of the document that supersedes this one (null when nothing
+     *  supersedes it or the replacement has no `validFrom`). */
+    val replacementValidFrom: LocalDate?,
 ) {
     companion object {
         fun of(
@@ -50,24 +56,26 @@ data class DocStatus(
             today: LocalDate,
         ): DocStatus {
             val original = parse(doc.expiry)
+            val validFrom = parse(doc.validFrom)
             val candidates = mutableListOf<Pair<LocalDate, ExpiryReason>>()
             if (original != null) candidates += original to ExpiryReason.DATE
-            val entry = TripModel.entryStatusFor(doc, trips, world, today)
+            val entry = TripModel.entryStatusFor(doc, trips, world, today, validFrom, original)
             if (entry != null && entry.effectiveExpiry != null &&
                 (original == null || entry.effectiveExpiry.isBefore(original))
             ) {
                 candidates += entry.effectiveExpiry to ExpiryReason.ENTRIES
             }
+            var replacementValidFrom: LocalDate? = null
             doc.supersededBy?.let { id ->
                 docs.firstOrNull { it.id == id }?.let { replacement ->
                     // A replacement without a `validFrom` supersedes IMMEDIATELY (user decision
                     // 2026-09-27): the old doc is archived on the spot (red "Replaced by …")
                     // instead of sitting in a shifting "replaced from today" amber state. Anchor
                     // the missing date to yesterday so the standard "before today" test trips.
-                    candidates += (parse(replacement.validFrom) ?: today.minusDays(1)) to ExpiryReason.SUPERSEDED
+                    replacementValidFrom = parse(replacement.validFrom)
+                    candidates += (replacementValidFrom ?: today.minusDays(1)) to ExpiryReason.SUPERSEDED
                 }
             }
-            val validFrom = parse(doc.validFrom)
             val best = candidates.minWithOrNull(compareBy({ it.first }, { it.second.ordinal }))
             val effective = best?.first
             return DocStatus(
@@ -76,6 +84,8 @@ data class DocStatus(
                 effectiveExpiry = effective,
                 entries = entry,
                 notYetValid = validFrom != null && validFrom.isAfter(today),
+                expiryDate = original,
+                replacementValidFrom = replacementValidFrom,
             )
         }
 

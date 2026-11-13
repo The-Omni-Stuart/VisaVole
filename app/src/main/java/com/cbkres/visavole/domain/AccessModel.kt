@@ -103,8 +103,8 @@ object AccessModel {
     ): Boolean = statuses?.get(doc.id)?.expired ?: isExpired(doc, docs, world, today, trips)
 
     /**
-     * True when [doc] unlocks nothing at [today]: expired *or* not valid yet. Mirrors the skip in
-     * [compute], which is the only place [notYetValid] was previously honoured.
+     * True when [doc] unlocks nothing at [today]: expired *or* not valid yet — the same test as
+     * [compute]'s skip, which is the only place [notYetValid] was previously honoured.
      */
     private fun unusableOf(
         doc: Document,
@@ -124,6 +124,10 @@ object AccessModel {
         val from = doc.validFrom?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return false
         return from.isAfter(today)
     }
+
+    /** [notYetValid] that reuses a precomputed [DocStatus.all] map when one is provided. */
+    private fun notYetValidOf(doc: Document, today: LocalDate, statuses: Map<String, DocStatus>?): Boolean =
+        statuses?.get(doc.id)?.notYetValid ?: notYetValid(doc, today)
 
     /**
      * Candidates from a passport: baseline corridors + bloc freedom/visa-free + own country.
@@ -241,8 +245,8 @@ object AccessModel {
     /**
      * [homeCountries] restricted to passports that are not expired at [today] — the passports that
      * can actually support a stay. Stay rules resolve against these, so an expired passport's
-     * nationality cannot drive the allowance window of a stay entered with another passport
-     * (P2-30). Passport validity is date-driven, so [trips] is irrelevant beyond the status call.
+     * nationality cannot drive the allowance window of a stay entered with another passport.
+     * Passport validity is date-driven, so [trips] is irrelevant beyond the status call.
      */
     fun validHomeCountries(
         docs: List<Document>,
@@ -435,7 +439,7 @@ object AccessModel {
         val evaluated = docs
             .mapNotNull { doc ->
                 val expired = expiredOf(doc, docs, world, today, trips, statuses)
-                if (doc.kind !is Passport && !ignoreExpiry && (expired || notYetValid(doc, today))) return@mapNotNull null
+                if (doc.kind !is Passport && !ignoreExpiry && unusableOf(doc, docs, world, today, trips, statuses)) return@mapNotNull null
                 val candidates = candidateMaps?.get(doc.id)
                     ?: when (val k = doc.kind) {
                         is Passport -> passportCandidates(k.iso2, world, expired)
@@ -497,8 +501,8 @@ object AccessModel {
      *
      * [statuses] is a precomputed `DocStatus.all` for the same (docs, trips, world, today),
      * reused instead of recomputing each document's status. A map computed for the *unclamped*
-     * docs is equally valid here: this method only reads `.expired`, which is identical for a
-     * doc with its expiry clamped to its effective expiry.
+     * docs is equally valid here: this method only reads `.expired` and `.notYetValid`, which are
+     * identical for a doc with its expiry clamped to its effective expiry.
      */
     fun compute(
         docs: List<Document>,
@@ -511,7 +515,7 @@ object AccessModel {
         val homeNats = homeCountries(docs)
         for (doc in docs) {
             // A document that is not valid yet unlocks nothing at [today].
-            if (notYetValid(doc, today)) continue
+            if (notYetValidOf(doc, today, statuses)) continue
             when (val k = doc.kind) {
                 is Passport -> {
                     // Pure best-of across passports; an expired one still grants home + freedom blocs.

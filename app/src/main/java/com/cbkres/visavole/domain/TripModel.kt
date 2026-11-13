@@ -42,6 +42,22 @@ object TripModel {
 
     private data class TrippedStop(val tripId: String, val stop: TripStop)
 
+    // Memo for stayRuleFor: passports and as-of are fixed per warning call, so the scan is pure in dest.
+    private class StayRuleMemo(
+        private val world: WorldData,
+        private val passports: Set<String>,
+        private val asOf: LocalDate,
+    ) {
+        private val allowingSynthetic = HashMap<String, StayRule?>()
+        private val explicitOnly = HashMap<String, StayRule?>()
+
+        fun forDest(dest: String, allowSynthetic: Boolean = true): StayRule? {
+            val memo = if (allowSynthetic) allowingSynthetic else explicitOnly
+            if (dest in memo) return memo[dest]
+            return world.stayRuleFor(dest, passports, asOf, allowSynthetic).also { memo[dest] = it }
+        }
+    }
+
     fun sections(trips: List<Trip>, today: LocalDate = LocalDate.now(ZoneOffset.UTC)): TripSections {
         val upcoming = trips.filter { it.statusAt(today) == TripStatus.UPCOMING }.sortedBy { it.firstArrival }
         val current = trips.filter { it.statusAt(today) == TripStatus.ONGOING }.sortedBy { it.firstArrival }
@@ -93,9 +109,9 @@ object TripModel {
         today: LocalDate = LocalDate.now(ZoneOffset.UTC),
         statuses: Map<String, DocStatus>? = null,
         /** The publish's access map, reused for the zone suppression set instead of a second
-         *  full `AccessModel.compute` (P2-28). Null (standalone/tests) computes its own. */
+         *  full `AccessModel.compute`. Null (standalone/tests) computes its own. */
         access: Map<String, Access>? = null,
-        /** The publish's per-document candidate maps, shared by every gate probe (P2-27). */
+        /** The publish's per-document candidate maps, shared by every gate probe. */
         candidateMaps: Map<String, Map<String, Access>>? = null,
     ): TripCalculation {
         val tripSections = sections(trips, today)
@@ -103,7 +119,7 @@ object TripModel {
         // P3-4: derive the entry-status map from the threaded DocStatus.entries instead of
         // re-running computeEntryStatus per doc — DocStatus.all already computed each one.
         val entryStatus = docStatuses.mapNotNull { (id, status) -> status.entries?.let { id to it } }.toMap()
-        val zoneAllowances = zoneUsages(trips, docs, world, today, access).mapNotNull { (key, usage) ->
+        val zoneAllowances = zoneUsages(trips, docs, world, today, access, docStatuses).mapNotNull { (key, usage) ->
             zoneSnapshot(key, usage, world, today, docs, trips, docStatuses, candidateMaps)
         }
         // Every document gets a snapshot, passports included: the Documents tab's top display
@@ -125,7 +141,7 @@ object TripModel {
     ): Map<String, EntryStatus> =
         docs
             .filter { isVisaLike(it, world) || it.entryType() != null }
-            .associate { it.id to computeEntryStatus(it, trips, today) }
+            .associate { it.id to computeEntryStatus(it, trips, today, iso(it.validFrom), iso(it.expiry)) }
 
     /**
      * The entry status of a single document, or null when it carries no entry count and is not
@@ -137,7 +153,18 @@ object TripModel {
         world: WorldData,
         today: LocalDate = LocalDate.now(ZoneOffset.UTC),
     ): EntryStatus? =
-        if (isVisaLike(doc, world) || doc.entryType() != null) computeEntryStatus(doc, trips, today) else null
+        if (isVisaLike(doc, world) || doc.entryType() != null) computeEntryStatus(doc, trips, today, iso(doc.validFrom), iso(doc.expiry)) else null
+
+    /** [entryStatusFor] for callers that already hold [doc]'s parsed dates (see [DocStatus.of]). */
+    internal fun entryStatusFor(
+        doc: Document,
+        trips: List<Trip>,
+        world: WorldData,
+        today: LocalDate,
+        validFromDay: LocalDate?,
+        expiryDay: LocalDate?,
+    ): EntryStatus? =
+        if (isVisaLike(doc, world) || doc.entryType() != null) computeEntryStatus(doc, trips, today, validFromDay, expiryDay) else null
 
     /**
      * The docs with their `expiry` clamped to their unified effective expiry (earliest of date
@@ -165,6 +192,7 @@ object TripModel {
         today: LocalDate = LocalDate.now(ZoneOffset.UTC),
     ): List<TripWarning> {
         val passports = AccessModel.validHomeCountries(docs, world, today, trips = trips)
+        val rules = StayRuleMemo(world, passports, today)
         val out = mutableListOf<TripWarning>()
         val seen = HashSet<String>()
         for (cs in candidate.stops) {
@@ -173,8 +201,8 @@ object TripModel {
                     val overlap = overlapDays(cs.arrival, cs.departure ?: today, os.arrival, os.departure ?: today)
                     if (overlap <= 1) continue
                     val sameCountry = cs.countryIso2 == os.countryIso2
-                    val csRule = world.stayRuleFor(cs.countryIso2, passports, today)
-                    val osRule = world.stayRuleFor(os.countryIso2, passports, today)
+                    val csRule = rules.forDest(cs.countryIso2)
+                    val osRule = rules.forDest(os.countryIso2)
                     val sameZone = !sameCountry && csRule != null && osRule != null && world.zoneKeyFor(csRule) == world.zoneKeyFor(osRule)
                     if (sameCountry || sameZone) {
                         val label = when {
@@ -239,8 +267,9 @@ object TripModel {
         val passports = AccessModel.validHomeCountries(docs, world, asOf, trips = trips)
 
         val zones = linkedSetOf<String>()
+        val rules = StayRuleMemo(world, passports, asOf)
         for (stop in candidate.stops) {
-            world.stayRuleFor(stop.countryIso2, passports, asOf)?.let { zones.add(world.zoneKeyFor(it)) }
+            rules.forDest(stop.countryIso2)?.let { zones.add(world.zoneKeyFor(it)) }
         }
         val usageWith = zoneUsages(trips + candidate, docs, world, asOf)
         for (key in zones) {
@@ -462,12 +491,14 @@ object TripModel {
         world: WorldData,
         asOf: LocalDate,
         access: Map<String, Access>? = null,
+        statuses: Map<String, DocStatus>? = null,
     ): Map<String, ZoneUsage> {
         // Stay rules resolve against the passports that can actually support a stay — an expired
-        // passport's nationality must not drive the allowance window (P2-30).
-        val passports = AccessModel.validHomeCountries(docs, world, asOf, trips = trips)
+        // passport's nationality must not drive the allowance window.
+        val passports = AccessModel.validHomeCountries(docs, world, asOf, trips = trips, statuses = statuses)
         val access = access ?: AccessModel.compute(docs, world, asOf)
         val suppressed = access.filterValues { it.level == FREEDOM || it.level == RESIDENCE }.keys
+        val rules = StayRuleMemo(world, passports, asOf)
         val out = HashMap<String, ZoneUsage>()
         for (trip in trips) {
             for (stop in trip.stops) {
@@ -480,7 +511,7 @@ object TripModel {
                 val end = if (stop.departure != null && stop.departure.isBefore(asOf)) stop.departure else asOf
                 if (end.isBefore(stop.arrival)) continue
                 val isSuppressed = stop.countryIso2 in suppressed
-                val rule = world.stayRuleFor(stop.countryIso2, passports, asOf, allowSynthetic = !isSuppressed)
+                val rule = rules.forDest(stop.countryIso2, allowSynthetic = !isSuppressed)
                     ?: if (!isSuppressed) {
                         access[stop.countryIso2]
                             ?.takeIf { it.level == VISA_FREE && it.days != null && it.days > 0 }
@@ -625,7 +656,7 @@ object TripModel {
                 gateIds
                     .mapNotNull { id ->
                         val status = statuses[id] ?: return@mapNotNull null
-                        gateCapDate(docById.getValue(id), status, docs)
+                        gateCapDate(status)
                     }
                     .minOrNull()
             }
@@ -633,22 +664,14 @@ object TripModel {
     }
 
     /**
-     * The day [doc] stops authorising a stay. A document whose entry is in progress
-     * ([EntryState.IN_USE]) keeps the current stay alive until its own date expiry — an entry
-     * count limits re-entries, not the stay you are already in; every other state falls back to
-     * the unified [DocStatus.effectiveExpiry] (entry exhaustion, supersession, lapsed date).
+     * The day the document behind [status] stops authorising a stay. A document whose entry is in
+     * progress ([EntryState.IN_USE]) keeps the current stay alive until its own date expiry — an
+     * entry count limits re-entries, not the stay you are already in; every other state falls back
+     * to the unified [DocStatus.effectiveExpiry] (entry exhaustion, supersession, lapsed date).
      */
-    private fun gateCapDate(
-        doc: Document,
-        status: DocStatus,
-        docs: List<Document>,
-    ): LocalDate? {
+    private fun gateCapDate(status: DocStatus): LocalDate? {
         if (status.entries?.state != EntryState.IN_USE) return status.effectiveExpiry
-        val own = doc.expiry?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-        val superseded = doc.supersededBy
-            ?.let { sid -> docs.firstOrNull { it.id == sid }?.validFrom }
-            ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-        return listOfNotNull(own, superseded).minOrNull() ?: status.effectiveExpiry
+        return listOfNotNull(status.expiryDate, status.replacementValidFrom).minOrNull() ?: status.effectiveExpiry
     }
 
     /** Union of the zone's segments (overlapping stays on the same days count once). */
@@ -713,7 +736,7 @@ object TripModel {
         val total = entry?.total ?: entryTotalFor(doc.entryType())
         val used = entry?.used ?: 0
         val remaining = entry?.remaining
-        val expiry = status?.let { gateCapDate(doc, it, docs) } ?: entry?.effectiveExpiry ?: iso(doc.expiry)
+        val expiry = status?.let { gateCapDate(it) } ?: entry?.effectiveExpiry ?: iso(doc.expiry)
         val daysToExpiry = expiry?.let { ChronoUnit.DAYS.between(asOf, it) }
         // Only the entry type and the expiry date here — the "N days left" / "N entries
         // remaining" halves live on the coloured summary line of the tab-top display.
@@ -758,9 +781,14 @@ object TripModel {
         )
     }
 
-    private fun computeEntryStatus(doc: Document, trips: List<Trip>, asOf: LocalDate): EntryStatus {
+    private fun computeEntryStatus(
+        doc: Document,
+        trips: List<Trip>,
+        asOf: LocalDate,
+        from: LocalDate?,
+        original: LocalDate?,
+    ): EntryStatus {
         val total = entryTotalFor(doc.entryType())
-        val from = iso(doc.validFrom)
         val stops = trips
             .flatMap { trip ->
                 trip.stops
@@ -785,7 +813,6 @@ object TripModel {
             .maxByOrNull { it.second }
         val lastUsedOn = if (active != null) asOf else lastCompleted?.second
         val sourceTripId = if (active != null) active.tripId else lastCompleted?.first?.tripId
-        val original = iso(doc.expiry)
         // Exhaustion by entry count is an effective expiry only once the stay is actually OVER
         // (active == null): while an entry is in progress the stay runs on the document's own date
         // expiry, so a single-entry visa mid-stay must not report "expires today" — that poisoned

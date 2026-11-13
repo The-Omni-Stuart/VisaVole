@@ -11,6 +11,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -18,6 +19,7 @@ import org.junit.Test
 import java.io.File
 import java.nio.file.Files
 import java.time.LocalDate
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Tests for [VisaStateStore] at its public seam — `load()`/`save(PersistedState)` — verified
@@ -95,6 +97,31 @@ class VisaStateStoreTest {
             "the last queued save never reached disk after the scope was cancelled",
             diskContains(queued.last()),
         )
+    }
+
+    /**
+     * save() must only enqueue: encoding runs on the writer's IO thread, not the caller's, so the
+     * (KB-scale) JSON build stays off the mutation frame even for a large state.
+     */
+    @Test
+    fun encodeRunsOnTheWriterThreadNotTheEnqueueingThread() {
+        val enqueueThread = Thread.currentThread().name
+        val encodedOn = AtomicReference<String>()
+        val encodingStore = VisaStateStore(file = stateFile, scope = scope) { state ->
+            encodedOn.set(Thread.currentThread().name)
+            StateCodec.encode(state)
+        }
+
+        encodingStore.save(fullState)
+
+        assertTrue("the saved state never reached disk", awaitUntil { diskContains(fullState) })
+        val thread = encodedOn.get()
+        assertNotNull("the injected encoder never ran", thread)
+        assertTrue(
+            "encode ran on the enqueueing thread ($thread)",
+            thread != enqueueThread,
+        )
+        assertEquals(fullState, store.load()?.state)
     }
 
     @Test

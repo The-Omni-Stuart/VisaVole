@@ -276,4 +276,29 @@ class DocStatusTest {
         assertTrue(map.getValue("v1").expired)
         assertFalse(map.getValue("v2").expired)
     }
+
+    // ------------------------------------------------------------------
+    // Parsed dates carried for gate consumers
+    // ------------------------------------------------------------------
+
+    @Test fun carriesParsedExpiryAndReplacementDates() {
+        val v1 = visa("v1", setOf("CA"), expiry = "2027-01-01", validFrom = "2026-01-01", supersededBy = "v2")
+        val v2 = visa("v2", setOf("CA"), validFrom = "2026-09-20")
+        val s = DocStatus.of(v1, listOf(v1, v2), emptyList(), world(), today)
+        assertEquals(LocalDate.of(2027, 1, 1), s.expiryDate)
+        assertEquals(LocalDate.of(2026, 9, 20), s.replacementValidFrom)
+    }
+
+    @Test fun replacementWithoutValidFromCarriesNoDate() {
+        val v1 = visa("v1", setOf("CA"), expiry = "2027-01-01", supersededBy = "v2")
+        val v2 = visa("v2", setOf("CA"))
+        val s = DocStatus.of(v1, listOf(v1, v2), emptyList(), world(), today)
+        assertNull(s.replacementValidFrom)
+        assertTrue("a dateless replacement still supersedes immediately", s.expired)
+    }
+
+    @Test fun unsetDatesCarryNullParsedValues() {
+        val s = status(visa("v1", setOf("CA")))
+        assertNull(s.expiryDate)
+    }
 }

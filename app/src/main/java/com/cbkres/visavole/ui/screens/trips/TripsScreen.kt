@@ -22,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
@@ -72,7 +73,12 @@ internal fun TripsScreen(
     val zoneAllowances = remember(ready.allowances) { ready.allowances.filter { !it.key.startsWith("doc:") } }
     val passportCounts = remember(ready.docs) { passportCountsByIso(ready.docs) }
     val passportNumbers = remember(ready.docs) { passportNumbers(ready.docs) }
-    val validHomes = remember(ready.docs, ready.world, today) { AccessModel.validHomeCountries(ready.docs, ready.world, today) }
+    val validHomes = remember(ready.docs, ready.statuses) {
+        AccessModel.validHomeCountries(ready.docs, ready.world, today, statuses = ready.statuses)
+    }
+    // onToggleExpanded comes from the scaffold and may carry a new identity per recomposition;
+    // the per-card callbacks below read it through this so they can stay pinned per trip.
+    val toggleExpanded by rememberUpdatedState(onToggleExpanded)
 
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         ScreenHeader(
@@ -170,6 +176,11 @@ internal fun TripsScreen(
                             items = sections.upcoming,
                             key = { it.id }
                         ) { trip ->
+                            // Callback identities pinned per trip so cards whose trip did not
+                            // change can skip recomposition when the screen republishes.
+                            val onExpand = remember(trip) { { toggleExpanded(trip.id) } }
+                            val onEdit = remember(trip) { { editingTrip = trip } }
+                            val onDelete = remember(trip) { { deletingTrip = trip } }
                             TripCard(
                                 trip = trip,
                                 world = ready.world,
@@ -180,16 +191,10 @@ internal fun TripsScreen(
                                 validHomes = validHomes,
                                 today = today,
                                 expanded = trip.id in expandedTrips,
-                                onExpand = {
-                                    onToggleExpanded(trip.id)
-                                },
-                                onEdit = {
-                                    editingTrip = trip
-                                },
+                                onExpand = onExpand,
+                                onEdit = onEdit,
                                 onEnd = {},
-                                onDelete = {
-                                    deletingTrip = trip
-                                },
+                                onDelete = onDelete,
                                 flashTrigger = flashes.countFor(trip.id),
                             )
                         }
@@ -204,6 +209,10 @@ internal fun TripsScreen(
                             items = sections.current,
                             key = { it.id }
                         ) { trip ->
+                            val onExpand = remember(trip) { { toggleExpanded(trip.id) } }
+                            val onEdit = remember(trip) { { editingTrip = trip } }
+                            val onEnd = remember(trip) { { endingTrip = trip } }
+                            val onDelete = remember(trip) { { deletingTrip = trip } }
                             TripCard(
                                 trip = trip,
                                 world = ready.world,
@@ -214,18 +223,10 @@ internal fun TripsScreen(
                                 validHomes = validHomes,
                                 today = today,
                                 expanded = trip.id in expandedTrips,
-                                onExpand = {
-                                    onToggleExpanded(trip.id)
-                                },
-                                onEdit = {
-                                    editingTrip = trip
-                                },
-                                onEnd = {
-                                    endingTrip = trip
-                                },
-                                onDelete = {
-                                    deletingTrip = trip
-                                },
+                                onExpand = onExpand,
+                                onEdit = onEdit,
+                                onEnd = onEnd,
+                                onDelete = onDelete,
                                 flashTrigger = flashes.countFor(trip.id),
                             )
                         }
@@ -240,6 +241,9 @@ internal fun TripsScreen(
                             items = sections.previous,
                             key = { it.id }
                         ) { trip ->
+                            val onExpand = remember(trip) { { toggleExpanded(trip.id) } }
+                            val onEdit = remember(trip) { { editingTrip = trip } }
+                            val onDelete = remember(trip) { { deletingTrip = trip } }
                             TripCard(
                                 trip = trip,
                                 world = ready.world,
@@ -250,16 +254,10 @@ internal fun TripsScreen(
                                 validHomes = validHomes,
                                 today = today,
                                 expanded = trip.id in expandedTrips,
-                                onExpand = {
-                                    onToggleExpanded(trip.id)
-                                },
-                                onEdit = {
-                                    editingTrip = trip
-                                },
+                                onExpand = onExpand,
+                                onEdit = onEdit,
                                 onEnd = {},
-                                onDelete = {
-                                    deletingTrip = trip
-                                },
+                                onDelete = onDelete,
                                 flashTrigger = flashes.countFor(trip.id),
                             )
                         }

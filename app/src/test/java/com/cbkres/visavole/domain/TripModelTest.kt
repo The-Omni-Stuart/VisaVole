@@ -813,4 +813,60 @@ class TripModelTest {
         assertEquals(29, a.remainingDays)
         assertEquals(AllowanceStatus.OK, a.status)
     }
+
+    // ------------------------------------------------------------------
+    // stayRuleFor memoisation
+    // ------------------------------------------------------------------
+
+    /** A stayRules list that counts every traversal, i.e. every raw [WorldData.stayRuleFor] lookup. */
+    private class CountingStayRules(private val delegate: List<StayRule>) : List<StayRule> by delegate {
+        var lookups = 0
+            private set
+        override fun iterator(): Iterator<StayRule> {
+            lookups++
+            return delegate.iterator()
+        }
+    }
+
+    private val overlappingStops = listOf(
+        stop("s1", "DE", today.minusDays(10), today.minusDays(5)),
+        stop("s2", "FR", today.minusDays(9), today.minusDays(4)),
+        stop("s3", "CA", today.minusDays(8), today.minusDays(3)),
+    )
+
+    @Test
+    fun overlapWarningsResolveEachDestinationOnce() {
+        val counted = CountingStayRules(listOf(schengen, ca4))
+        val docs = listOf(passport("GB"))
+        val candidate = trip("c", *overlappingStops.toTypedArray())
+        val other = trip("o", *overlappingStops.toTypedArray())
+        val warnings = TripModel.overlapWarningsFor(candidate, listOf(other), docs, world(stayRules = counted), today)
+        assertEquals(
+            listOf(
+                "This trip overlaps Germany by 6 days.",
+                "This trip overlaps Schengen Area by 5 days.",
+                "This trip overlaps another trip by 4 days, but the stays are in different places — " +
+                    "you can only be in one place at a time.",
+                "This trip overlaps France by 6 days.",
+                "This trip overlaps Canada by 6 days.",
+            ),
+            warnings.map { it.message },
+        )
+        // Three stop pairs per destination would need 18 raw lookups; the memo resolves each once.
+        assertEquals(3, counted.lookups)
+    }
+
+    @Test
+    fun calculateResolvesEachZoneDestinationOnce() {
+        val counted = CountingStayRules(listOf(schengen, ca4))
+        val trips = listOf(
+            trip("t1", overlappingStops[0], overlappingStops[1]),
+            trip("t2", overlappingStops[2]),
+        )
+        val calc = TripModel.calculate(trips, listOf(passport("GB")), world(stayRules = counted), today)
+        val schengenAllowance = calc.allowances.first { it.key == "stay:schengen" }
+        assertEquals(7, schengenAllowance.usedDays)
+        assertEquals(83, schengenAllowance.remainingDays)
+        assertEquals(3, counted.lookups)
+    }
 }

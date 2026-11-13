@@ -21,13 +21,13 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.DocKind
-import com.cbkres.visavole.domain.DocStatus
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.GuardAction
 import com.cbkres.visavole.domain.GuardContext
@@ -88,6 +88,9 @@ internal fun DocumentsScreen(
     val removeBlockings: Map<String, GuardResult> = remember(guardCtx) {
         ready.docs.associateBy({ it.id }, { d -> GuardEngine.evaluate(GuardAction.RemoveDocument(d.id), guardCtx) })
     }
+    // Card callbacks read the blockings through this so their identities stay stable across
+    // publishes (a fresh per-publish map in a captured lambda would force every card to recompose).
+    val blockings by rememberUpdatedState(removeBlockings)
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         ScreenHeader(
             "Documents",
@@ -97,10 +100,7 @@ internal fun DocumentsScreen(
         if (ready.docs.isEmpty()) {
             EmptyState("No documents yet. Start with a passport or a residence permit.")
         } else {
-            // Unified validity for every document (date expiry, entry exhaustion, supersession).
-            val statuses = remember(ready.docs, ready.trips, ready.world, today) {
-                DocStatus.all(ready.docs, ready.trips, ready.world, today)
-            }
+            val statuses = ready.statuses
             val active = ready.docs.filter { !statuses.getValue(it.id).expired }
             val archived = ready.docs.filter { statuses.getValue(it.id).expired }
             // Every card's position in the LazyColumn below, keyed by doc id: the allowances item
@@ -242,9 +242,11 @@ internal fun DocumentsScreen(
                         items(active, key = { it.id }) { doc ->
                             val iso = (doc.kind as? DocKind.Passport)?.iso2
                             val sameNatCount = iso?.let { validPassportIsoCounts[it] ?: 0 } ?: 0
+                            // Callback identities pinned per document so cards whose doc did not
+                            // change can skip recomposition when the screen republishes.
                             val star: (() -> Unit)? =
                                 if (doc.kind is DocKind.Passport && sameNatCount >= 2) {
-                                    { vm.setPrimary(doc.id) }
+                                    remember(doc) { { vm.setPrimary(doc.id) } }
                                 } else null
                             val number = iso?.let {
                                 if ((passportIsoTotal[it]
@@ -267,11 +269,11 @@ internal fun DocumentsScreen(
                                 canRemove = removeBlockings[doc.id]?.canProceed == true,
                                 passportNumber = number,
                                 isPrimary = doc.id == ready.primaryDocId,
-                                onRemove = { removingDoc = doc },
-                                onRemoveBlocked = {
-                                    blockedRemove = removeBlockings[doc.id]?.findings?.firstOrNull()
+                                onRemove = remember(doc) { { removingDoc = doc } },
+                                onRemoveBlocked = remember(doc) {
+                                    { blockedRemove = blockings[doc.id]?.findings?.firstOrNull() }
                                 },
-                                onEdit = { editing = doc },
+                                onEdit = remember(doc) { { editing = doc } },
                                 onStar = star,
                                 flashTrigger = flashes.countFor(doc.id),
                             )
@@ -308,11 +310,11 @@ internal fun DocumentsScreen(
                                 canRemove = removeBlockings[doc.id]?.canProceed == true,
                                 passportNumber = number,
                                 isPrimary = false,
-                                onRemove = { removingDoc = doc },
-                                onRemoveBlocked = {
-                                    blockedRemove = removeBlockings[doc.id]?.findings?.firstOrNull()
+                                onRemove = remember(doc) { { removingDoc = doc } },
+                                onRemoveBlocked = remember(doc) {
+                                    { blockedRemove = blockings[doc.id]?.findings?.firstOrNull() }
                                 },
-                                onEdit = { editing = doc },
+                                onEdit = remember(doc) { { editing = doc } },
                                 onStar = null,
                                 flashTrigger = flashes.countFor(doc.id),
                             )

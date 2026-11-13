@@ -89,6 +89,9 @@ internal fun AddTripDialog(
     var lastStopSnapshot by remember { mutableStateOf<StopSnapshot?>(null) }
     var saveWarnings by remember { mutableStateOf<Pair<List<GuardFinding>, Boolean>?>(null) }
     var pendingMutations by remember { mutableStateOf<List<GuardMutation>>(emptyList()) }
+    // The guard result behind pendingMutations: handed to the ViewModel on save so one save tap runs
+    // the engine once instead of re-running it for the same candidate.
+    var pendingResult by remember { mutableStateOf<GuardResult?>(null) }
     var ongoingConflict by remember { mutableStateOf<OngoingConflict?>(null) }
     var splitCommitted by remember { mutableStateOf(false) }
     var showSplitExitConfirm by remember { mutableStateOf(false) }
@@ -101,8 +104,10 @@ internal fun AddTripDialog(
     }
 
     fun save(trip: Trip = candidate()) {
-        if (isEditingExisting) vm.updateTrip(trip, pendingMutations) else vm.addTrip(trip, pendingMutations)
+        if (isEditingExisting) vm.updateTrip(trip, pendingMutations, pendingResult)
+        else vm.addTrip(trip, pendingMutations, pendingResult)
         pendingMutations = emptyList()
+        pendingResult = null
         onDismiss()
     }
 
@@ -113,23 +118,24 @@ internal fun AddTripDialog(
         return GuardEngine.evaluate(action, GuardContext.of(ready.docs, tripsOverride, ready.world, ready.starredDocId, today))
     }
 
-    /** The ongoing-cap finding/mutation from the engine, if any (§13.4). */
-    fun ongoingConflictFor(trip: Trip): OngoingConflict? {
-        val end = evaluate(trip).mutations.firstOrNull { it is GuardMutation.EndTrip } as? GuardMutation.EndTrip
+    /** The ongoing-cap finding/mutation from [result], evaluating [trip] when none is passed (§13.4). */
+    fun ongoingConflictFor(trip: Trip, result: GuardResult = evaluate(trip)): OngoingConflict? {
+        val end = result.mutations.firstOrNull { it is GuardMutation.EndTrip } as? GuardMutation.EndTrip
             ?: return null
         val previous = ready.trips.firstOrNull { it.id == end.tripId } ?: return null
         return OngoingConflict(trip, previous, end.onDate)
     }
 
-    fun continueValidation(trip: Trip) {
-        val conflict = ongoingConflictFor(trip)
+    /** Mutations + warnings all come from [evaluated], so a save tap runs the engine exactly once. */
+    fun continueValidation(trip: Trip, evaluated: GuardResult = evaluate(trip)) {
+        val conflict = ongoingConflictFor(trip, evaluated)
         if (conflict != null) {
             ongoingConflict = conflict
             return
         }
-        val result = evaluate(trip)
-        pendingMutations = result.mutations
-        if (result.warnings.isEmpty()) save(trip) else saveWarnings = result.warnings to true
+        pendingResult = evaluated
+        pendingMutations = evaluated.mutations
+        if (evaluated.warnings.isEmpty()) save(trip) else saveWarnings = evaluated.warnings to true
     }
 
     fun resolveOngoingConflict(closePrevious: Boolean) {
@@ -142,13 +148,17 @@ internal fun AddTripDialog(
             val result = evaluate(conflict.candidate, closedTrips)
             if (result.blocks.isNotEmpty()) {
                 pendingMutations = emptyList()
+                pendingResult = null
                 saveWarnings = result.blocks to false
                 return
             }
+            pendingResult = result
+            // result.mutations is empty: it was evaluated with the previous trip already closed.
             pendingMutations = listOf(GuardMutation.EndTrip(conflict.previous.id, conflict.end))
             if (result.warnings.isEmpty()) save(conflict.candidate) else saveWarnings = result.warnings to true
         } else {
             val result = evaluate(conflict.candidate)
+            pendingResult = result
             pendingMutations = emptyList()
             val warnings = result.warnings.filter { it.code != "trip.ongoing.cap" }
             if (warnings.isEmpty()) save(conflict.candidate) else saveWarnings = warnings to true
@@ -160,10 +170,11 @@ internal fun AddTripDialog(
         val result = evaluate(trip)
         if (result.blocks.isNotEmpty()) {
             pendingMutations = emptyList()
+            pendingResult = null
             saveWarnings = result.blocks to false
             return
         }
-        val conflict = ongoingConflictFor(trip)
+        val conflict = ongoingConflictFor(trip, result)
         if (conflict != null) {
             ongoingConflict = conflict
             return
@@ -172,7 +183,7 @@ internal fun AddTripDialog(
             showOngoingConfirm = true
             return
         }
-        continueValidation(trip)
+        continueValidation(trip, result)
     }
 
     fun confirmOngoing() {
@@ -241,11 +252,12 @@ internal fun AddTripDialog(
             leftStops,
             if (isEditingExisting) (initial?.note ?: rightNote) else rightNote,
         )
-        evaluate(leftTrip).blocks.firstOrNull()?.let { blockedBy ->
+        val splitResult = evaluate(leftTrip)
+        splitResult.blocks.firstOrNull()?.let { blockedBy ->
             gapError = "Can't split here: ${blockedBy.message}"
             return
         }
-        if (isEditingExisting) vm.updateTrip(leftTrip) else vm.addTrip(leftTrip)
+        if (isEditingExisting) vm.updateTrip(leftTrip, evaluated = splitResult) else vm.addTrip(leftTrip, evaluated = splitResult)
         splitCommitted = true
         vm.snackMessage("First half saved — the rest continues as a new trip")
         stops = rightStops

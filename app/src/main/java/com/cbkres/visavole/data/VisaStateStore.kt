@@ -21,13 +21,14 @@ data class LoadedState(val state: PersistedState, val droppedRecords: Int)
 internal class VisaStateStore(
     private val file: File,
     scope: CoroutineScope,
+    // Test seam: production always encodes with StateCodec.
+    private val encode: (PersistedState) -> String = StateCodec::encode,
 ) {
-    // P3-48: ordered queue of encoded state strings. Declared before init so the writer launched
-    // below can reference it (Kotlin runs property initializers + init blocks in source order).
-    // Drained in FIFO order on the IO dispatcher so rapid mutations hit disk in the order they
-    // happened (each write is the full state, so the last one wins) and the UI thread never does
-    // disk I/O.
-    private val persistQueue = Channel<String>(Channel.UNLIMITED)
+    // Ordered queue of snapshots handed to the writer below (Kotlin runs property initializers +
+    // init blocks in source order). Drained in FIFO order on the IO dispatcher so rapid mutations
+    // hit disk in the order they happened (each write is the full state, so the last one wins);
+    // encoding and disk I/O both run there, so the caller's thread does neither.
+    private val persistQueue = Channel<PersistedState>(Channel.UNLIMITED)
 
     /** Set when the state file exists but cannot be read or quarantined; while set, save()
      *  refuses to run, because writing would overwrite the user's only copy of the data. */
@@ -39,14 +40,14 @@ internal class VisaStateStore(
     @Volatile private var lastPersistMs: Long = 0L
 
     init {
-        // P3-48: ordered persistence writer — drains persistQueue in FIFO order on the IO dispatcher,
-        // so the UI thread never does the disk write (and rapid mutations apply in order).
+        // Ordered persistence writer: drains persistQueue in FIFO order on the IO dispatcher so
+        // the calling thread never encodes or touches disk.
         scope.launch {
-            var inFlight: String? = null
+            var inFlight: PersistedState? = null
             try {
-                for (text in persistQueue) {
-                    inFlight = text
-                    withContext(Dispatchers.IO) { writeFile(text) }
+                for (state in persistQueue) {
+                    inFlight = state
+                    withContext(Dispatchers.IO) { encodeAndWrite(state) }
                     inFlight = null
                 }
             } finally {
@@ -55,12 +56,12 @@ internal class VisaStateStore(
                 val tail = buildList {
                     inFlight?.let { add(it) }
                     while (true) {
-                        val text = persistQueue.tryReceive().getOrNull() ?: break
-                        add(text)
+                        val state = persistQueue.tryReceive().getOrNull() ?: break
+                        add(state)
                     }
                 }
                 if (tail.isNotEmpty()) {
-                    withContext(NonCancellable + Dispatchers.IO) { tail.forEach { writeFile(it) } }
+                    withContext(NonCancellable + Dispatchers.IO) { tail.forEach { encodeAndWrite(it) } }
                 }
             }
         }
@@ -111,28 +112,32 @@ internal class VisaStateStore(
     }
 
     /**
-     * Queues [state] for writing. Encoding happens here (cheap, KBs) and the disk write runs on
-     * the ordered IO writer, so the caller's thread never blocks on disk.
+     * Queues [state] for writing. Both encoding and the disk write run on the ordered IO writer,
+     * so the caller's thread does neither; [state] is an immutable snapshot, so encoding it later
+     * serializes exactly this moment's content.
      */
     fun save(state: PersistedState) {
         if (stateFileBlocked) {
             Log.e(TAG, "Refusing to persist: unreadable state file $file still present (overwriting it would lose the user's data)")
             return
         }
-        // P3-48: encode on the main thread (cheap, KBs) and hand the text to the ordered IO writer,
-        // so the disk write no longer runs on the UI thread on the exact frame of the tap.
+        persistQueue.trySend(state)
+    }
+
+    /** Ordered IO writer: encode one snapshot, then tmp-write + atomic rename it. */
+    private fun encodeAndWrite(state: PersistedState) {
         val text = runCatching {
-            StateCodec.encode(state)
+            encode(state)
         }.getOrElse { e ->
             Log.e(TAG, "Could not encode state for $file", e)
             return
         }
-        persistQueue.trySend(text)
+        writeFile(text)
     }
 
-    /** Ordered IO writer (P3-48): tmp-write + atomic rename for one encoded state. */
+    /** Atomic tmp-write + rename for one encoded state. */
     private fun writeFile(text: String) {
-        // P3-56: flag the A/B fixture race — the file changed on disk since we last wrote it, so we
+        // Flag the A/B fixture race — the file changed on disk since we last wrote it, so we
         // are about to overwrite a change made by something else (e.g. an adb push of a state file).
         val currentMtime = file.lastModified()
         if (currentMtime > lastPersistMs) {

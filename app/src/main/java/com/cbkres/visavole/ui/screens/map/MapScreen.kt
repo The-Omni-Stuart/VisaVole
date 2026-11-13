@@ -198,11 +198,11 @@ internal fun MapScreen(
         ) {
             if (selected != null) {
                 val selectedAccess = s.access[selected]
-                // Stay windows resolve against the passports that are not expired (P2-30).
-                val validHomes = remember(s.docs, s.world, s.today) { AccessModel.validHomeCountries(s.docs, s.world, s.today) }
+                // Stay windows resolve against the passports that are not expired.
+                val validHomes = remember(s.docs, s.statuses) { AccessModel.validHomeCountries(s.docs, s.world, s.today, statuses = s.statuses) }
                 // The per-selection breakdown + stay rule are the heavy per-zone access-model
                 // lookups. Running them synchronously in composition froze the map (and the
-                // centre-on-country tween) for ~1s on tap (P2-46). They now compute off the main
+                // centre-on-country tween) for ~1s on tap. They now compute off the main
                 // thread — the card slides in immediately with its cheap name/level and the
                 // breakdown rows + exact stay label fill in a moment later.
                 var breakdown by remember(selected) { mutableStateOf<List<DocAccess>?>(null) }

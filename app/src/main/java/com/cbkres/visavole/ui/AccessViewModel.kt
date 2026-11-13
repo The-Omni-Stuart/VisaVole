@@ -24,6 +24,7 @@ import com.cbkres.visavole.domain.GuardContext
 import com.cbkres.visavole.domain.GuardEngine
 import com.cbkres.visavole.domain.GuardFinding
 import com.cbkres.visavole.domain.GuardMutation
+import com.cbkres.visavole.domain.GuardResult
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripCalculation
 import com.cbkres.visavole.domain.TripModel
@@ -88,7 +89,9 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     private var docs: MutableList<Document> = mutableListOf()
     private var trips: MutableList<Trip> = mutableListOf()
     private var primaryDocId: String? = null
-    private var reloadGeneration = 0
+    // Newest-ticket-wins gates: a superseded world reload or derivation must not write state late.
+    private val reloadGate = PublishGeneration()
+    private val publishGate = PublishGeneration()
     // M6: records the pending restore's file held but could not read; voiced when the restore lands.
     private var restoreDroppedRecords = 0
     // P3-48: persisted state is read off the main thread, once, before the first world load.
@@ -175,52 +178,28 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     /** One "today" per publish cycle: screens, derived state and the guard backstop all read this. */
     private var today: LocalDate = LocalDate.now(ZoneOffset.UTC)
 
+    // The derivation is the heaviest per-mutation work, so it runs off-main on a snapshot;
+    // only the newest scheduled derivation writes state.
     private fun publish() {
         val w = world ?: return
         today = LocalDate.now(ZoneOffset.UTC)
-        val homeCountries = AccessModel.homeCountries(docs)
-        // The unified document validity, computed once per publish and threaded through the
-        // derivations below — each of which used to recompute it per document (~5× per document
-        // per publish, plus 2× per zone country inside the allowance caps).
-        val statuses = DocStatus.all(docs, trips.toList(), w, today)
-        val ownVisaCountries =
-            if (homeCountries.isNotEmpty()) AccessModel.ownVisaCountries(docs, w, today, trips = trips.toList(), statuses = statuses) else emptySet()
-        val effectiveDocs = if (homeCountries.isNotEmpty()) TripModel.effectiveDocs(docs, trips, w, today, statuses = statuses) else docs
-        val access =
-            if (homeCountries.isNotEmpty()) AccessModel.compute(effectiveDocs, w, today, trips = trips.toList(), statuses = statuses) else emptyMap()
-        // P2-27/28: thread this publish's access map + per-doc candidate maps into the
-        // calculation so zone usage and gate probes reuse them instead of recomputing.
-        val calc = if (homeCountries.isNotEmpty()) TripModel.calculate(
-            trips, docs, w, today, statuses = statuses,
-            access = access,
-            candidateMaps = AccessModel.candidateMaps(docs, w, statuses),
-        )
-        else TripCalculation(TripSections(emptyList(), emptyList(), emptyList()), emptyList(), emptyMap())
-        _state.value = AppState.Ready(
-            homeCountries = homeCountries,
-            ownVisaCountries = ownVisaCountries,
-            docs = docs.toList(),
-            access = access,
+        val inputs = snapshotPublishedInputs(
             world = w,
             geometry = geometry,
             shapes = shapes.orEmpty(),
             focus = focus.orEmpty(),
-            trips = trips.toList(),
-            tripSections = calc.sections,
-            allowances = calc.allowances,
-            primaryDocId = effectivePrimaryId(today),
+            docs = docs,
+            trips = trips,
             starredDocId = primaryDocId,
             today = today,
         )
+        val generation = publishGate.next()
+        viewModelScope.launch {
+            val ready = withContext(Dispatchers.Default) { deriveReady(inputs) }
+            if (!publishGate.isCurrent(generation)) return@launch
+            _state.value = ready
+        }
     }
-
-    /**
-     * The effective primary passport: the starred one if it's still a valid (non-expired) passport,
-     * otherwise the first valid passport. Feeds the guard context (via [GuardContext.of]) and acts
-     * as a tie-breaker for [AccessModel.bestDocumentId].
-     */
-    private fun effectivePrimaryId(today: LocalDate): String? =
-        DocumentMigration.effectivePrimaryId(docs, primaryDocId, today)
 
     private fun updateDocs(nextDocs: List<Document>) {
         val oldHomes = AccessModel.homeCountries(docs)
@@ -231,7 +210,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun reloadWorldAndPublish() {
         val homes = AccessModel.homeCountries(docs)
-        val gen = ++reloadGeneration
+        val gen = reloadGate.next()
         viewModelScope.launch {
             val w = withContext(Dispatchers.IO) {
                 try {
@@ -243,7 +222,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
                     null
                 }
             }
-            if (gen != reloadGeneration) return@launch
+            if (!reloadGate.isCurrent(gen)) return@launch
             if (w == null) {
                 snack("Could not reload the visa database; showing the last good state.")
                 return@launch
@@ -265,9 +244,12 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
      * Backstop for a guarded mutation: re-run the same [GuardEngine] rules the screens ran and
      * drop the action if they now block (e.g. state changed between the tap and the commit).
      * Surfaces the blocking reason as a snackbar. Returns true when the action must not proceed.
+     *
+     * [evaluated] is a verdict the dialog just computed for this exact action on the same main
+     * thread, so no mutation can have interleaved; dialog-less paths still re-evaluate fully.
      */
-    private fun guardBlocked(action: GuardAction): Boolean {
-        val result = guardCtx()?.let { GuardEngine.evaluate(action, it) } ?: return false
+    private fun guardBlocked(action: GuardAction, evaluated: GuardResult? = null): Boolean {
+        val result = evaluated ?: guardCtx()?.let { GuardEngine.evaluate(action, it) } ?: return false
         if (!result.canProceed) {
             snack(result.blocks.first().message)
         }
@@ -341,16 +323,19 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     /** Lets a dialog report a side effect it committed itself (e.g. a mid-dialog trip split). */
     fun snackMessage(message: String) = snack(message)
 
-    fun addTrip(trip: Trip, mutations: List<GuardMutation> = emptyList()) {
-        if (guardBlocked(GuardAction.AddTrip(trip))) return
+    /** Adds [trip]. [evaluated] is the verdict the trip dialog already computed for this add (see
+     *  [guardBlocked]); [mutations] are the ones the user confirmed alongside it. */
+    fun addTrip(trip: Trip, mutations: List<GuardMutation> = emptyList(), evaluated: GuardResult? = null) {
+        if (guardBlocked(GuardAction.AddTrip(trip), evaluated)) return
         applyMutations(mutations)
         trips = (trips + trip).toMutableList()
         persist()
         publish()
     }
 
-    fun updateTrip(trip: Trip, mutations: List<GuardMutation> = emptyList()) {
-        if (guardBlocked(GuardAction.UpdateTrip(trip))) return
+    /** Updates [trip], honouring the [evaluated] verdict the trip dialog computed for it. */
+    fun updateTrip(trip: Trip, mutations: List<GuardMutation> = emptyList(), evaluated: GuardResult? = null) {
+        if (guardBlocked(GuardAction.UpdateTrip(trip), evaluated)) return
         applyMutations(mutations)
         trips = trips.map { if (it.id == trip.id) trip else it }.toMutableList()
         persist()
@@ -456,4 +441,96 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     companion object {
         private const val TAG = "AccessViewModel"
     }
+}
+
+/** Everything [deriveReady] needs, captured on the main thread at mutation time. */
+internal data class PublishedInputs(
+    val world: WorldData,
+    val geometry: WorldMapData,
+    val shapes: List<IsoShape>,
+    val focus: Map<String, Focus>,
+    val docs: List<Document>,
+    val trips: List<Trip>,
+    /** The raw starred document id (may point at an expired document). */
+    val starredDocId: String?,
+    val today: LocalDate,
+)
+
+/**
+ * The pure derivation behind [AccessViewModel]'s published state — the whole access map plus every
+ * trip's and document's allowance snapshots. Runs off the main thread; touches nothing but [input].
+ */
+internal fun deriveReady(input: PublishedInputs): AppState.Ready {
+    val (world, geometry, shapes, focus, docs, trips, starredDocId, today) = input
+    val homeCountries = AccessModel.homeCountries(docs)
+    // The unified document validity, computed once per publish and threaded through the
+    // derivations below — each of which used to recompute it per document (~5× per document
+    // per publish, plus 2× per zone country inside the allowance caps).
+    val statuses = DocStatus.all(docs, trips, world, today)
+    val ownVisaCountries =
+        if (homeCountries.isNotEmpty()) AccessModel.ownVisaCountries(docs, world, today, trips = trips, statuses = statuses) else emptySet()
+    val effectiveDocs = if (homeCountries.isNotEmpty()) TripModel.effectiveDocs(docs, trips, world, today, statuses = statuses) else docs
+    val access =
+        if (homeCountries.isNotEmpty()) AccessModel.compute(effectiveDocs, world, today, trips = trips, statuses = statuses) else emptyMap()
+    // P2-27/28: thread this publish's access map + per-doc candidate maps into the
+    // calculation so zone usage and gate probes reuse them instead of recomputing.
+    val calc = if (homeCountries.isNotEmpty()) TripModel.calculate(
+        trips, docs, world, today, statuses = statuses,
+        access = access,
+        candidateMaps = AccessModel.candidateMaps(docs, world, statuses),
+    )
+    else TripCalculation(TripSections(emptyList(), emptyList(), emptyList()), emptyList(), emptyMap())
+    return AppState.Ready(
+        homeCountries = homeCountries,
+        ownVisaCountries = ownVisaCountries,
+        docs = docs,
+        access = access,
+        statuses = statuses,
+        world = world,
+        geometry = geometry,
+        shapes = shapes,
+        focus = focus,
+        trips = trips,
+        tripSections = calc.sections,
+        allowances = calc.allowances,
+        primaryDocId = DocumentMigration.effectivePrimaryId(docs, starredDocId, today),
+        starredDocId = starredDocId,
+        today = today,
+    )
+}
+
+/**
+ * Freezes the live docs/trips for one publish. The derivation runs later on another thread, so it
+ * must see this moment's lists, not whatever the next mutation has made of the mutable ones.
+ */
+internal fun snapshotPublishedInputs(
+    world: WorldData,
+    geometry: WorldMapData,
+    shapes: List<IsoShape>,
+    focus: Map<String, Focus>,
+    docs: List<Document>,
+    trips: List<Trip>,
+    starredDocId: String?,
+    today: LocalDate,
+) = PublishedInputs(
+    world = world,
+    geometry = geometry,
+    shapes = shapes,
+    focus = focus,
+    docs = docs.toList(),
+    trips = trips.toList(),
+    starredDocId = starredDocId,
+    today = today,
+)
+
+// Monotonic tickets for work that may be superseded: only the newest may write state, so a
+// late-finishing older run cannot overwrite it.
+internal class PublishGeneration {
+    // Volatile so a superseded run finishing on a worker sees the newer ticket.
+    @Volatile private var latest = 0
+
+    /** Takes the next ticket, superseding every earlier one. Called on the main thread only. */
+    fun next(): Int = ++latest
+
+    fun isCurrent(generation: Int): Boolean = generation == latest
 }
