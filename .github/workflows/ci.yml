@@ -17,6 +17,7 @@ jobs:
   unit-tests:
     name: JVM tests, lint, build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v6
@@ -41,6 +42,11 @@ jobs:
   emulator-tests:
     name: Android emulator tests
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Emulator minutes only on the shared branches and on PRs, not every feature push.
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'))
 
     steps:
       - uses: actions/checkout@v6
@@ -63,7 +69,7 @@ jobs:
       - name: Run instrumented tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 36
           target: google_apis
           arch: x86_64
-          script: ./gradlew :app:connectedCheck --stacktrace
+          script: ./gradlew :app:connectedDebugAndroidTest --stacktrace

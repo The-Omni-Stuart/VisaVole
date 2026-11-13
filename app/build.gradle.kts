@@ -36,6 +36,7 @@ android {
         targetSdk = 37
         versionCode = 4
         versionName = "1.0.0-alpha04"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -99,6 +100,11 @@ dependencies {
     // Real org.json for JVM unit tests (the mockable android.jar stubs would throw "not mocked").
     testImplementation(libs.orgJson)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
 }
 
 tasks.register("updateVisaDb") {
