@@ -135,7 +135,7 @@ class TripModelTest {
 
     @Test
     fun currentTripIdPrefersTheMostInProgressActiveTrip() {
-        // P3-2: two concurrently-active trips in one zone → current is the one with the most
+        // two concurrently-active trips in one zone → current is the one with the most
         // days, not the first inserted (tB is inserted first but is shallower).
         val trips = listOf(
             trip("tB", stop("sB", "FR", today.minusDays(1), null)),
@@ -289,7 +289,7 @@ class TripModelTest {
 
     @Test
     fun pastTripDeclaredDocDoesNotCapCurrentZone() {
-        // Regression (P1-5): a document declared on a PAST stay must not cap today's zone. The
+        // Regression: a document declared on a PAST stay must not cap today's zone. The
         // past trip exhausted single-entry visa V; the current open stay is on the passport,
         // which covers the zone visa-free — the ring must show the full window, not 0/DANGER.
         val visa = Document("v", "Visa", Custom(setOf("DE", "FR"), kind = "visa", entryType = "single"))
@@ -314,7 +314,7 @@ class TripModelTest {
 
     @Test
     fun inProgressEntryWithoutDateExpiryKeepsFullWindow() {
-        // Regression (P1-6): a single-entry visa with NO date expiry, mid-entry, must not cap
+        // Regression: a single-entry visa with NO date expiry, mid-entry, must not cap
         // the zone at 0 — exhaustion has not happened, the entry count limits re-entries only.
         val visa = Document("v", "Visa", Custom(setOf("DE", "FR"), kind = "visa", entryType = "single"))
         val w = world(stayRules = listOf(schengen))
@@ -411,6 +411,68 @@ class TripModelTest {
     }
 
     @Test
+    fun oneDayVisitInsideAZoneStayIsDayTripTolerance() {
+        // A single foreign stop inside a longer same-zone stay (a rail day trip) is tolerated;
+        // the boundary of that tolerance is pinned alongside the two-day case below.
+        val candidate = trip("c", stop("s1", "FR", today.plusDays(1), today.plusDays(10)))
+        val other = listOf(trip("e", stop("s1", "DE", today.plusDays(5), today.plusDays(5))))
+        val warnings = TripModel.overlapWarningsFor(candidate, other, listOf(passport("GB")), world(stayRules = listOf(schengen)), today)
+        assertTrue(warnings.none { it.title == "Trip overlap" })
+    }
+
+    @Test
+    fun twoDayVisitInsideAZoneStayWarns() {
+        val candidate = trip("c", stop("s1", "FR", today.plusDays(1), today.plusDays(10)))
+        val other = listOf(trip("e", stop("s1", "DE", today.plusDays(5), today.plusDays(6))))
+        val warnings = TripModel.overlapWarningsFor(candidate, other, listOf(passport("GB")), world(stayRules = listOf(schengen)), today)
+        assertTrue(warnings.any { it.title == "Trip overlap" })
+    }
+
+    @Test
+    fun sameDayHandoverAcrossTripsDoesNotWarn() {
+        val candidate = trip("c", stop("s1", "FR", today.plusDays(1), today.plusDays(14)))
+        val other = listOf(trip("e", stop("s1", "DE", today.plusDays(14), today.plusDays(20))))
+        val warnings = TripModel.overlapWarningsFor(candidate, other, listOf(passport("GB")), world(stayRules = listOf(schengen)), today)
+        assertTrue(warnings.none { it.title == "Trip overlap" })
+    }
+
+    /**
+     * A stop whose departure is blank is an open-ended stay, so a later same-country stop in
+     * another trip is a real overlap even though the candidate has no end date to compare.
+     */
+    @Test
+    fun openFutureStopWarnsAboutOverlapWithLaterTrip() {
+        val candidate = trip("c", stop("s1", "DE", today.plusDays(7), null))
+        val other = listOf(trip("e", stop("s1", "DE", today.plusDays(9), today.plusDays(12))))
+        val warnings = TripModel.overlapWarningsFor(candidate, other, listOf(passport("GB")), world(stayRules = listOf(schengen)), today)
+        assertTrue(warnings.any { it.title == "Trip overlap" })
+    }
+
+    @Test
+    fun openStopStartingBeforeTodayStillWarnsAboutFutureOverlap() {
+        val candidate = trip("c", stop("s1", "DE", today.minusDays(3), null))
+        val other = listOf(trip("e", stop("s1", "DE", today.plusDays(4), today.plusDays(10))))
+        val warnings = TripModel.overlapWarningsFor(candidate, other, listOf(passport("GB")), world(stayRules = listOf(schengen)), today)
+        assertTrue(warnings.any { it.title == "Trip overlap" })
+    }
+
+    /**
+     * An open-ended stay has no end date, so the only way a grant expiring mid-stay surfaces is
+     * by probing the day each document stops being valid.
+     */
+    @Test
+    fun projectionWarnsWhenGrantExpiresDuringOpenStay() {
+        val visa = Document("v", "Austria visa", Custom(setOf("AT"), kind = "visa", entryType = "multiple"), expiry = today.plusDays(15).toString())
+        val candidate = trip("c", stop("s1", "AT", today.plusDays(3), null, "v"))
+        val w = world(
+            countries = mapOf("AT" to Country("AT", "Austria")),
+            stayRules = emptyList(),
+        )
+        val warnings = TripModel.projectionWarningsFor(candidate, emptyList(), listOf(passport("GB"), visa), w, today)
+        assertTrue(warnings.any { it.code == "trip.access.none" || it.code == "trip.access.blocked" })
+    }
+
+    @Test
     fun projectionWarnsWhenAllowanceWouldBeExceeded() {
         val candidate = trip("c", stop("s1", "DE", today.minusDays(5), today.plusDays(90)))
         val warnings = TripModel.projectionWarningsFor(candidate, emptyList(), listOf(passport("GB")), world(stayRules = listOf(schengen)), today)
@@ -435,21 +497,21 @@ class TripModelTest {
         assertEquals("trip.access.none", none?.code)
         assertEquals(WarningSeverity.DANGER, none?.severity)
         // Visa required.
-        val vr = TripModel.accessWarningFor(Access(VISA_REQUIRED, null, "Passport rule"), "United Kingdom", today)
+        val vr = TripModel.accessWarningFor(Access(VISA_REQUIRED, null, AccessReason.PassportBaseline), "United Kingdom", today)
         assertEquals("trip.access.blocked", vr?.code)
         assertTrue("visa required" in (vr?.message ?: ""))
         // Entry refused.
-        val rf = TripModel.accessWarningFor(Access(REFUSED, null, "Passport rule"), "Syria", today)
+        val rf = TripModel.accessWarningFor(Access(REFUSED, null, AccessReason.PassportBaseline), "Syria", today)
         assertEquals("trip.access.blocked", rf?.code)
         assertTrue("entry refused" in (rf?.message ?: ""))
         // e-visa / eta: an extra step, but only a warning (not a hard block).
-        val ev = TripModel.accessWarningFor(Access(E_VISA, 90, "Passport rule"), "Australia", today)
+        val ev = TripModel.accessWarningFor(Access(E_VISA, 90, AccessReason.PassportBaseline), "Australia", today)
         assertEquals("trip.access.extraStep", ev?.code)
         assertEquals(WarningSeverity.WARNING, ev?.severity)
         // Visa-free, freedom and residence need no step: no warning.
-        assertNull(TripModel.accessWarningFor(Access(VISA_FREE, 90, "Passport rule"), "Andorra", today))
-        assertNull(TripModel.accessWarningFor(Access(FREEDOM, null, "Bloc"), "Germany", today))
-        assertNull(TripModel.accessWarningFor(Access(RESIDENCE, null, "Residence"), "Czechia", today))
+        assertNull(TripModel.accessWarningFor(Access(VISA_FREE, 90, AccessReason.PassportBaseline), "Andorra", today))
+        assertNull(TripModel.accessWarningFor(Access(FREEDOM, null), "Germany", today))
+        assertNull(TripModel.accessWarningFor(Access(RESIDENCE, null), "Czechia", today))
     }
 
     @Test
@@ -505,7 +567,7 @@ class TripModelTest {
 
     @Test
     fun firstGapIndexSkipsAnOpenNonFinalStopToFindALaterGap() {
-        // P3-1: a non-final open stop must not bail the scan — a later real gap is still found.
+        // a non-final open stop must not bail the scan — a later real gap is still found.
         val stops = listOf(
             stop("s1", "DE", today, null),
             stop("s2", "DE", today.plusDays(5), today.plusDays(6)),
@@ -521,7 +583,7 @@ class TripModelTest {
             stop("s1", "DE", today, today),
             stop("s2", "FR", today.plusDays(3), null),
         )
-        val warnings = TripModel.gapWarningsFor(t, today)
+        val warnings = TripModel.gapWarningsFor(t)
         assertEquals(1, warnings.size)
         assertEquals(WarningSeverity.WARNING, warnings.first().severity)
         assertEquals("Gap between stops", warnings.first().title)
@@ -564,9 +626,9 @@ class TripModelTest {
 
     @Test
     fun shortStaySuppressionAppliesOnlyToFreedomAndResidence() {
-        assertTrue(TripModel.isShortStaySuppressed(Access(AccessLevel.FREEDOM, null, "freedom")))
-        assertTrue(TripModel.isShortStaySuppressed(Access(AccessLevel.RESIDENCE, null, "residence")))
-        assertTrue(!TripModel.isShortStaySuppressed(Access(AccessLevel.VISA_FREE, 90, "visa free")))
+        assertTrue(TripModel.isShortStaySuppressed(Access(AccessLevel.FREEDOM, null)))
+        assertTrue(TripModel.isShortStaySuppressed(Access(AccessLevel.RESIDENCE, null)))
+        assertTrue(!TripModel.isShortStaySuppressed(Access(AccessLevel.VISA_FREE, 90)))
         assertTrue(!TripModel.isShortStaySuppressed(null))
     }
 
@@ -627,7 +689,7 @@ class TripModelTest {
 
     @Test
     fun closeTripDoesNotExtendAlreadyClosedFinalStop() {
-        // P2-12: a final stop already closed with an EARLIER departure is kept — extending
+        // a final stop already closed with an EARLIER departure is kept — extending
         // recorded history would silently inflate the country's zone usage. Truncating to an
         // earlier close date is allowed.
         val original = trip(
@@ -671,7 +733,7 @@ class TripModelTest {
 
     @Test
     fun rollingWindowDropsStaysOutsideLookback() {
-        // P2-36: pin the 180-day lookback boundary — a stay that ended well outside the window
+        // pin the 180-day lookback boundary — a stay that ended well outside the window
         // counts nothing, and one day at exactly the window start (today-179) still counts.
         // A lookback off-by-one flips one of these two.
         val outside = trip("t1", stop("s1", "DE", today.minusDays(200), today.minusDays(190))) // 11 days, outside
@@ -684,7 +746,7 @@ class TripModelTest {
 
     @Test
     fun projectionWarnsWhenAllowanceWouldGetLow() {
-        // P2-37: trip.allowance.low — the candidate does not exceed the window, but only
+        // trip.allowance.low — the candidate does not exceed the window, but only
         // ≤7 days remain after it.
         val candidate = trip("c", stop("s1", "DE", today.plusDays(5), today.plusDays(91))) // 87 of the 90 days
         val warnings = TripModel.projectionWarningsFor(candidate, emptyList(), listOf(passport("GB")), world(stayRules = listOf(schengen)), today)
@@ -695,7 +757,7 @@ class TripModelTest {
 
     @Test
     fun projectionWarnsWhenCandidateUsesLastEntry() {
-        // P2-37: trip.entries.last — the candidate's own future stop consumes the document's
+        // trip.entries.last — the candidate's own future stop consumes the document's
         // final entry (remaining hits 0, not negative).
         val v = Document("v", "Visa", Custom(setOf("US"), null, "visa", null, "double"), "2030-01-01")
         val past = trip("t1", stop("s1", "US", today.minusDays(30), today.minusDays(25), "v"))
@@ -708,7 +770,7 @@ class TripModelTest {
 
     @Test
     fun projectionCountsSeparatedFutureStopOnOpenStayAsReEntry() {
-        // P2-13: a single-entry visa with an open in-progress stay plus the candidate's separated
+        // a single-entry visa with an open in-progress stay plus the candidate's separated
         // future stop on the same doc is a re-entry — 2 entries against 1 → DANGER
         // "Not enough entries" (the old merge-into-the-open-entry logic reported
         // WARNING "Last entry used" instead).
@@ -721,7 +783,7 @@ class TripModelTest {
 
     @Test
     fun projectionWarnsWhenCountryNeedsExtraStep() {
-        // P2-37: trip.access.extraStep — a destination needing an e-visa/ETA on the trip dates
+        // trip.access.extraStep — a destination needing an e-visa/ETA on the trip dates
         // (a warning, not a block).
         val w = world(
             countries = mapOf("AU" to Country("AU", "Australia")),
@@ -736,7 +798,7 @@ class TripModelTest {
 
     @Test
     fun expiredPassportNationalityDoesNotDriveStayRule() {
-        // P2-30: the traveller holds a valid GB passport and an expired FR passport, staying in a
+        // the traveller holds a valid GB passport and an expired FR passport, staying in a
         // neutral country (DE) with no document declared. The stay rule must resolve on the valid
         // GB nationality's 60-day rule — the expired FR nationality must not pull in the FR-keyed
         // 90-day rule. (DE, not FR: an FR stay is suppressed as a home-country stay regardless.)
@@ -753,7 +815,7 @@ class TripModelTest {
 
     @Test
     fun exhaustedDocSnapshotShowsDangerAtExhaustionDate() {
-        // P2-38: a single-entry visa whose one stay is over is spent: zero entries left, pinned
+        // a single-entry visa whose one stay is over is spent: zero entries left, pinned
         // to the exhaustion date (the stay's end). (The AllowanceStatus.EXHAUSTED branch is
         // shadowed here — an exhausted doc's effective expiry is by definition in the past, so
         // the expiry check reports DANGER first; that is what the UI shows.)
@@ -772,7 +834,7 @@ class TripModelTest {
 
     @Test
     fun lastEntryDocSnapshotWarns() {
-        // P2-38: WARNING at remaining == 1 — a double-entry visa with one entry used.
+        // WARNING at remaining == 1 — a double-entry visa with one entry used.
         val v = Document("v", "Visa", Custom(setOf("US"), null, "visa", null, "double"), "2030-01-01")
         val trips = listOf(trip("t1", stop("s1", "US", today.minusDays(12), today.minusDays(8), "v")))
         val calc = TripModel.calculate(trips, listOf(v), world(), today)
@@ -785,7 +847,7 @@ class TripModelTest {
 
     @Test
     fun docSnapshotSubtitleFormat() {
-        // P2-38: the subtitle is "<entry type> · Expires <date>"; the entry-type half is omitted
+        // the subtitle is "<entry type> · Expires <date>"; the entry-type half is omitted
         // for unlimited-entry docs and the date half when there is no expiry.
         val double = Document("v", "Visa", Custom(setOf("US"), null, "visa", null, "double"), "2030-01-01")
         val unlimited = Document("u", "Visa", Custom(setOf("US"), null, "visa", null, "multiple"), "2030-01-01")
@@ -798,7 +860,7 @@ class TripModelTest {
 
     @Test
     fun passportSnapshotShowsValidityNotEntries() {
-        // P2-38: a passport gets a DOCUMENT_VALIDITY snapshot — no entry count, just "Expires".
+        // a passport gets a DOCUMENT_VALIDITY snapshot — no entry count, just "Expires".
         val p = Document("p", "Passport · GB", Passport("GB"), expiry = "2026-10-12")
         val calc = TripModel.calculate(emptyList(), listOf(p), world(), today)
         val a = calc.allowances.first { it.key == "doc:p" }
@@ -862,5 +924,14 @@ class TripModelTest {
         assertEquals(7, schengenAllowance.usedDays)
         assertEquals(83, schengenAllowance.remainingDays)
         assertEquals(3, counted.lookups)
+    }
+
+    @Test
+    fun entryPointsCompileOnlyWithAnExplicitToday() {
+        // one today for the whole publish: these entry points no longer carry their own clock,
+        // so the file stops compiling the moment anyone drops the date — these calls are the pin.
+        val sections = TripModel.sections(listOf(trip("t1", stop("s1", "DE", today.plusDays(3), null))), today)
+        assertEquals(1, sections.upcoming.size)
+        assertEquals("Schengen Area", world(stayRules = listOf(schengen)).stayRuleFor("DE", setOf("GB"), today)?.zoneName)
     }
 }

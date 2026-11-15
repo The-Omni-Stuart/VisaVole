@@ -4,6 +4,7 @@ import com.cbkres.visavole.data.WorldMapData
 import com.cbkres.visavole.domain.Access
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.DocStatus
+import com.cbkres.visavole.domain.GuardResult
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripSections
@@ -35,6 +36,9 @@ sealed interface AppState {
         val allowances: List<AllowanceSnapshot> = emptyList(),
         /** The effective primary passport id (null when no valid passport is held). */
         val primaryDocId: String? = null,
+        /** This publish's guard verdict for removing each document id — screens read it instead
+         *  of re-evaluating the guard per document on the main thread. */
+        val removeBlockings: Map<String, GuardResult> = emptyMap(),
         /** The raw starred document id (may point at an expired document). */
         val starredDocId: String? = null,
         val today: LocalDate,

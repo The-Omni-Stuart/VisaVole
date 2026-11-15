@@ -22,13 +22,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.cbkres.visavole.R
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.ringColor
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
+import com.cbkres.visavole.ui.toUtcIsoDate
+import java.time.LocalDate
 
 /**
  * The tab-top allowance display, shared by the Trips tab (zone allowances) and the Documents tab
@@ -45,6 +49,7 @@ internal fun StatusCard(
     allowances: List<AllowanceSnapshot>,
     primary: AllowanceSnapshot?,
     focusedKey: String?,
+    today: LocalDate,
     onFocus: (String) -> Unit,
     onRingClick: (AllowanceSnapshot) -> Unit = {},
     titleRow: (@Composable RowScope.(AllowanceSnapshot) -> Unit)? = null,
@@ -76,7 +81,15 @@ internal fun StatusCard(
                     }
                 }
                 it.subtitle?.let { s -> Text(s, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                Text(allowanceSummary(it), style = MaterialTheme.typography.labelMedium, color = ringColor(it, LocalEffectiveDarkTheme.current))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(allowanceSummary(it), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = ringColor(it, LocalEffectiveDarkTheme.current))
+                    // Honest date for the day-dependent numbers the summary just printed.
+                    Text(
+                        stringResource(R.string.status_today, today.toUtcIsoDate()),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
         Spacer(Modifier.height(16.dp))

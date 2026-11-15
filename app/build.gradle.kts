@@ -9,6 +9,14 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Pin the JDK instead of relying on the ambient one (local CI both use 25). The bytecode
+// targets stay on compileOptions below — Kotlin 2.2.x has no JVM target 25.
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
 // Release signing: the keystore lives OUTSIDE the repo (see the keystore.properties
 // path) and is referenced by a gitignored keystore.properties. Without it, release
 // artifacts are built unsigned (CI can inject it via secrets).
@@ -64,6 +72,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+    }
+    lint {
+        // Ratchet: existing warnings are baselined so only new ones surface in reports and CI.
+        baseline = file("lint-baseline.xml")
     }
     buildFeatures {
         compose = true

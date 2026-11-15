@@ -37,12 +37,10 @@ import com.cbkres.visavole.ui.screens.map.IsoShape
 import com.cbkres.visavole.ui.screens.map.buildFocus
 import com.cbkres.visavole.ui.screens.map.buildShapes
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -66,7 +64,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     private val stateStore = VisaStateStore(file = backup.stateFile, scope = viewModelScope)
     @Volatile private var world: WorldData? = null
     private val geometry: WorldMapData by lazy { WorldGeometry.load(application) }
-    // Built once on the IO thread at load time and shipped via AppState.Ready (P3-40).
+    // Built once on the IO thread at load time and shipped via AppState.Ready.
     @Volatile private var shapes: List<IsoShape>? = null
     @Volatile private var focus: Map<String, Focus>? = null
 
@@ -75,15 +73,27 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Transient user feedback, shown as a snackbar by the UI. Emitted whenever a guarded
      *  mutation is rejected by the backstop, so no blocked action is ever silent. */
-    private val _snacks = Channel<String>(Channel.BUFFERED)
-    val snacks: Flow<String> = _snacks.receiveAsFlow()
-    private fun snack(message: String) {
-        _snacks.trySend(message)
+    private val snackQueue = SnackQueue()
+    val snacks: Flow<String> = snackQueue.flow
+    private fun snack(message: String, sticky: Boolean = false) {
+        // Past capacity the feedback would vanish silently; a log is the honest minimum.
+        if (!snackQueue.send(message, sticky)) {
+            Log.w(TAG, "Snack channel full; dropped feedback: $message")
+        }
     }
+
+    /** Drops the feedback buffered before the main screen first appeared; call once, from it. */
+    fun discardStaleSnacks() {
+        if (staleSnacksDiscarded) return
+        staleSnacksDiscarded = true
+        snackQueue.dropBuffered()
+    }
+
+    private var staleSnacksDiscarded = false
 
     /** M6: skipped records must have a voice before an edit persists the shrunken set. */
     private fun snackUnreadableRecords(count: Int) {
-        snack("$count record${if (count == 1) "" else "s"} could not be read — your backup may be damaged")
+        snack("$count record${if (count == 1) "" else "s"} could not be read — your backup may be damaged", sticky = true)
     }
 
     private var docs: MutableList<Document> = mutableListOf()
@@ -94,7 +104,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
     private val publishGate = PublishGeneration()
     // M6: records the pending restore's file held but could not read; voiced when the restore lands.
     private var restoreDroppedRecords = 0
-    // P3-48: persisted state is read off the main thread, once, before the first world load.
+    // persisted state is read off the main thread, once, before the first world load.
     @Volatile private var stateRead = false
 
     init {
@@ -109,7 +119,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    // P3-48: read the persisted state off the main thread, once, before deriving the
+                    // read the persisted state off the main thread, once, before deriving the
                     // home countries from the loaded docs. retryLoad skips it — by then the in-memory
                     // state (and the async writes it triggered) is already authoritative.
                     if (!stateRead) {
@@ -123,7 +133,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     val initialHomes = AccessModel.homeCountries(docs)
                     world = repository.loadWorld(initialHomes)
-                    // P3-40: pre-build the map shapes + per-country focus here (IO thread) rather than
+                    // pre-build the map shapes + per-country focus here (IO thread) rather than
                     // on the main thread at first composition — the one-time ~121k-point Path
                     // construction would otherwise add to first-frame latency on top of the load.
                     shapes = buildShapes(geometry)
@@ -133,7 +143,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
                 // here on the main thread, keeping every state mutation single-threaded.
                 ensurePrimaryPassport()
                 normalizeResidenceClasses(world!!)
-                // P3-41: neither of the above changes the passport set, so homeCountries is unchanged
+                // neither of the above changes the passport set, so homeCountries is unchanged
                 // and the world loaded above is still correct. The old "reload if finalHomes differs"
                 // branch (a full second read/parse of the ~7.4 MB DB) was dead code.
                 publish()
@@ -177,6 +187,16 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     /** One "today" per publish cycle: screens, derived state and the guard backstop all read this. */
     private var today: LocalDate = LocalDate.now(ZoneOffset.UTC)
+
+    /**
+     * Called by the UI's ON_RESUME observer: an app left open across UTC midnight must not keep
+     * showing yesterday's numbers. Recomputes only when the date actually rolled over, so a
+     * resume storm (every tab switch back) cannot recompute the world.
+     */
+    fun onResume() {
+        if (world == null) return // nothing published yet; the load publishes its own date
+        if (shouldRepublish(today, LocalDate.now(ZoneOffset.UTC))) publish()
+    }
 
     // The derivation is the heaviest per-mutation work, so it runs off-main on a snapshot;
     // only the newest scheduled derivation writes state.
@@ -224,7 +244,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
             }
             if (!reloadGate.isCurrent(gen)) return@launch
             if (w == null) {
-                snack("Could not reload the visa database; showing the last good state.")
+                snack("Could not reload the visa database; showing the last good state.", sticky = true)
                 return@launch
             }
             world = w
@@ -274,14 +294,14 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Onboarding's "add your first passport": the same guarded add path as the documents tab.
      *  Returns the blocking findings when the guard rejects the add (empty on success). */
-    // P3-55: takes validFrom as well as expiry so onboarding can record a full (or no) validity
+    // takes validFrom as well as expiry so onboarding can record a full (or no) validity
     // period, symmetric with the add-doc dialog.
     fun addOnboardingPassport(iso2: String, validFrom: String? = null, expiry: String? = null): List<GuardFinding> =
         addDocument(passportDocument(iso2, world?.countries?.get(iso2)?.name, expiry, validFrom))
 
     /** Adds or updates [doc] through the guard backstop. Returns the blocking findings when the
      *  guard rejects the mutation (empty on success), so callers can surface why nothing happened.
-     *  The first block is ALSO snack'd here (P2-6): the dialogs close unconditionally after submit,
+     *  The first block is ALSO snack'd here: the dialogs close unconditionally after submit,
      *  so without this the backstop's rejection — the only one that can disagree with the dialog's
      *  own evaluation — would vanish with the filled form and zero feedback. */
     fun addDocument(doc: Document): List<GuardFinding> {
@@ -342,6 +362,8 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         publish()
     }
 
+    // Intentionally outside the guard: deletion must never be blocked — the user owns their trips,
+    // and the delete confirm dialog (ongoing-aware) is the warning surface.
     fun removeTrip(id: String) {
         trips = trips.filterNot { it.id == id }.toMutableList()
         persist()
@@ -350,7 +372,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     /** UX close of an ongoing trip — intentionally outside the guard (see spec §Phase 3). */
     fun endTrip(id: String, departure: LocalDate) {
-        // P3-50: a stale id used to no-op silently — surface it instead (the path is modal-blocked
+        // a stale id used to no-op silently — surface it instead (the path is modal-blocked
         // today, but it was the last silent return left in the VM).
         if (trips.none { it.id == id }) {
             snack("That trip no longer exists.")
@@ -392,7 +414,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Replace the live state with [state] (after the user confirms), then re-persist and republish. */
     fun applyRestore(state: PersistedState) {
-        // P2-4: a restore bypasses the guard's supersession-on-add, so a hand-edited or foreign
+        // a restore bypasses the guard's supersession-on-add, so a hand-edited or foreign
         // backup could carry a state the UI can never create (two valid documents for one country).
         // Validate before swapping it in; on violation keep the current state so a bad backup can't
         // clobber the user's data.
@@ -472,7 +494,7 @@ internal fun deriveReady(input: PublishedInputs): AppState.Ready {
     val effectiveDocs = if (homeCountries.isNotEmpty()) TripModel.effectiveDocs(docs, trips, world, today, statuses = statuses) else docs
     val access =
         if (homeCountries.isNotEmpty()) AccessModel.compute(effectiveDocs, world, today, trips = trips, statuses = statuses) else emptyMap()
-    // P2-27/28: thread this publish's access map + per-doc candidate maps into the
+    // thread this publish's access map + per-doc candidate maps into the
     // calculation so zone usage and gate probes reuse them instead of recomputing.
     val calc = if (homeCountries.isNotEmpty()) TripModel.calculate(
         trips, docs, world, today, statuses = statuses,
@@ -480,8 +502,15 @@ internal fun deriveReady(input: PublishedInputs): AppState.Ready {
         candidateMaps = AccessModel.candidateMaps(docs, world, statuses),
     )
     else TripCalculation(TripSections(emptyList(), emptyList(), emptyList()), emptyList(), emptyMap())
+    // Removal verdicts, derived here so the documents screen never re-runs the guard per
+    // document on the main thread (the last per-publish fan-out of that kind).
+    val guardCtx = GuardContext.of(docs, trips, world, starredDocId, today)
+    val removeBlockings = docs.associateBy({ it.id }, { d ->
+        GuardEngine.evaluate(GuardAction.RemoveDocument(d.id), guardCtx)
+    })
     return AppState.Ready(
         homeCountries = homeCountries,
+        removeBlockings = removeBlockings,
         ownVisaCountries = ownVisaCountries,
         docs = docs,
         access = access,
@@ -522,6 +551,9 @@ internal fun snapshotPublishedInputs(
     starredDocId = starredDocId,
     today = today,
 )
+
+/** The resume-storm guard: republish the derived state only when the UTC date actually changed. */
+internal fun shouldRepublish(published: LocalDate, observed: LocalDate): Boolean = published != observed
 
 // Monotonic tickets for work that may be superseded: only the newest may write state, so a
 // late-finishing older run cannot overwrite it.

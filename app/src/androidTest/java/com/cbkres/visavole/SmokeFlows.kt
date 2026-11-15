@@ -5,6 +5,7 @@ package com.cbkres.visavole
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -20,6 +21,12 @@ internal const val STEP_TIMEOUT_MS = 30_000L
  *  "exactly one" here). */
 internal fun ComposeTestRule.waitForAnyText(vararg texts: String, timeoutMillis: Long = STEP_TIMEOUT_MS) {
     texts.forEach { waitUntilAtLeastOneExists(hasText(it), timeoutMillis) }
+}
+
+/** Click the bottom-nav tab labelled [label]: tab labels share their wording with the matching
+ *  screen's header, so the tab's selectable role — not the bare text — must pick it. */
+internal fun ComposeTestRule.clickNavTab(label: String) {
+    onNode(hasText(label) and isSelectable()).performClick()
 }
 
 /** The one editable field on screen — the app's text fields also carry their label as merged

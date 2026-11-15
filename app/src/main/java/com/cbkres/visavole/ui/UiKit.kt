@@ -37,6 +37,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -57,31 +58,32 @@ import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.WorldData
 import com.cbkres.visavole.domain.docCategory
-import com.cbkres.visavole.ui.screens.map.HOME
-import com.cbkres.visavole.ui.screens.map.HOME_DARK
-import com.cbkres.visavole.ui.screens.map.NO_DATA
+import com.cbkres.visavole.domain.toDateOrNull
 import com.cbkres.visavole.ui.screens.map.STATUS_CHIP_ALPHA
 import com.cbkres.visavole.ui.screens.map.Severity
 import com.cbkres.visavole.ui.screens.map.severityColor
 import com.cbkres.visavole.ui.screens.map.statusTone
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.time.Duration.Companion.milliseconds
 
-// --- Date helpers (one canonical copy; previously duplicated in Trips/Documents/Onboarding) ---
+// --- Date helpers ---
 
-internal fun Long.toUtcIsoDate(): String {
-    val d = Instant.ofEpochMilli(this).atOffset(ZoneOffset.UTC).toLocalDate()
-    return "%04d-%02d-%02d".format(d.year, d.monthValue, d.dayOfMonth)
-}
+/** The app's one ISO date text; everything that shows or persists a date as text goes through it. */
+internal fun LocalDate.toUtcIsoDate(): String = toString()
+
+internal fun Long.toUtcIsoDate(): String =
+    Instant.ofEpochMilli(this).atOffset(ZoneOffset.UTC).toLocalDate().toUtcIsoDate()
 
 internal fun LocalDate.toUtcMillis(): Long = atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
 
-internal fun LocalDate.toUtcIsoDate(): String = "%04d-%02d-%02d".format(year, monthValue, dayOfMonth)
-
-internal fun String.toUtcMillis(): Long? = runCatching { LocalDate.parse(this).toUtcMillis() }.getOrNull()
+internal fun String.toUtcMillis(): Long? = toDateOrNull()?.toUtcMillis()
 
 // --- Document presentational helpers (shared by the cards and the tab-top allowance display) ---
 
@@ -92,7 +94,7 @@ internal fun String.toUtcMillis(): Long? = runCatching { LocalDate.parse(this).t
  */
 internal fun docTypeBadge(doc: Document, world: WorldData, isDark: Boolean): Pair<String, Color> =
     when (doc.kind) {
-        is DocKind.Passport -> "Passport" to (if (isDark) HOME_DARK else HOME)
+        is DocKind.Passport -> "Passport" to statusTone(null, isDark, isHome = true)
         else -> if (doc.docCategory(world) == "residence") {
             "Residence" to statusTone(AccessLevel.RESIDENCE, isDark)
         } else {
@@ -204,13 +206,21 @@ internal fun VisaListCard(
     val shape = CardDefaults.elevatedShape
     // Dedicated source so the programmatic flash doesn't fight the body tap's own interaction.
     val flashSource = remember { MutableInteractionSource() }
+    val flashScope = rememberCoroutineScope()
+    val flashMutex = remember { Mutex() }
     var flashCenter by remember { mutableStateOf(Offset.Zero) }
     LaunchedEffect(flashTrigger) {
         if (flashTrigger == 0) return@LaunchedEffect
-        val press = PressInteraction.Press(flashCenter)
-        flashSource.emit(press)
-        delay(300.milliseconds)
-        flashSource.emit(PressInteraction.Release(press))
+        // A flash started while one is still running must not strand its Press: the unparented
+        // job finishes its pair before the next one begins, and cannot be cancelled mid-pair.
+        flashScope.launch(NonCancellable) {
+            flashMutex.withLock {
+                val press = PressInteraction.Press(flashCenter)
+                flashSource.emit(press)
+                delay(300.milliseconds)
+                flashSource.emit(PressInteraction.Release(press))
+            }
+        }
     }
     val cardModifier = modifier
         .fillMaxWidth()
@@ -342,7 +352,7 @@ internal fun VisaSnackbarHost(hostState: SnackbarHostState, modifier: Modifier =
 // --- Allowance ring: shared by the Trips tab (112.dp primary + switcher) and the Documents tab (72.dp per document) ---
 
 internal fun allowanceFraction(a: AllowanceSnapshot): Float = when {
-    // P3-25: guard a zero-day window — dividing by 0f is NaN and would poison drawArc's sweep.
+    // guard a zero-day window — dividing by 0f is NaN and would poison drawArc's sweep.
     a.totalDays != null && a.usedDays != null && a.totalDays > 0 -> ((a.totalDays - a.usedDays).coerceAtLeast(0) / a.totalDays.toFloat()).coerceIn(0f, 1f)
     a.entryTotal != null && a.entryRemaining != null -> (a.entryRemaining.toFloat() / a.entryTotal).coerceIn(0f, 1f)
     a.remainingDays != null -> (a.remainingDays.coerceAtLeast(0) / 90f).coerceIn(0f, 1f)
@@ -359,7 +369,7 @@ internal fun ringColor(a: AllowanceSnapshot, isDark: Boolean): Color {
         Severity.BAD,
         isDark
     ) // no document assigned — flash red like an overstay
-    if (a.status == AllowanceStatus.UNKNOWN) return NO_DATA // neutral slate — allowance unknown (one NO-DATA entry, see MapColors)
+    if (a.status == AllowanceStatus.UNKNOWN) return statusTone(null, isDark) // neutral slate — allowance unknown
     val severity = when {
         a.overstayDays > 0 || a.status == AllowanceStatus.DANGER || a.status == AllowanceStatus.EXHAUSTED -> Severity.BAD
         a.kind == AllowanceKind.ENTRY_COUNT -> when {

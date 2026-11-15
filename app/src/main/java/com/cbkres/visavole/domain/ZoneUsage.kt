@@ -65,8 +65,10 @@ internal fun zoneUsages(
             val rule = rules.forDest(stop.countryIso2, allowSynthetic = !isSuppressed)
                 ?: if (!isSuppressed) {
                     access[stop.countryIso2]
-                        ?.takeIf { it.level == VISA_FREE && it.days != null && it.days > 0 }
-                        ?.let { world.syntheticStayRuleFor(stop.countryIso2, it.days!!) }
+                        ?.takeIf { it.level == VISA_FREE }
+                        ?.days
+                        ?.takeIf { it > 0 }
+                        ?.let { world.syntheticStayRuleFor(stop.countryIso2, it) }
                 } else {
                     null
                 }
@@ -194,15 +196,13 @@ internal fun expiryCapFor(
     candidateMaps: Map<String, Map<String, Access>>? = null,
 ): LocalDate? {
     val docById = docs.associateBy { it.id }
+    val stopsAtAsOf = trips
+        .flatMap { it.stops }
+        .filter { !it.arrival.isAfter(asOf) && (it.departure == null || !it.departure.isBefore(asOf)) }
     return rule.countries
         .mapNotNull { country ->
-            val declared = trips
-                .flatMap { it.stops }
-                .filter {
-                    it.countryIso2 == country &&
-                        !it.arrival.isAfter(asOf) &&
-                        (it.departure == null || !it.departure.isBefore(asOf))
-                }
+            val declared = stopsAtAsOf
+                .filter { it.countryIso2 == country }
                 .mapNotNull { it.documentId }
                 .filter { docById.containsKey(it) }
                 .toSet()

@@ -12,19 +12,16 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.Country
@@ -36,6 +33,7 @@ import com.cbkres.visavole.ui.VisaDatePickerDialog
 import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.toUtcIsoDate
 import com.cbkres.visavole.ui.toUtcMillis
+import com.cbkres.visavole.ui.VoleAlertDialog
 import java.time.LocalDate
 
 /** First-run setup: add the traveller's first passport (required to compute the map). */
@@ -50,15 +48,15 @@ internal fun OnboardingScreen(
     // survives process death; the transient addError is intentionally not saved.
     var query by rememberSaveable { mutableStateOf("") }
     var pendingIso by rememberSaveable { mutableStateOf<String?>(null) }
-    // P3-55: symmetric with the add-doc dialog — a validity period is both-or-neither, entered as
+    // symmetric with the add-doc dialog — a validity period is both-or-neither, entered as
     // a chained start → expiry pair.
     var showValidityDialog by rememberSaveable { mutableStateOf(false) }
     var showValidFromPicker by rememberSaveable { mutableStateOf(false) }
     var showExpiryPicker by rememberSaveable { mutableStateOf(false) }
     var validFromMillis by rememberSaveable { mutableStateOf<Long?>(null) }
     var addError by remember { mutableStateOf<String?>(null) }
-    // P3-44: remember the country list so it only re-runs when the query or the country set
-    // changes, not on every recomposition (every scroll frame via P1-14). Blank query shows
+    // remember the country list so it only re-runs when the query or the country set
+    // changes, not on every recomposition. Blank query shows
     // the full alphabetical list; otherwise the shared ranked matching applies.
     val list = remember(countries, query) {
         if (query.isBlank()) countries.values.sortedBy { it.name }
@@ -142,23 +140,22 @@ internal fun OnboardingScreen(
         val iso = pendingIso
         if (iso != null) {
             val countryName = countries[iso]?.name ?: iso
-            AlertDialog(
-                onDismissRequest = { showValidityDialog = false },
-                title = { Text("$countryName passport") },
-                text = { Text("Add validity dates (start and expiry) for this passport? You can skip both and add them later from the documents screen.") },
-                confirmButton = {
-                    Button(onClick = {
-                        showValidityDialog = false
-                        showValidFromPicker = true
-                    }) { Text("Choose dates") }
+            VoleAlertDialog(
+                title = "$countryName passport",
+                confirmLabel = "Choose dates",
+                onConfirm = {
+                    showValidityDialog = false
+                    showValidFromPicker = true
                 },
-                dismissButton = {
-                    // P3-55: "Skip" means neither date (both-or-neither), not just no expiry.
-                    TextButton(onClick = {
-                        addError = onAddPassport(iso, null, null).firstOrNull()?.message
-                        showValidityDialog = false
-                    }) { Text("Skip") }
+                // "Skip" means neither date (both-or-neither), not just no expiry; Back just closes.
+                neutralLabel = "Skip",
+                onNeutral = {
+                    addError = onAddPassport(iso, null, null).firstOrNull()?.message
+                    showValidityDialog = false
                 },
+                dismissLabel = null,
+                onDismiss = { showValidityDialog = false },
+                content = { Text("Add validity dates (start and expiry) for this passport? You can skip both and add them later from the documents screen.") },
             )
         }
     }
@@ -190,7 +187,7 @@ internal fun OnboardingScreen(
                 val iso = pendingIso
                 val vfrom = validFromMillis
                 if (iso == null || vfrom == null) {
-                    // P3-55: a validity period is both-or-neither — the flow sets both, so a lone
+                    // a validity period is both-or-neither — the flow sets both, so a lone
                     // date can't be saved here.
                     addError = "Set both a start and an end date, or skip both."
                     return@VisaDatePickerDialog

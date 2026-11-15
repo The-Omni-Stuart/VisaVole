@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.AccessModel
+import com.cbkres.visavole.domain.DocStatus
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.TripStop
 import com.cbkres.visavole.domain.WorldData
@@ -46,7 +47,11 @@ internal fun TripStopList(
     maxHeight: Dp,
     onEdit: (TripStop) -> Unit,
     onRemove: (TripStop) -> Unit,
+    statuses: Map<String, DocStatus> = emptyMap(),
 ) {
+    val validHomes = remember(docs, world, today, statuses) {
+        AccessModel.validHomeCountries(docs, world, today, statuses = statuses)
+    }
     val stopsScroll = rememberScrollState()
     val (stopsTop, stopsEnd) = stopsScroll.hazeAlphas()
     HazeBox(
@@ -74,6 +79,7 @@ internal fun TripStopList(
                     world = world,
                     docs = docs,
                     today = today,
+                    validHomes = validHomes,
                     onClick = { onEdit(stop) },
                     onRemove = { onRemove(stop) },
                 )
@@ -97,10 +103,10 @@ private fun StopRow(
     world: WorldData,
     docs: List<Document>,
     today: LocalDate,
+    validHomes: Set<String>,
     onClick: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    val validHomes = remember(docs, world, today) { AccessModel.validHomeCountries(docs, world, today) }
     val rule = world.stayRuleFor(stop.countryIso2, validHomes, today)
     val passportCounts = remember(docs) { passportCountsByIso(docs) }
     val passportNumbers = remember(docs) { passportNumbers(docs) }

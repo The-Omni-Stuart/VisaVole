@@ -37,7 +37,9 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Run all JVM unit tests, lint and build
-        run: ./gradlew :app:test :app:lintDebug :app:assembleDebug --stacktrace
+        # assembleRelease keeps R8 full mode and resource shrinking compiling on every push;
+        # without a keystore it produces an unsigned APK, which is all this job needs to check.
+        run: ./gradlew :app:test :app:lintDebug :app:assembleDebug :app:assembleRelease --stacktrace
 
   emulator-tests:
     name: Android emulator tests

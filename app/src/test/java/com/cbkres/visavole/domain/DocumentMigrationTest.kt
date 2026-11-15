@@ -15,9 +15,9 @@ class DocumentMigrationTest {
             Document("p1", "Passport · RU", DocKind.Passport("RU")),
             Document("p2", "Passport · IE", DocKind.Passport("IE")),
         )
-        assertEquals("p2", DocumentMigration.effectivePrimaryId(docs, primaryId = "p2"))
+        assertEquals("p2", DocumentMigration.effectivePrimaryId(docs, primaryId = "p2", today = LocalDate.parse("2026-01-01")))
         // No star: the first passport is the default.
-        assertEquals("p1", DocumentMigration.effectivePrimaryId(docs, primaryId = null))
+        assertEquals("p1", DocumentMigration.effectivePrimaryId(docs, primaryId = null, today = LocalDate.parse("2026-01-01")))
     }
 
     @Test fun effectivePrimaryIdFallsBackToFirstPassportWhenStarredExpired() {
@@ -31,7 +31,7 @@ class DocumentMigrationTest {
 
     @Test fun effectivePrimaryIdFallsBackWhenStarredMissing() {
         val docs = listOf(Document("p1", "Passport · RU", DocKind.Passport("RU")))
-        assertEquals("p1", DocumentMigration.effectivePrimaryId(docs, primaryId = "ghost"))
+        assertEquals("p1", DocumentMigration.effectivePrimaryId(docs, primaryId = "ghost", today = LocalDate.parse("2026-01-01")))
     }
 
     @Test fun effectivePrimaryIdMovesToNextSameNationalityWhenStarredExpires() {
@@ -51,7 +51,7 @@ class DocumentMigrationTest {
             Document("p1", "Passport · RU", DocKind.Passport("RU")),
         )
         // A starred visa is not a passport, so it never counts as the primary passport.
-        assertEquals("p1", DocumentMigration.effectivePrimaryId(docs, primaryId = "v1"))
+        assertEquals("p1", DocumentMigration.effectivePrimaryId(docs, primaryId = "v1", today = LocalDate.parse("2026-01-01")))
     }
 
     @Test fun effectivePrimaryIdSkipsExpiredPassportsForFallback() {

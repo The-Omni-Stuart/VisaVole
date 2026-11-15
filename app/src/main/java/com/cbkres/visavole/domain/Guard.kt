@@ -4,7 +4,6 @@ import com.cbkres.visavole.domain.GuardContext.Companion.of
 import com.cbkres.visavole.domain.GuardEngine.inUseEntriesRule
 import com.cbkres.visavole.domain.GuardEngine.supersessionStart
 import java.time.LocalDate
-import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 
 /**
@@ -54,7 +53,7 @@ data class GuardContext(
     val docs: List<Document>,
     val trips: List<Trip>,
     val world: WorldData,
-    val today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+    val today: LocalDate,
     /** The effective primary passport id (null when no valid passport is held) — the document the
      *  `trip.passport.*` rules evaluate against. */
     val primaryId: String? = null,
@@ -79,7 +78,7 @@ data class GuardContext(
             trips: List<Trip>,
             world: WorldData,
             starredDocId: String?,
-            today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+            today: LocalDate,
         ) = GuardContext(
             docs, trips, world, today,
             DocumentMigration.effectivePrimaryId(docs, starredDocId, today),
@@ -97,7 +96,6 @@ sealed class GuardAction {
     data class AddTrip(val candidate: Trip) : GuardAction()
     data class UpdateTrip(val candidate: Trip) : GuardAction()
     data class RemoveTrip(val tripId: String) : GuardAction()
-    data class EndTrip(val tripId: String) : GuardAction()
 }
 
 data class GuardResult(
@@ -119,8 +117,7 @@ object GuardEngine {
             is GuardAction.SetPrimary -> listOfNotNull(setPrimaryRule(action, ctx))
             is GuardAction.AddTrip -> tripRules(action, ctx)
             is GuardAction.UpdateTrip -> tripRules(action, ctx)
-            is GuardAction.RemoveTrip -> emptyList()
-            is GuardAction.EndTrip -> emptyList()
+            is GuardAction.RemoveTrip -> emptyList() // deleting your own trip is never blocked
         }
         return GuardResult(
             findings = results.flatMap { it.findings }.distinct(),
@@ -129,7 +126,7 @@ object GuardEngine {
     }
 
     /**
-     * P2-4: invariants the UI always maintains but a restored or foreign backup might not. The
+     * invariants the UI always maintains but a restored or foreign backup might not. The
      * guard supersedes on add, so a UI-created state never has two valid visa/residence documents
      * for the same country; a non-empty result means the backup was hand-edited or came from an
      * incompatible version. Returns one line per violating pair (passports are exempt — they are
@@ -181,7 +178,7 @@ object GuardEngine {
     }
 
     /**
-     * `doc.supersession.stale` (P2-5) — the candidate's identity changed (countries/kind) so it no
+     * `doc.supersession.stale` — the candidate's identity changed (countries/kind) so it no
      * longer overlaps a document it previously superseded; that document is revived by clearing the
      * stale pointer. Without this, an update to the replacement would leave the old doc archived
      * forever ("Replaced by …") even though the two no longer conflict. Editing an archived
@@ -207,7 +204,7 @@ object GuardEngine {
         )
     }
 
-    /** Whether an archived doc still conflicts with the replacement it points at (P2-5's predicate). */
+    /** Whether an archived doc still conflicts with the replacement it points at ('s predicate). */
     private fun supersessionMatches(archived: Document, replacement: Document, world: WorldData): Boolean =
         archived.docCategory(world) == replacement.docCategory(world) &&
             archived.coveredCountries(world).any { it in replacement.coveredCountries(world) }
@@ -239,8 +236,8 @@ object GuardEngine {
 
     /** `doc.validity.inverted` — a valid-from date after the expiry date is not a usable window. */
     private fun validityInvertedRule(candidate: Document, ctx: GuardContext): GuardResult? {
-        val from = parseIso(candidate.validFrom) ?: return null
-        val to = parseIso(candidate.expiry) ?: return null
+        val from = candidate.validFrom.toDateOrNull() ?: return null
+        val to = candidate.expiry.toDateOrNull() ?: return null
         if (!from.isAfter(to)) return null
         return GuardResult(listOf(
             GuardFinding(
@@ -254,7 +251,7 @@ object GuardEngine {
      * `doc.inUse.identity` — an in-use document's structural identity (or its residence class)
      * would change. The residence class is not part of [Document.identityKey] (it is harmless for
      * an unused document) but it IS guarded here: it gates residence-minimum benefits, so changing
-     * it under a trip silently changes that trip's access/stay math (P2-10).
+     * it under a trip silently changes that trip's access/stay math.
      */
     private fun inUseIdentityRule(action: GuardAction, candidate: Document, ctx: GuardContext): GuardResult? {
         if (action !is GuardAction.UpdateDocument) return null
@@ -303,7 +300,7 @@ object GuardEngine {
     private fun visaMultiCountryRule(action: GuardAction, candidate: Document, ctx: GuardContext): GuardResult? {
         val k = candidate.kind as? DocKind.Custom ?: return null
         if (k.kind != "visa" || k.countries.size <= 1) return null
-        // P3-6: don't re-ask when an edit leaves the country set unchanged (e.g. editing the expiry
+        // don't re-ask when an edit leaves the country set unchanged (e.g. editing the expiry
         // of an existing multi-country visa) — the confirmation was already given at creation.
         if (action is GuardAction.UpdateDocument) {
             val orig = action.original.kind as? DocKind.Custom
@@ -325,8 +322,8 @@ object GuardEngine {
         if (action !is GuardAction.UpdateDocument) return null
         if (candidate.id !in ctx.referencedDocIds) return null
         val e = TripModel.entryStatusFor(candidate, ctx.trips, ctx.world, ctx.today)?.effectiveExpiry
-            ?: parseIso(candidate.expiry)
-        val validFrom = parseIso(candidate.validFrom)
+            ?: candidate.expiry.toDateOrNull()
+        val validFrom = candidate.validFrom.toDateOrNull()
         val findings = mutableListOf<GuardFinding>()
         for (trip in ctx.trips) {
             for (stop in trip.stops.filter { it.documentId == candidate.id }) {
@@ -339,7 +336,7 @@ object GuardEngine {
                 }
                 // An expiry landing before a FUTURE stay starts is not caught by the whole-stay
                 // check below: an open-ended stop (no departure) ends at `today`, so the window
-                // between today and the arrival would slip through (P2-9).
+                // between today and the arrival would slip through.
                 if (e != null && e.isBefore(stop.arrival)) {
                     findings += GuardFinding(
                         "doc.inUse.validity", GuardSeverity.BLOCK, "In use by a trip",
@@ -372,7 +369,7 @@ object GuardEngine {
         val u = TripModel.entryStatusFor(candidate, ctx.trips, ctx.world, ctx.today)?.used ?: 0
         if (u < 1) {
             // Not used yet — but planned FUTURE trips referencing the document will consume
-            // entries too (P2-8). Symmetric to D3a, which already protects future stays from
+            // entries too. Symmetric to D3a, which already protects future stays from
             // date edits: warn when the planned usage would exceed the new total.
             val planned = plannedEntriesFor(candidate.id, ctx.trips, ctx.today)
             if (planned == 0 || planned <= n) return null
@@ -399,22 +396,18 @@ object GuardEngine {
 
     /**
      * Entries the document's FUTURE stops will consume: one per stay segment starting after [today]
-     * (consecutive stops that don't leave a gap share one entry). Used by [inUseEntriesRule] to
-     * protect planned trips from entry-count reductions.
+     * ([mergeStaySegments]), where an open stay's continuity bound is simply the latest date known
+     * so far. Used by [inUseEntriesRule] to protect planned trips from entry-count reductions.
      */
     private fun plannedEntriesFor(docId: String, trips: List<Trip>, today: LocalDate): Int {
-        var total = 0
-        for (t in trips) {
-            val future = t.stops
-                .filter { it.documentId == docId && it.arrival.isAfter(today) }
-                .sortedBy { it.arrival }
-            var stayEnd: LocalDate? = null
-            for (s in future) {
-                if (stayEnd == null || s.arrival.isAfter(stayEnd)) total++
-                stayEnd = s.departure ?: s.arrival
+        val future = trips
+            .flatMap { trip ->
+                trip.stops
+                    .filter { it.documentId == docId && it.arrival.isAfter(today) }
+                    .map { TrippedStop(trip.id, it) }
             }
-        }
-        return total
+            .sortedBy { it.stop.arrival }
+        return mergeStaySegments(future) { it.bound }.size
     }
 
     private fun entryTypeLabel(doc: Document): String = doc.entryType() ?: "unlimited"
@@ -423,7 +416,7 @@ object GuardEngine {
     private fun capRules(candidate: Document, ctx: GuardContext): GuardResult? {
         if (!heldAndValid(candidate, ctx)) return null
         val others = ctx.docs.filter { it.id != candidate.id }
-        // P3-5: a pending supersession frees a slot — subtract the still-valid documents the
+        // a pending supersession frees a slot — subtract the still-valid documents the
         // candidate would supersede so an 11th overlapping visa/residence isn't blocked.
         val freed = supersessionTargets(candidate, ctx).count { heldAndValid(it, ctx) }
         return when {
@@ -508,11 +501,11 @@ object GuardEngine {
         )
     }
 
-    /** P3-11: the supersession can't start before today — a backdated validFrom would rewrite
+    /** the supersession can't start before today — a backdated validFrom would rewrite
      *  history (an already-expired doc would read "Replaced by …" instead of "Expired on …") and
      *  could open a pointer cycle. */
     private fun supersessionStart(candidate: Document, ctx: GuardContext): LocalDate {
-        val validFrom = parseIso(candidate.validFrom)
+        val validFrom = candidate.validFrom.toDateOrNull()
         return if (validFrom != null && validFrom.isAfter(ctx.today)) validFrom else ctx.today
     }
 
@@ -551,7 +544,7 @@ object GuardEngine {
     private fun setPrimaryRule(action: GuardAction.SetPrimary, ctx: GuardContext): GuardResult? {
         val id = action.docId ?: return null
         val doc = ctx.docs.firstOrNull { it.id == id }
-        // P3-10: an unknown id is a ghost — block it instead of silently storing it (it only ever
+        // an unknown id is a ghost — block it instead of silently storing it (it only ever
         // self-heals, but the rule should reject it outright).
         if (doc == null) {
             return GuardResult(listOf(
@@ -611,7 +604,7 @@ object GuardEngine {
 
     /** `trip.gap` — adapter over [TripModel.gapWarningsFor]. */
     private fun gapRule(candidate: Trip, ctx: GuardContext): GuardResult? {
-        val warnings = TripModel.gapWarningsFor(candidate, ctx.today)
+        val warnings = TripModel.gapWarningsFor(candidate)
         if (warnings.isEmpty()) return null
         return GuardResult(warnings.map { w -> GuardFinding(w.code, GuardSeverity.WARN, w.title, w.message) })
     }
@@ -659,7 +652,7 @@ object GuardEngine {
             .filter { it.id != candidate.id && it.statusAt(ctx.today) == TripStatus.ONGOING }
             .minByOrNull { it.firstArrival }
             ?: return null
-        // P3-7: the "firstArrival after today" branch is unreachable (this rule only runs on
+        // the "firstArrival after today" branch is unreachable (this rule only runs on
         // ONGOING trips, which require firstArrival <= today).
         val end = if (candidate.firstArrival.isBefore(previous.firstArrival)) previous.firstArrival else candidate.firstArrival
         return GuardResult(
@@ -690,7 +683,7 @@ object GuardEngine {
             ?: passports.first()
         val kind = passport.kind as DocKind.Passport
         val expiryOf = { d: Document ->
-            DocStatus.of(d, ctx.docs, ctx.trips, ctx.world, ctx.today).effectiveExpiry ?: parseIso(d.expiry)
+            DocStatus.of(d, ctx.docs, ctx.trips, ctx.world, ctx.today).effectiveExpiry ?: d.expiry.toDateOrNull()
         }
         val expiry = expiryOf(passport) ?: return null
         val start = candidate.firstArrival
@@ -708,7 +701,7 @@ object GuardEngine {
                 "Your $name passport expires on $expiry (${daysUntil} days from now).",
             )
         }
-        // P3-8: use `!expiry.isBefore(start)` (expiry >= start) so a passport expiring exactly on
+        // use `!expiry.isBefore(start)` (expiry >= start) so a passport expiring exactly on
         // the trip start day is flagged — the strict `isAfter` let that case slip through both the
         // during-trip and the expired-before-trip checks.
         if (!expiry.isBefore(start) && (end == null || !expiry.isAfter(end))) {
@@ -734,7 +727,7 @@ object GuardEngine {
                     "Your passports are expired and cannot support entry to ${ctx.countryName(uncovered.countryIso2)}.",
                 )
             } else {
-                // P3-9: coverage may come from a *different* held passport, not the evaluated one —
+                // coverage may come from a *different* held passport, not the evaluated one —
                 // attribute it to the held passports collectively rather than to $name.
                 findings += GuardFinding(
                     "trip.passport.expiredBeforeTrip", GuardSeverity.WARN, "Passport expired",
@@ -751,5 +744,4 @@ object GuardEngine {
     // Helpers
     // ------------------------------------------------------------------
 
-    private fun parseIso(s: String?): LocalDate? = s?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
 }

@@ -191,7 +191,7 @@ class DocumentTest {
     }
 
     @Test fun docCategoryUnknownHoldingDefaultsToVisa() {
-        // P3-26: a holding id missing from the world data must not yield a null category (which
+        // a holding id missing from the world data must not yield a null category (which
         // would silently skip the per-country caps/supersession) — default it to "visa".
         assertEquals("visa", Document("d", "d", DocKind.Holding("ghost")).docCategory(world))
         // known holdings keep their real categories

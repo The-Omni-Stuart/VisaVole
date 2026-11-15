@@ -12,8 +12,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,7 +39,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -57,6 +54,7 @@ import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.app.AppState
 import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.screens.EmptyState
+import com.cbkres.visavole.ui.tapSink
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -74,7 +72,7 @@ internal fun MapScreen(
     modifier: Modifier = Modifier,
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
-    // P3-59: the search field must blur when the map is tapped or Back is pressed, otherwise it
+    // the search field must blur when the map is tapped or Back is pressed, otherwise it
     // keeps its focus/selection forever. This Compose build only exposes clearFocus on the
     // FocusManager (there is no public Modifier.clearFocus / FocusRequester), so grab the manager
     // from LocalFocusManager and clear directly. searchFocused (via onFocusChanged) gates the Back
@@ -92,7 +90,7 @@ internal fun MapScreen(
     if (query.isNotBlank() && query != shownQuery) shownQuery = query
     val matches = remember(shownQuery, s.world) { searchCountries(s.world.countries, shownQuery) }
     // Stable identity: a fresh lambda on every recomposition would make WorldMapCanvas re-run
-    // and repaint every country for the whole duration of the card slide (P1-13).
+    // and repaint every country for the whole duration of the card slide.
     val pick: (String?) -> Unit = remember {
         { iso: String? ->
             keyboardController?.hide()
@@ -166,7 +164,7 @@ internal fun MapScreen(
         CountrySearchBar(
             query = query,
             onQuery = onQuery,
-            // P3-16: the IME "Search" action picks the first match (previously it only hid the
+            // the IME "Search" action picks the first match (previously it only hid the
             // keyboard, leaving the dropdown open with nothing selected).
             onSearch = { matches.firstOrNull()?.let { pickFromSearch(it.iso2) } ?: keyboardController?.hide() },
             onFocusChanged = { searchFocused = it },
@@ -215,7 +213,7 @@ internal fun MapScreen(
                             s.access[selected]?.level == AccessLevel.RESIDENCE -> null // you live here — no short-stay limit
                             else -> s.world.stayRuleFor(selected, validHomes, s.today)
                         }
-                        AccessModel.breakdownFor(selected, s.docs, s.world, trips = s.trips) to
+                        AccessModel.breakdownFor(selected, s.docs, s.world, s.today, trips = s.trips) to
                                 AccessModel.stayLabelFor(selectedAccess, stayRule)
                     }
                     breakdown = b
@@ -304,7 +302,7 @@ internal fun MapScreen(
                     .onSizeChanged { legendH = Dp(it.height / density.density) },
             ) {
                 // Homes are their own "Your country" swatch, so legendCounts keeps them out of the
-                // level buckets and out of the slate count (P3-15); the slate row counts what the
+                // level buckets and out of the slate count; the slate row counts what the
                 // canvas can actually paint (the geometry set, incl. e.g. AQ which has no DB row).
                 MapLegend(
                     legendCounts(s.geometry.countries.keys, s.access, s.homeCountries),
@@ -327,19 +325,7 @@ internal fun MapScreen(
                     .padding(horizontal = 12.dp)
                     .offset(y = searchBarH)
                     .heightIn(max = 240.dp)
-                    // Pointer sink for taps landing on the dropdown's empty space or padding:
-                    // without a node here the hit test continues down to the map canvas, which
-                    // accepts already-consumed downs and would select a country behind the list.
-                    // Consuming only the release keeps the inner scroll and rows working.
-                    .pointerInput(Unit) {
-                        awaitEachGesture {
-                            awaitFirstDown()
-                            do {
-                                val event = awaitPointerEvent()
-                                event.changes.forEach { if (!it.pressed) it.consume() }
-                            } while (event.changes.any { it.pressed })
-                        }
-                    },
+                    .tapSink(),
             ) {
                 val searchScroll = rememberScrollState()
                 val (searchTop, searchEnd) = searchScroll.hazeAlphas()

@@ -40,13 +40,17 @@ internal fun buildDocument(draft: DocDraft, initial: Document?, world: WorldData
             Document(id, label, DocKind.Holding(h, initHolding.entryType), exp, vfrom, rc, supersededBy)
         }
         else -> {
+            val initCustom = initial?.kind as? DocKind.Custom
             val names = draft.countries.joinToString(", ") { countries[it]?.name ?: it }.take(80)
             val typeSuffix = draft.effectiveHolding?.let { hid -> " (${world.holdings[hid]?.name ?: hid})" } ?: ""
             // The tab carries identity only once the user moves it: while it sits on the tab the
             // document opened on, the stored kind survives — a legacy "permit" opens on the Visa
             // tab, so an untouched edit must not stamp it "visa" and break trip references.
-            val stored = (initial?.kind as? DocKind.Custom)?.kind
+            val stored = initCustom?.kind
             val kind = if (stored != null && initialTabFor(stored) == draft.docType) stored else draft.docType.kind
+            // The label prefix follows the guarded kind, never the raw tab: a legacy "Permit: …"
+            // document edited on the Visa tab must not be rebuilt as "Visa: …".
+            val typeLabel = kind.replaceFirstChar { it.uppercaseChar() }
             // Residence entry types are not editable on the tabs; an edit must not delete a stored
             // one, and visa documents keep the dialog's selection.
             val entry = when (draft.docType) {
@@ -54,14 +58,20 @@ internal fun buildDocument(draft: DocDraft, initial: Document?, world: WorldData
                 DocType.RESIDENCE -> (initial?.kind as? DocKind.Custom)?.entryType
                 else -> null
             }
+            // An edit that changed no identity input keeps the stored label verbatim: the legacy
+            // label formats vary, and a date-only save must never rename the document.
+            val identityUnchanged = initCustom != null && initCustom.countries == draft.countries &&
+                initCustom.blocId == draft.effectiveBloc && initCustom.holdingId == draft.effectiveHolding &&
+                initCustom.kind == kind && initCustom.entryType == entry
+            val label = if (identityUnchanged) initial!!.label else "$typeLabel: $names$typeSuffix"
             val rc = if (draft.docType == DocType.RESIDENCE) draft.residenceClass else null
-            Document(id, "${draft.docType.label}: $names$typeSuffix", DocKind.Custom(draft.countries, draft.effectiveBloc, kind, draft.effectiveHolding, entry), exp, vfrom, rc, supersededBy)
+            Document(id, label, DocKind.Custom(draft.countries, draft.effectiveBloc, kind, draft.effectiveHolding, entry), exp, vfrom, rc, supersededBy)
         }
     }
 }
 
 /** The tab an edit of a stored custom kind opens on — mirrors the dialog's tab initialisation. */
-private fun initialTabFor(kind: String): DocType = when (kind) {
+internal fun initialTabFor(kind: String): DocType = when (kind) {
     "visa", "permit" -> DocType.VISA
     "passport" -> DocType.PASSPORT
     else -> DocType.RESIDENCE

@@ -17,7 +17,6 @@ data class VisaFreshness(
 private const val GREEN_DAYS = 30L
 private const val AMBER_DAYS = 90L
 
-private fun parsed(date: String): LocalDate? = runCatching { LocalDate.parse(date) }.getOrNull()
 
 /**
  * Pure freshness verdict for the Settings data-build row. Age is measured from [generated]; the
@@ -33,10 +32,10 @@ fun freshnessFor(
     lapsingSoon: Int,
     today: LocalDate,
 ): VisaFreshness {
-    val build = parsed(generated)
+    val build = generated.toDateOrNull()
     val age = build?.let { ChronoUnit.DAYS.between(it, today) }
     val level = when {
-        age == null || parsed(rulesVerifiedAt) == null || parsed(nextReview) == null -> FreshnessLevel.NEUTRAL
+        age == null || rulesVerifiedAt.toDateOrNull() == null || nextReview.toDateOrNull() == null -> FreshnessLevel.NEUTRAL
         age <= GREEN_DAYS -> FreshnessLevel.GREEN
         age <= AMBER_DAYS -> FreshnessLevel.AMBER
         else -> FreshnessLevel.RED

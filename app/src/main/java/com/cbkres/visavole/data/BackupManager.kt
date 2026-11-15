@@ -49,7 +49,7 @@ class BackupManager(context: Context) {
             try {
                 writeBackupJson(state, out)
             } catch (e: Exception) {
-                // P3-33: a mid-write failure (disk full, permission revoked) can leave a truncated
+                // a mid-write failure (disk full, permission revoked) can leave a truncated
                 // backup at the chosen location — say so rather than reporting a clean failure.
                 return Outcome.Failed("Export failed mid-way; a partial backup may remain at the chosen location.")
             }

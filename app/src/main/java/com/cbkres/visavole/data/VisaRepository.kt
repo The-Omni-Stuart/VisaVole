@@ -80,7 +80,7 @@ class VisaRepository(private val db: VisaDb) {
         val out = mutableListOf<Regime>()
         c.rawQuery("SELECT id, name, level, members FROM mobility_regimes", null).use { cur ->
             while (cur.moveToNext()) {
-                // P3-31: shared lenient parser (see parseIso2Array) — identical to the JVM mirror,
+                // shared lenient parser (see parseIso2Array) — identical to the JVM mirror,
                 // so a malformed members string degrades instead of crashing the startup load.
                 out.add(Regime(cur.getString(0), cur.getString(1), cur.getString(2), parseIso2Array(cur.getString(3))))
             }
@@ -153,11 +153,7 @@ class VisaRepository(private val db: VisaDb) {
             while (cur.moveToNext()) {
                 out.add(
                     StayRule(
-                        zoneName = when {
-                            iZoneName >= 0 -> str(iZoneName) ?: ""
-                            iZone >= 0 -> str(iZone) ?: ""
-                            else -> ""
-                        },
+                        zoneName = zoneLabel(str(iZoneName), str(iZone)),
                         countries = jsonSet(str(iCountries)),
                         windowType = str(iWindowType) ?: "",
                         windowDays = intv(iWindowDays),
@@ -179,10 +175,4 @@ class VisaRepository(private val db: VisaDb) {
     }
 
     private fun jsonSet(json: String?): Set<String> = parseIso2Array(json).toSet()
-
-    /** Parse a comma list of entry types like `double,multiple`; null/blank = no restriction. */
-    private fun parseEntryTypes(csv: String?): Set<String> {
-        if (csv == null) return emptySet()
-        return csv.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-    }
 }

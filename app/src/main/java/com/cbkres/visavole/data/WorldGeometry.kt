@@ -24,7 +24,7 @@ object WorldGeometry {
         val bytes = context.assets.open("world_robinson.bin").use { it.readBytes() }
         val buf = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
         require(buf.getInt() == MAGIC) { "bad world_robinson.bin magic" }
-        // P3-30: a corrupt/tampered asset must degrade to an empty map, never crash startup. Every
+        // a corrupt/tampered asset must degrade to an empty map, never crash startup. Every
         // structural int is bounds-checked against the remaining buffer before it sizes an array,
         // and any BufferUnderflow (a truncated asset) falls back to the empty map.
         return try {

@@ -112,7 +112,7 @@ class StateCodecTest {
     @Test
     fun duplicateDocIdsDedupeFirstWins() {
         // A hand-edited backup with two docs sharing an id would crash the keyed lists and make
-        // an edit delete both twins — decode keeps the first occurrence (P1-7).
+        // an edit delete both twins — decode keeps the first occurrence.
         val text = StateCodec.encode(
             PersistedState(
                 "doc-passport",
@@ -255,7 +255,7 @@ class StateCodecTest {
     @Test
     fun nullIdDocIsSkippedNotMintedAsLiteralNull() {
         // org.json's getString on a JSON null returns the string "null": without the guard, a
-        // corrupt doc would decode to a document whose id is literally "null" (P2-3).
+        // corrupt doc would decode to a document whose id is literally "null".
         val json = """
             {"schemaVersion":3,"primaryDocId":null,
              "docs":[
@@ -292,7 +292,7 @@ class StateCodecTest {
     fun docWithUnparseableDateIsSkipped() {
         // A non-null date that doesn't parse would otherwise decode as unconstrained — an immortal
         // doc, or one valid immediately — because every downstream consumer wraps LocalDate.parse
-        // in runCatching. Skip such docs instead of minting them with garbage dates (P3-27).
+        // in runCatching. Skip such docs instead of minting them with garbage dates.
         val json = """
             {"schemaVersion":3,"primaryDocId":null,
              "docs":[
@@ -308,7 +308,7 @@ class StateCodecTest {
 
     @Test
     fun docsAndTripsFieldsPresentButNotArraysYieldEmpty() {
-        // P3-35: a hand-edited backup where `docs`/`trips` exist but aren't arrays must not crash —
+        // a hand-edited backup where `docs`/`trips` exist but aren't arrays must not crash —
         // optJSONArray returns null and decode falls back to an empty array.
         val json = """
             {"schemaVersion":3,"primaryDocId":null,"docs":42,"trips":"oops"}
@@ -320,7 +320,7 @@ class StateCodecTest {
 
     @Test
     fun customDocWithNonArrayCountriesIsSkipped() {
-        // P3-35: a custom doc whose `countries` is present but not an array throws in getJSONArray;
+        // a custom doc whose `countries` is present but not an array throws in getJSONArray;
         // decode catches it and skips the doc (a sibling valid doc survives).
         val json = """
             {"schemaVersion":3,"primaryDocId":null,
@@ -337,7 +337,7 @@ class StateCodecTest {
     @Test
     fun danglingSupersededByPointerIsClearedOnDecode() {
         // A backup that references a replacement not in the set would leave a chip that can never
-        // resolve; the decode choke point drops the dangling pointer (P2-4).
+        // resolve; the decode choke point drops the dangling pointer.
         val json = """
             {"schemaVersion":3,"primaryDocId":null,
              "docs":[
@@ -353,7 +353,7 @@ class StateCodecTest {
     @Test
     fun selfSupersededByPointerIsClearedOnDecode() {
         // A doc superseding itself would expire from today and vanish from the valid lists;
-        // decode drops the pointer (P2-4).
+        // decode drops the pointer.
         val json = """
             {"schemaVersion":3,"primaryDocId":null,
              "docs":[{"id":"doc-1","label":"Self","kind":"passport","iso2":"CZ","supersededBy":"doc-1"}],
@@ -394,7 +394,7 @@ class StateCodecTest {
     @Test
     fun primaryDocIdSurvivesDecodeIncludingDangling() {
         // The primary pointer is preserved verbatim (even when dangling) — the ViewModel
-        // re-derives a valid pointer on load; decode only enforces doc-set invariants (P2-40).
+        // re-derives a valid pointer on load; decode only enforces doc-set invariants.
         val json = """
             {"schemaVersion":3,"primaryDocId":"doc-gone","docs":[],"trips":[]}
         """.trimIndent()
@@ -428,5 +428,39 @@ class StateCodecTest {
         val state = StateCodec.decode(json).state
         assertEquals(1, state.docs.size)
         assertEquals("doc-passport", state.primaryDocId)
+    }
+
+    @Test
+    fun duplicateStopIdsCollapseToTheFirstStop() {
+        val json = """
+            {"schemaVersion":3,"primaryDocId":null,"docs":[],
+             "trips":[{"id":"t1","stops":[
+                {"id":"s1","country":"DE","arrival":"2027-06-01","departure":"2027-06-05"},
+                {"id":"s1","country":"FR","arrival":"2027-06-02"}
+             ]}]}
+        """.trimIndent()
+        val trip = StateCodec.decode(json).state.trips.single()
+        assertEquals(1, trip.stops.size)
+        assertEquals("DE", trip.stops.single().countryIso2)
+    }
+
+    @Test
+    fun aStopDepartingBeforeItsArrivalIsDropped() {
+        val json = """
+            {"schemaVersion":3,"primaryDocId":null,"docs":[],
+             "trips":[{"id":"t1","stops":[
+                {"id":"s1","country":"DE","arrival":"2027-06-10","departure":"2027-06-05"},
+                {"id":"s2","country":"FR","arrival":"2027-06-20"}
+             ]},
+             {"id":"t2","stops":[
+                {"id":"s3","country":"FR","arrival":"2027-07-01","departure":"2027-06-30"}
+             ]}]}
+        """.trimIndent()
+        val decoded = StateCodec.decode(json)
+        assertEquals(1, decoded.state.trips.size)
+        val trip = decoded.state.trips.single()
+        assertEquals(listOf("s2"), trip.stops.map { it.id })
+        // Two inverted stops drop, and t2 losing its only stop counts once more.
+        assertEquals(3, decoded.droppedRecords)
     }
 }

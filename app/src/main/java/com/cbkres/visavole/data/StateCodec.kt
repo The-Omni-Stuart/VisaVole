@@ -8,6 +8,7 @@ import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.ResidenceClass
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripStop
+import com.cbkres.visavole.domain.toDateOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
@@ -88,6 +89,7 @@ object StateCodec {
                 continue
             }
             val stops = mutableListOf<TripStop>()
+            val seenStopIds = mutableSetOf<String>()
             val stopArr = o.optJSONArray("stops") ?: JSONArray()
             for (j in 0 until stopArr.length()) {
                 val so = runCatching { stopArr.getJSONObject(j) }.getOrNull()
@@ -101,10 +103,16 @@ object StateCodec {
                             LocalDate.parse(so.getString("arrival")),
                             so.strOrNull("departure")?.let { d -> LocalDate.parse(d) },
                             so.strOrNull("documentId"),
-                        )
+                        // The editor refuses these spans and the guard never re-checks after
+                        // load, so a restore must not smuggle one in.
+                        ).also { require(it.departure == null || !it.departure.isBefore(it.arrival)) }
                     }.getOrNull()
                 }
-                if (stop == null) dropped++ else stops.add(stop)
+                // Duplicate stop ids merge to the first, like duplicate doc ids above.
+                when {
+                    stop == null -> dropped++
+                    seenStopIds.add(stop.id) -> stops.add(stop)
+                }
             }
             if (stops.isEmpty()) {
                 dropped++
@@ -197,7 +205,7 @@ object StateCodec {
         }
         val expiry = o.strOrNull("expiry")
         val validFrom = o.strOrNull("validFrom")
-        // P3-27: a non-null date that doesn't parse would otherwise decode as "unconstrained" —
+        // a non-null date that doesn't parse would otherwise decode as "unconstrained" —
         // an immortal doc, or one valid immediately — because every downstream consumer wraps
         // LocalDate.parse in runCatching. Skip the doc instead of minting one with garbage dates.
         if (!isDateOrNull(expiry) || !isDateOrNull(validFrom)) return null
@@ -207,7 +215,6 @@ object StateCodec {
     }
 
     /** True when [s] is null (unset) or a parseable ISO date — a non-null, unparseable date is
-     *  corrupt input (P3-27). */
-    private fun isDateOrNull(s: String?): Boolean =
-        s == null || runCatching { LocalDate.parse(s) }.isSuccess
+     *  corrupt input. */
+    private fun isDateOrNull(s: String?): Boolean = s == null || s.toDateOrNull() != null
 }

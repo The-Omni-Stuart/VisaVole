@@ -6,23 +6,18 @@ import com.cbkres.visavole.domain.DocKind.Custom
 import com.cbkres.visavole.domain.DocKind.Holding
 import com.cbkres.visavole.domain.DocKind.Passport
 import java.time.LocalDate
-import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 
 object TripModel {
 
-    private data class DocEntry(val start: LocalDate, val end: LocalDate?, val tripId: String)
-
-    private data class TrippedStop(val tripId: String, val stop: TripStop)
-
-    fun sections(trips: List<Trip>, today: LocalDate = LocalDate.now(ZoneOffset.UTC)): TripSections {
+    fun sections(trips: List<Trip>, today: LocalDate): TripSections {
         val upcoming = trips.filter { it.statusAt(today) == TripStatus.UPCOMING }.sortedBy { it.firstArrival }
         val current = trips.filter { it.statusAt(today) == TripStatus.ONGOING }.sortedBy { it.firstArrival }
         val previous = trips.filter { it.statusAt(today) == TripStatus.PREVIOUS }.sortedByDescending { it.firstArrival }
         return TripSections(upcoming, current, previous)
     }
 
-    fun validateTrip(trip: Trip, world: WorldData, today: LocalDate = LocalDate.now(ZoneOffset.UTC)): List<TripWarning> =
+    fun validateTrip(trip: Trip, world: WorldData, today: LocalDate): List<TripWarning> =
         TripWarnings.validateTrip(trip, world, today)
 
     fun closeTrip(trip: Trip, departure: LocalDate): Trip {
@@ -32,7 +27,7 @@ object TripModel {
             stops = trip.stops.map { stop ->
                 when {
                     // A final stop that is already closed keeps its earlier departure: extending
-                    // recorded history would silently inflate the country's zone usage (P2-12).
+                    // recorded history would silently inflate the country's zone usage.
                     // Truncating to an earlier close is allowed.
                     stop.id == last.id ->
                         if (stop.departure == null || stop.departure.isAfter(safeDeparture)) stop.copy(departure = safeDeparture) else stop
@@ -47,7 +42,7 @@ object TripModel {
         trips: List<Trip>,
         docs: List<Document>,
         world: WorldData,
-        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        today: LocalDate,
         statuses: Map<String, DocStatus>? = null,
         /** The publish's access map, reused for the zone suppression set instead of a second
          *  full `AccessModel.compute`. Null (standalone/tests) computes its own. */
@@ -57,7 +52,7 @@ object TripModel {
     ): TripCalculation {
         val tripSections = sections(trips, today)
         val docStatuses = statuses ?: DocStatus.all(docs, trips, world, today)
-        // P3-4: derive the entry-status map from the threaded DocStatus.entries instead of
+        // derive the entry-status map from the threaded DocStatus.entries instead of
         // re-running computeEntryStatus per doc — DocStatus.all already computed each one.
         val entryStatus = docStatuses.mapNotNull { (id, status) -> status.entries?.let { id to it } }.toMap()
         val zoneAllowances = zoneUsages(trips, docs, world, today, access, docStatuses).mapNotNull { (key, usage) ->
@@ -74,27 +69,17 @@ object TripModel {
         return TripCalculation(tripSections, allowances, entryStatus)
     }
 
-    fun entryStatusFor(
-        docs: List<Document>,
-        trips: List<Trip>,
-        world: WorldData,
-        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
-    ): Map<String, EntryStatus> =
-        docs
-            .filter { isVisaLike(it, world) || it.entryType() != null }
-            .associate { it.id to computeEntryStatus(it, trips, today, iso(it.validFrom), iso(it.expiry)) }
-
     /**
      * The entry status of a single document, or null when it carries no entry count and is not
-     * visa-like (e.g. a passport). The per-document form of [entryStatusFor].
+     * visa-like (e.g. a passport).
      */
     fun entryStatusFor(
         doc: Document,
         trips: List<Trip>,
         world: WorldData,
-        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        today: LocalDate,
     ): EntryStatus? =
-        if (isVisaLike(doc, world) || doc.entryType() != null) computeEntryStatus(doc, trips, today, iso(doc.validFrom), iso(doc.expiry)) else null
+        if (isVisaLike(doc, world) || doc.entryType() != null) computeEntryStatus(doc, trips, today, doc.validFrom.toDateOrNull(), doc.expiry.toDateOrNull()) else null
 
     /** [entryStatusFor] for callers that already hold [doc]'s parsed dates (see [DocStatus.of]). */
     internal fun entryStatusFor(
@@ -116,7 +101,7 @@ object TripModel {
         docs: List<Document>,
         trips: List<Trip>,
         world: WorldData,
-        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        today: LocalDate,
         statuses: Map<String, DocStatus>? = null,
     ): List<Document> {
         val all = statuses ?: DocStatus.all(docs, trips, world, today)
@@ -130,7 +115,7 @@ object TripModel {
         trips: List<Trip>,
         docs: List<Document>,
         world: WorldData,
-        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        today: LocalDate,
     ): List<TripWarning> = TripWarnings.overlapWarningsFor(candidate, trips, docs, world, today)
 
     fun accessWarningFor(access: Access?, countryName: String, date: LocalDate): TripWarning? =
@@ -141,7 +126,7 @@ object TripModel {
         trips: List<Trip>,
         docs: List<Document>,
         world: WorldData,
-        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        today: LocalDate,
     ): List<TripWarning> = TripWarnings.projectionWarningsFor(candidate, trips, docs, world, today)
 
     fun primaryAllowance(allowances: List<AllowanceSnapshot>, focusedKey: String? = null): AllowanceSnapshot? {
@@ -189,7 +174,7 @@ object TripModel {
     fun firstGapIndex(stops: List<TripStop>): Int? {
         val ordered = sortedStops(stops)
         for (i in 0 until ordered.lastIndex) {
-            // P3-1: skip (not bail on) an open stop so a later gap is still found — matches
+            // skip (not bail on) an open stop so a later gap is still found — matches
             // gapWarningsFor, which `continue`s past open stops.
             val departure = ordered[i].departure ?: continue
             if (ordered[i + 1].arrival > departure.plusDays(1)) return i + 1
@@ -197,8 +182,8 @@ object TripModel {
         return null
     }
 
-    fun gapWarningsFor(trip: Trip, today: LocalDate = LocalDate.now(ZoneOffset.UTC)): List<TripWarning> =
-        TripWarnings.gapWarningsFor(trip, today)
+    fun gapWarningsFor(trip: Trip): List<TripWarning> =
+        TripWarnings.gapWarningsFor(trip)
 
     fun stopOverlapWarningsFor(trip: Trip): List<TripWarning> =
         TripWarnings.stopOverlapWarningsFor(trip)
@@ -244,7 +229,7 @@ object TripModel {
         val total = entry?.total ?: entryTotalFor(doc.entryType())
         val used = entry?.used ?: 0
         val remaining = entry?.remaining
-        val expiry = status?.let { gateCapDate(it) } ?: entry?.effectiveExpiry ?: iso(doc.expiry)
+        val expiry = status?.let { gateCapDate(it) } ?: entry?.effectiveExpiry ?: doc.expiry.toDateOrNull()
         val daysToExpiry = expiry?.let { ChronoUnit.DAYS.between(asOf, it) }
         // Only the entry type and the expiry date here — the "N days left" / "N entries
         // remaining" halves live on the coloured summary line of the tab-top display.
@@ -304,15 +289,7 @@ object TripModel {
                     .map { TrippedStop(trip.id, it) }
             }
             .sortedBy { it.stop.arrival }
-        val entries = mutableListOf<DocEntry>()
-        for (ts in stops) {
-            val last = entries.lastOrNull()
-            if (last == null || (last.end != null && ts.stop.arrival > last.end.plusDays(1))) {
-                entries.add(DocEntry(ts.stop.arrival, ts.stop.departure, ts.tripId))
-            } else {
-                entries[entries.lastIndex] = last.copy(end = mergeEnd(last.end, ts.stop.departure))
-            }
-        }
+        val entries = mergeStaySegments(stops) { it.end }
         val usedEntries = entries.filter { it.start <= asOf }
         val used = usedEntries.size
         val active = entries.firstOrNull { it.start <= asOf && (it.end == null || asOf <= it.end) }
@@ -357,7 +334,7 @@ object TripModel {
         asOf: LocalDate,
     ): Int? {
         val total = entryTotalFor(doc.entryType()) ?: return null
-        val from = iso(doc.validFrom)
+        val from = doc.validFrom.toDateOrNull()
         val all = (trips + candidate)
             .flatMap { trip ->
                 trip.stops
@@ -365,18 +342,9 @@ object TripModel {
                     .map { TrippedStop(trip.id, it) }
             }
             .sortedBy { it.stop.arrival }
-        val entries = mutableListOf<DocEntry>()
-        for (ts in all) {
-            val last = entries.lastOrNull()
-            // Open entry: for the projection it ends at [asOf], so a separated future stop is a
-            // re-entry instead of merging into the unknown open stay.
-            val lastEnd = last?.end ?: asOf
-            if (last == null || ts.stop.arrival > lastEnd.plusDays(1)) {
-                entries.add(DocEntry(ts.stop.arrival, ts.stop.departure, ts.tripId))
-            } else {
-                entries[entries.lastIndex] = last.copy(end = mergeEnd(last.end, ts.stop.departure))
-            }
-        }
+        // Open stay: for the projection it ends at [asOf], so a separated future stop is a
+        // re-entry instead of merging into the unknown open stay.
+        val entries = mergeStaySegments(all) { it.end ?: asOf }
         val used = entries.count { it.start <= asOf || it.tripId == candidate.id }
         return total - used
     }
@@ -394,12 +362,4 @@ object TripModel {
         else -> null
     }
 
-    private fun mergeEnd(a: LocalDate?, b: LocalDate?): LocalDate? = when {
-        a == null -> b
-        b == null -> null
-        else -> if (a.isAfter(b)) a else b
-    }
-
-    private fun iso(s: String?): LocalDate? =
-        s?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
 }

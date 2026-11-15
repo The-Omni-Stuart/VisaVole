@@ -1,7 +1,6 @@
 package com.cbkres.visavole.domain
 
 import java.time.LocalDate
-import java.time.ZoneOffset
 
 /** A country as stored in the VisaDB `countries` table. */
 data class Country(val iso2: String, val name: String)
@@ -210,7 +209,7 @@ data class WorldData(
      * which beats the "any" wildcard (1). Returns null when no rule names the destination or none
      * matches the traveller's nationality.
      */
-    fun stayRuleFor(dest: String, passports: Set<String>, today: LocalDate = LocalDate.now(ZoneOffset.UTC), allowSynthetic: Boolean = true): StayRule? {
+    fun stayRuleFor(dest: String, passports: Set<String>, today: LocalDate, allowSynthetic: Boolean = true): StayRule? {
         val cands = stayRules.filter { dest in it.countries && isStayRuleValidOn(it, today) }
         val hasEuEea = passports.any { it in euEeaMembers }
         fun score(nats: Set<String>): Int = when {
@@ -252,8 +251,8 @@ data class WorldData(
     }
 
     private fun isStayRuleValidOn(rule: StayRule, today: LocalDate): Boolean {
-        rule.validFrom?.let { from -> runCatching { LocalDate.parse(from) }.getOrNull() }?.let { if (it.isAfter(today)) return false }
-        rule.validTo?.let { to -> runCatching { LocalDate.parse(to) }.getOrNull() }?.let { if (it.isBefore(today)) return false }
+        rule.validFrom.toDateOrNull()?.let { if (it.isAfter(today)) return false }
+        rule.validTo.toDateOrNull()?.let { if (it.isBefore(today)) return false }
         return true
     }
 

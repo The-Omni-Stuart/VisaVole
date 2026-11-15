@@ -87,6 +87,29 @@ class PublishDerivationTest {
     }
 
     @Test
+    fun publishedStateCarriesTheRemoveVerdictOfEveryDocument() {
+        val visa = Document("v", "Visa: France (Schengen Visa)", DocKind.Custom(setOf("FR"), entryType = "single"), null)
+        val albania = Document("al", "Residence: Albania", DocKind.Custom(setOf("AL"), kind = "residence"), null)
+        val inUse = Trip(
+            "t1",
+            listOf(
+                TripStop("t1-s", "DE", today.minusDays(5), today.plusDays(5), documentId = passport.id),
+                TripStop("t1-v", "FR", today.plusDays(10), today.plusDays(15), documentId = visa.id),
+            ),
+        )
+        val busy = deriveReady(inputs(listOf(inUse)).let { it.copy(docs = listOf(passport, visa, albania)) })
+        assertEquals(setOf(passport.id, visa.id, albania.id), busy.removeBlockings.keys)
+        for (id in listOf(passport.id, visa.id)) {
+            assertFalse(
+                "a document used by a trip must not read as removable (was: $id)",
+                busy.removeBlockings.getValue(id).canProceed,
+            )
+        }
+        assertTrue(busy.removeBlockings.getValue(albania.id).canProceed)
+        val idle = deriveReady(inputs(emptyList()).let { it.copy(docs = busy.docs) })
+        assertTrue(idle.removeBlockings.values.all { it.canProceed })
+    }
+    @Test
     fun snapshotPublishedInputsFreezesTheLiveLists() {
         val liveDocs = mutableListOf(passport)
         val liveTrips = mutableListOf(trip("t1"))

@@ -180,7 +180,7 @@ object JdbcRepository {
                 while (rs.next()) {
                     out.add(
                         StayRule(
-                            zoneName = str("zone_name") ?: str("zone") ?: "",
+                            zoneName = zoneLabel(str("zone_name"), str("zone")),
                             countries = parseIso2Array(str("countries")).toSet(),
                             windowType = str("window_type") ?: "",
                             windowDays = intv("window_days"),
@@ -200,11 +200,5 @@ object JdbcRepository {
             }
         }
         return out
-    }
-
-    /** Parse a comma list of entry types like `double,multiple`; null/blank = no restriction. */
-    private fun parseEntryTypes(csv: String?): Set<String> {
-        if (csv == null) return emptySet()
-        return csv.split(",").map { it.trim() }.filter { it.isNotEmpty() }.toSet()
     }
 }

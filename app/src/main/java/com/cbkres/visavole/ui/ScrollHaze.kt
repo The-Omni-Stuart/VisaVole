@@ -35,7 +35,7 @@ private fun HazeEdges(
     horizontal: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    // P3-42: the brushes depend only on `color`/`horizontal`, not the per-frame alphas, so remember
+    // the brushes depend only on `color`/`horizontal`, not the per-frame alphas, so remember
     // them — otherwise a scroll frame rebuilds up to two gradient brushes per HazeBox.
     val startFade = remember(color, horizontal) {
         if (horizontal) Brush.horizontalGradient(0f to color, 1f to Color.Transparent)

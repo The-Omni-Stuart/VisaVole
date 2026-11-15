@@ -53,7 +53,7 @@ private fun zoneLabel(rule: StayRule?, fallback: String): String = when {
 // The allowance display (ring kit, AllowanceSection, AllowanceCard) lives in UiKit — shared with
 // the Documents tab.
 
-/** One expanded stop's derived display values, computed once per trip row (P3-43). */
+/** One expanded stop's derived display values, computed once per trip row. */
 private data class StopRow(
     val countryName: String,
     val zoneLabel: String,
@@ -61,8 +61,8 @@ private data class StopRow(
     val zoneAllowance: AllowanceSnapshot?,
 )
 
-/** Everything a TripCard derives per trip, computed once per publish (P3-43) so a card's row
- *  doesn't re-derive on every scroll-frame recomposition (amplified by P1-14). */
+/** Everything a TripCard derives per trip, computed once per publish so a card's row
+ *  doesn't re-derive on every scroll-frame recomposition. */
 private data class TripCardRow(
     val sortedStops: List<TripStop>,
     val stops: List<StopRow>,

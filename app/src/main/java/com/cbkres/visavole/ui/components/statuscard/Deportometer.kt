@@ -38,7 +38,7 @@ import kotlinx.coroutines.delay
 /** Entry-count documents rotate to a days-to-expiry face this close to their expiry. */
 private const val RING_ROTATE_MAX_DAYS = 90     // TODO: Probably shouldn't hard code this.
 
-// TODO: Make this more generic since it's used for document expiery as well
+// TODO: Make this more generic since it's used for document expiry as well
 
 /**
  * The allowance donut: the remaining window (or remaining entries) drawn in the status colour,
@@ -94,7 +94,7 @@ internal fun Deportometer(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Mod
         noValidDoc -> "NO DOC" to ""
         overstay -> "-${a.overstayDays}" to "OVERSTAY!"
         // A window-less (UNKNOWN) allowance has no remaining count — show "no data", not a bogus
-        // "0 days left" (P2-20).
+        // "0 days left".
         a.status == AllowanceStatus.UNKNOWN -> "—" to "no data"
         docKind && a.status == AllowanceStatus.DANGER -> "Expired" to "on ${a.effectiveExpiry ?: "unknown"}"
         a.kind == AllowanceKind.ENTRY_COUNT && a.currentTripId != null -> "In use" to entriesRemainingPhrase(a.entryRemaining)
@@ -107,9 +107,9 @@ internal fun Deportometer(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Mod
     // The centre box is a *minimum* height, not a fixed one: at normal text sizes both faces sit in
     // an identical 58dp box (so the crossfade's own size never changes and the text stays parked on
     // the ring's centre line), but at large accessibility font scales the box grows to fit the
-    // scaled text instead of clipping it (P2-18).
+    // scaled text instead of clipping it.
     val faceHeight = 58.dp
-    // P2-22: the donut is a Canvas plus two Text nodes; merge them into a single accessible node
+    // the donut is a Canvas plus two Text nodes; merge them into a single accessible node
     // so TalkBack announces the allowance's state in one stop instead of the number and label as
     // separate, meaningless fragments.
     val ringDescription = "Allowance: ${allowanceSummary(a)}"

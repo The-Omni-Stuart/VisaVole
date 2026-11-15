@@ -8,6 +8,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.RandomAccessFile
 
 /** [VisaStateStore.load]'s result: the file's [state] plus [droppedRecords] records it could not read. */
 data class LoadedState(val state: PersistedState, val droppedRecords: Int)
@@ -23,6 +24,10 @@ internal class VisaStateStore(
     scope: CoroutineScope,
     // Test seam: production always encodes with StateCodec.
     private val encode: (PersistedState) -> String = StateCodec::encode,
+    // Test seams: production fsyncs and renames for real; tests pin the durability protocol's
+    // order and exercise the rename-denied fallback.
+    private val sync: (File) -> Unit = VisaStateStore::fsync,
+    private val rename: (File, File) -> Boolean = { src, dest -> src.renameTo(dest) },
 ) {
     // Ordered queue of snapshots handed to the writer below (Kotlin runs property initializers +
     // init blocks in source order). Drained in FIFO order on the IO dispatcher so rapid mutations
@@ -34,7 +39,7 @@ internal class VisaStateStore(
      *  refuses to run, because writing would overwrite the user's only copy of the data. */
     @Volatile private var stateFileBlocked = false
 
-    // P3-56: mtime of the state file as of our last write (or the read at startup). If it advances
+    // mtime of the state file as of our last write (or the read at startup). If it advances
     // on its own before the next persist(), something else (e.g. a pushed A/B fixture) modified the
     // file while we were running, and persist() would silently clobber that change.
     @Volatile private var lastPersistMs: Long = 0L
@@ -78,7 +83,7 @@ internal class VisaStateStore(
         val f = file
         try {
             if (!f.exists()) return null
-            // P3-56: baseline the mtime we read so the first persist() doesn't false-positive on a
+            // baseline the mtime we read so the first persist() doesn't false-positive on a
             // pre-existing (older) file.
             lastPersistMs = f.lastModified()
             val decoded = StateCodec.decode(f.readText())
@@ -103,7 +108,7 @@ internal class VisaStateStore(
                 stateFileBlocked = true
                 Log.e(TAG, "Unreadable state file $f could not be quarantined; persisting disabled for this process")
             }
-            // P3-29: cap the quarantine files so repeated decode failures don't accumulate forever.
+            // cap the quarantine files so repeated decode failures don't accumulate forever.
             // parentFile is @Nullable in java.io.File (null only for a parentless path, which the
             // caller's filesDir-based path never is), so prune only when there is a directory.
             f.parentFile?.let { pruneQuarantined(it) }
@@ -135,7 +140,13 @@ internal class VisaStateStore(
         writeFile(text)
     }
 
-    /** Atomic tmp-write + rename for one encoded state. */
+    /**
+     * Durable tmp-write + atomic rename for one encoded state. The tmp file is fsynced **before**
+     * the rename (else a power cut can swap in not-yet-durable bytes and leave a file that
+     * decodes corrupt), and the directory is fsynced after (the rename itself is only durable
+     * once its directory entry is). A failed rename falls back to a second tmp + rename — never
+     * a copy onto the live file, which truncates the user's only copy before writing it.
+     */
     private fun writeFile(text: String) {
         // Flag the A/B fixture race — the file changed on disk since we last wrote it, so we
         // are about to overwrite a change made by something else (e.g. an adb push of a state file).
@@ -148,9 +159,27 @@ internal class VisaStateStore(
             // process death mid-write leaves the previous file intact instead of truncated JSON.
             val tmp = File(file.parentFile, "${file.name}.tmp")
             tmp.writeText(text)
-            if (!tmp.renameTo(file)) {
-                tmp.copyTo(file, overwrite = true)
+            sync(tmp)
+            if (!rename(tmp, file)) {
+                // Cross-device or denied replace: stage via a second tmp and rename that. If even
+                // this rename fails, give up — refusing loses only this edit, while copying
+                // straight onto the live file loses everything on a cut mid-copy.
+                val alt = File(file.parentFile, "${file.name}.alt-tmp")
+                if (alt.exists() && !alt.delete()) {
+                    Log.e(TAG, "Could not clear stale alt tmp $alt; refusing to persist")
+                    return
+                }
+                tmp.copyTo(alt, overwrite = false)
+                sync(alt)
                 tmp.delete()
+                if (rename(alt, file)) {
+                    file.parentFile?.let { dir -> runCatching { sync(dir) } }
+                } else {
+                    alt.delete()
+                    Log.e(TAG, "Neither rename of $file succeeded; refusing to overwrite the live state file")
+                }
+            } else {
+                file.parentFile?.let { dir -> runCatching { sync(dir) } }
             }
             lastPersistMs = file.lastModified()
         } catch (e: Exception) {
@@ -158,7 +187,21 @@ internal class VisaStateStore(
         }
     }
 
-    /** P3-29: keep only the newest [keep] quarantine files so a run of decode failures doesn't fill
+    /** Flush a file's bytes (or a directory's entries) to durable storage. */
+    private fun fsync(f: File) {
+        try {
+            RandomAccessFile(f, "r").use { it.fd.sync() }
+        } catch (e: Exception) {
+            // ext4 refuses O_RDONLY directory fds; reopen for writing to get a syncable one.
+            try {
+                RandomAccessFile(f, "rw").use { it.fd.sync() }
+            } catch (e2: Exception) {
+                Log.w(TAG, "Could not fsync $f", e2)
+            }
+        }
+    }
+
+    /** keep only the newest [keep] quarantine files so a run of decode failures doesn't fill
      *  the files dir. Names end in `.corrupt-<epoch-millis>`, so sorting by name is newest-first. */
     private fun pruneQuarantined(dir: File, keep: Int = 3) {
         val files = dir.listFiles { f -> f.isFile && f.name.contains(".corrupt-") }?.sortedByDescending { it.name } ?: return
@@ -167,5 +210,19 @@ internal class VisaStateStore(
 
     companion object {
         private const val TAG = "VisaStateStore"
+
+        /** Flush a file's bytes (or a directory's entries) to durable storage. */
+        private fun fsync(f: File) {
+            try {
+                RandomAccessFile(f, "r").use { it.fd.sync() }
+            } catch (e: Exception) {
+                // ext4 refuses O_RDONLY directory fds; reopen for writing to get a syncable one.
+                try {
+                    RandomAccessFile(f, "rw").use { it.fd.sync() }
+                } catch (e2: Exception) {
+                    Log.w(TAG, "Could not fsync $f", e2)
+                }
+            }
+        }
     }
 }

@@ -107,10 +107,10 @@ class VisaStateStoreTest {
     fun encodeRunsOnTheWriterThreadNotTheEnqueueingThread() {
         val enqueueThread = Thread.currentThread().name
         val encodedOn = AtomicReference<String>()
-        val encodingStore = VisaStateStore(file = stateFile, scope = scope) { state ->
+        val encodingStore = VisaStateStore(file = stateFile, scope = scope, encode = { state ->
             encodedOn.set(Thread.currentThread().name)
             StateCodec.encode(state)
-        }
+        })
 
         encodingStore.save(fullState)
 
@@ -167,6 +167,89 @@ class VisaStateStoreTest {
         assertEquals("expected the 2 seeded survivors plus the new quarantine", 3, survivors.size)
         assertTrue("stale quarantines were not pruned: $survivors", survivors.intersect(staleNames.toSet()).isEmpty())
     }
+
+    /**
+     * The tmp file must reach durable storage before the rename makes it live, and the directory
+     * entry must be synced after. The real `fd.sync()` bytes are not observable from JVM, so the
+     * sync step is a seam and the test pins the order of the durability protocol.
+     */
+    @Test
+    fun stateFileSyncsBeforeRenameAndFallsBackViaSecondTmp() {
+        val events = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val recordingSync: (File) -> Unit = { events += "sync:${it.name}" }
+        var denyLiveRename = false
+        val recordingRename: (File, File) -> Boolean = { src, dest ->
+            val isLive = dest.name == stateFile.name
+            val isFirstAttempt = src.name == "${stateFile.name}.tmp"
+            events += if (isLive) "rename:live(${if (isFirstAttempt) "tmp" else "alt"})" else "rename:${dest.name}"
+            // Deny only the tmp→live rename; the staged alt→live one must still work.
+            when {
+                isLive && isFirstAttempt && denyLiveRename -> false
+                else -> src.renameTo(dest)
+            }
+        }
+
+        val store1 = VisaStateStore(file = stateFile, scope = scope, sync = recordingSync, rename = recordingRename)
+        store1.save(fullState)
+        assertTrue("the saved state never reached disk", awaitUntil { diskContains(fullState) })
+        assertEquals("the durability protocol ran in the wrong order", listOf(
+            "sync:${stateFile.name}.tmp",
+            "rename:live(tmp)",
+            "sync:${dir.name}",
+        ), events)
+
+        // Second save with the live rename denied: must land via a second tmp + rename, the
+        // live file never truncated-then-copied.
+        events.clear()
+        denyLiveRename = true
+        val store2 = VisaStateStore(file = stateFile, scope = scope, sync = recordingSync, rename = recordingRename)
+        val second = copyOf(fullState, "doc-second")
+        store2.save(second)
+        assertTrue("the fallback never delivered the new state", awaitUntil { diskContains(second) })
+        assertTrue("fallback did not rename the staged alt tmp: $events",
+            events.contains("rename:live(alt)"))
+        assertTrue("no sync of the second tmp before its rename: $events",
+            events.count { it.startsWith("sync:") } >= 2)
+        assertTrue(
+            "a temp file survived the fallback",
+            dir.listFiles { f: File -> f.name.endsWith(".tmp") || f.name.contains("alt") }?.isEmpty() ?: false,
+        )
+    }
+
+    /**
+     * When even the fallback rename cannot land, the store must refuse rather than overwrite —
+     * the live file keeps decoding the OLD state. A copy-onto-live branch could lose everything
+     * on a cut mid-copy; a refused save only loses the edit. Filesystems that ignore read-only
+     * directories cannot force the failure, so the test skips there.
+     */
+    @Test
+    fun refusesToPersistRatherThanTruncateWhenReplacementImpossible() {
+        try {
+            // Baseline content written straight to disk (before the lock): the writer cannot
+            // touch it afterwards, so whatever the store does, the live file must still decode
+            // to it.
+            stateFile.writeText(StateCodec.encode(fullState))
+            if (!makeDirReadOnly()) return // filesystem ignores write-protected directories
+
+            store.save(copyOf(fullState, "doc-second"))
+            Thread.sleep(400) // give the writer its turn; nothing may land
+
+            assertEquals(fullState, store.load()?.state)
+        } finally {
+            dir.setWritable(true)
+        }
+    }
+
+    private fun makeDirReadOnly(): Boolean {
+        dir.setWritable(false)
+        // tmpfs/btrfs throw instead of returning false when the directory denies the create.
+        val protected_ = runCatching { !File(dir, "probe").createNewFile() }.getOrDefault(true)
+        if (!protected_) dir.setWritable(true)
+        return protected_
+    }
+
+    private fun copyOf(base: PersistedState, id: String) =
+        PersistedState(id, listOf(Document(id, "Passport · $id", DocKind.Passport("CZ"))), emptyList())
 
     /**
      * Decodes the state file straight off disk. Deliberately bypasses `store.load()`: load

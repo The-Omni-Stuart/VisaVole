@@ -11,24 +11,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.AccessModel
 import com.cbkres.visavole.domain.Trip
+import com.cbkres.visavole.domain.TripStatus
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.ui.AccessViewModel
@@ -44,6 +41,7 @@ import com.cbkres.visavole.ui.screens.EmptyState
 import com.cbkres.visavole.ui.screens.ScreenHeader
 import com.cbkres.visavole.ui.screens.SectionLabel
 import com.cbkres.visavole.ui.toUtcMillis
+import com.cbkres.visavole.ui.VoleAlertDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -125,6 +123,7 @@ internal fun TripsScreen(
                             allowances = zoneAllowances,
                             primary = focus.primaryAllowance(zoneAllowances),
                             focusedKey = focus.effectiveFocusKey(zoneAllowances),
+                            today = ready.today,
                             onFocus = focus::toggle,
                             onRingClick = { snap ->
                                 val trip =
@@ -281,18 +280,18 @@ internal fun TripsScreen(
         AddTripDialog(vm, ready, editingTrip) { editingTrip = null }
     }
     deletingTrip?.let { trip ->
-        AlertDialog(
-            onDismissRequest = { deletingTrip = null },
-            title = { Text("Delete trip") },
-            text = { Text("Delete this trip and its stops? Allowance usage will be recalculated.") },
-            confirmButton = {
-                Button(
-                    onClick = { vm.removeTrip(trip.id); onTripDeleted(trip.id); deletingTrip = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                ) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { deletingTrip = null }) { Text("Cancel") }
+        VoleAlertDialog(
+            title = "Delete trip",
+            confirmLabel = "Delete",
+            confirmDestructive = true,
+            onConfirm = { vm.removeTrip(trip.id); onTripDeleted(trip.id); deletingTrip = null },
+            onDismiss = { deletingTrip = null },
+            content = {
+                Text(
+                    if (trip.statusAt(today) == TripStatus.ONGOING)
+                        "This trip is ongoing. Delete it and its stops? Allowance usage will be recalculated."
+                    else "Delete this trip and its stops? Allowance usage will be recalculated.",
+                )
             },
         )
     }
@@ -308,7 +307,7 @@ internal fun TripsScreen(
     }
 }
 
-// TODO: Investing this
+// TODO: Investigate this
 @Composable
 private fun EndTripDialog(today: LocalDate, onConfirm: (LocalDate) -> Unit, onDismiss: () -> Unit) {
     VisaDatePickerDialog(

@@ -2,6 +2,7 @@ package com.cbkres.visavole.domain
 
 import com.cbkres.visavole.domain.DocKind.Passport
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 
@@ -129,5 +130,56 @@ class ZoneUsageTest {
         // yesterday, and the gate cap must not keep the stay alive to the old expiry date.
         val s = status(ExpiryReason.SUPERSEDED, today.minusDays(1), inUseExhausted(), today.plusYears(1), null)
         assertEquals(today.minusDays(1), gateCapDate(s))
+    }
+
+    // ---- zone gate from the real bundled dataset (the archive-with-expired-passports shape) ----
+
+    private val zoneToday = LocalDate.of(2026, 11, 15)
+    private val realWorld = com.cbkres.visavole.data.JdbcRepository.load(java.io.File("src/main/assets/visa_data.db"))
+    private val expiredDe = Document("zone-p1", "Expired DE", Passport("DE"), zoneToday.minusDays(1).toString())
+    private val liveDe = Document("zone-p2", "Live DE", Passport("DE"), null)
+
+    private fun zoneSnapshotFor(stop: TripStop, docs: List<Document>) =
+        TripModel.calculate(
+            listOf(Trip("zt", listOf(stop))),
+            docs,
+            realWorld,
+            zoneToday,
+        ).allowances.first { it.key == "stay:schengen" }
+
+    @Test
+    fun expiredUnreferencedPassportDoesNotCapZoneOnHomeStay() {
+        // A closed same-day stay at home declared on the live passport: the archived expired
+        // passport is held by nobody's stay today and must not cap the zone into the past.
+        val a = zoneSnapshotFor(TripStop("zs1", "DE", zoneToday, zoneToday, documentId = liveDe.id), listOf(expiredDe, liveDe))
+        assertEquals(0, a.overstayDays)
+        assertEquals(AllowanceStatus.OK, a.status)
+    }
+
+    @Test
+    fun expiredUnreferencedPassportDoesNotCapZoneOnDeclaredForeignStay() {
+        // Same shape with the stay on a zone partner country, still declared on the live passport.
+        // A German's FR stay is freedom of movement (0 window days); what is pinned here is that
+        // the dormant expired passport must not cap the zone into the past.
+        val a = zoneSnapshotFor(TripStop("zs2", "FR", zoneToday.minusDays(2), zoneToday, documentId = liveDe.id), listOf(expiredDe, liveDe))
+        assertEquals(0, a.overstayDays)
+        assertEquals(AllowanceStatus.OK, a.status)
+    }
+
+    @Test
+    fun undeclaredZoneStayFallsBackToLiveNotExpiredPassport() {
+        // Legacy stop without a document: the fallback gate must weigh the live passport, not an
+        // equal-access expired one sitting earlier in the list — that would cap the zone into the past.
+        val a = zoneSnapshotFor(TripStop("zs3", "FR", zoneToday.minusDays(1), zoneToday, documentId = null), listOf(expiredDe, liveDe))
+        assertEquals(0, a.overstayDays)
+        assertEquals(AllowanceStatus.OK, a.status)
+    }
+
+    @Test
+    fun stayDeclaredOnExpiredPassportStillCapsIntoThePast() {
+        // The intended M5 rule stays: a stay actually declared on the lapsed gate is capped into the past.
+        val a = zoneSnapshotFor(TripStop("zs4", "FR", zoneToday.minusDays(1), zoneToday, documentId = expiredDe.id), listOf(expiredDe, liveDe))
+        assertTrue("a stay on a lapsed declared gate must read as overstay", a.overstayDays > 0)
+        assertEquals(AllowanceStatus.DANGER, a.status)
     }
 }

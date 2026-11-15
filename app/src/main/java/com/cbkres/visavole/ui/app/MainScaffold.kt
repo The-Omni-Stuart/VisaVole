@@ -51,7 +51,7 @@ import com.cbkres.visavole.ui.screens.settings.SettingsScreen
 import com.cbkres.visavole.ui.screens.trips.TripsScreen
 import com.cbkres.visavole.ui.theme.ThemePrefs
 
-// P3-49: Float/Offset states aren't directly saveable, so persist their underlying values.
+// Float/Offset states aren't directly saveable, so persist their underlying values.
 private val MapZoomSaver = object : Saver<MutableFloatState, Float> {
     override fun SaverScope.save(value: MutableFloatState): Float = value.floatValue
     override fun restore(value: Float): MutableFloatState = mutableFloatStateOf(value)
@@ -88,27 +88,30 @@ internal fun MainScaffold(
     val expandedTrips = rememberSaveable { mutableStateListOf<String>() }
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(vm) {
+        // Feedback buffered while onboarding had the screen belongs to that phase; only
+        // state warnings (a damaged backup) are flagged to survive into a fresh main screen.
+        vm.discardStaleSnacks()
         vm.snacks.collect { snackbarHostState.showSnackbar(it) }
     }
-    // P2-47: the system Back button used to just exit the app. Close the topmost layer instead:
+    // the system Back button used to just exit the app. Close the topmost layer instead:
     // Settings overlay -> an open country card (Map) -> a non-home tab (jump home). The
     // search-focus BackHandler lives in MapTab and, being registered after these, takes priority
     // over the card when both apply (clear the field first, then the card on the next press).
     BackHandler(enabled = showSettings) { showSettings = false }
     BackHandler(enabled = !showSettings && tab == 0 && selected != null) { selected = null }
     BackHandler(enabled = !showSettings && tab != 0) { tab = 0 }
-    // P3-40: the map shapes + per-country focus are pre-built on the VM's IO thread at load time
+    // the map shapes + per-country focus are pre-built on the VM's IO thread at load time
     // (see AccessViewModel.launchLoad) and shipped on AppState.Ready, so the one-time ~121k-point
     // Path construction no longer runs on the main thread at first composition.
     val mapShapes = s.shapes
     val mapFocus = s.focus
-    // P3-49: map framing (zoom + centre) survives process death — plain `remember` reset it to
+    // map framing (zoom + centre) survives process death — plain `remember` reset it to
     // the default view on every cold start.
     val mapZoom = rememberSaveable(saver = MapZoomSaver) { mutableFloatStateOf(1f) }
     val mapCenter = rememberSaveable(saver = MapCenterSaver) { mutableStateOf(defaultCenter(s.geometry)) }
     // rememberLazyListState() is rememberSaveable(saver = LazyListState.Saver) under the hood,
     // so the scroll position survives both the tab switch and process death — the same guarantee
-    // the Phase-C saveable pass gave tab/selected/query/expandedTrips (P2-15).
+    // the Phase-C saveable pass gave tab/selected/query/expandedTrips.
     val docsScroll = rememberLazyListState()
     val tripsScroll = rememberLazyListState()
     Scaffold(
@@ -201,7 +204,7 @@ internal fun MainScaffold(
                         scrollState = tripsScroll,
                         expandedTrips = expandedTrips,
                         onToggleExpanded = { id -> if (id in expandedTrips) expandedTrips.remove(id) else expandedTrips.add(id) },
-                        // P3-20: a deleted trip's id would otherwise linger in the saveable list forever.
+                        // a deleted trip's id would otherwise linger in the saveable list forever.
                         onTripDeleted = { id -> expandedTrips.remove(id) },
                         modifier = Modifier.fillMaxSize(),
                     )

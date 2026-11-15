@@ -31,7 +31,8 @@ enum class ExpiryReason {
  * - [reason] is the [ExpiryReason] attached to that earliest date;
  * - [expired] is true once [effectiveExpiry] is past (an expiry of *today* is still valid);
  * - [notYetValid] is true when the document's `validFrom` lies after [today] — such a document
- *   unlocks nothing at [today] (see [com.cbkres.visavole.domain.AccessModel.compute]).
+ *   unlocks nothing at [today], a passport excepted: it evidences a nationality from any date
+ *   (see [com.cbkres.visavole.domain.AccessModel.compute]).
  */
 data class DocStatus(
     val expired: Boolean,
@@ -54,8 +55,8 @@ data class DocStatus(
             world: WorldData,
             today: LocalDate,
         ): DocStatus {
-            val original = parse(doc.expiry)
-            val validFrom = parse(doc.validFrom)
+            val original = doc.expiry.toDateOrNull()
+            val validFrom = doc.validFrom.toDateOrNull()
             val candidates = mutableListOf<Pair<LocalDate, ExpiryReason>>()
             if (original != null) candidates += original to ExpiryReason.DATE
             val entry = TripModel.entryStatusFor(doc, trips, world, today, validFrom, original)
@@ -71,7 +72,7 @@ data class DocStatus(
                     // 2026-09-27): the old doc is archived on the spot (red "Replaced by …")
                     // instead of sitting in a shifting "replaced from today" amber state. Anchor
                     // the missing date to yesterday so the standard "before today" test trips.
-                    replacementValidFrom = parse(replacement.validFrom)
+                    replacementValidFrom = replacement.validFrom.toDateOrNull()
                     candidates += (replacementValidFrom ?: today.minusDays(1)) to ExpiryReason.SUPERSEDED
                 }
             }
@@ -97,6 +98,5 @@ data class DocStatus(
         ): Map<String, DocStatus> =
             docs.associate { it.id to of(it, docs, trips, world, today) }
 
-        private fun parse(s: String?): LocalDate? = s?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
     }
 }

@@ -16,6 +16,24 @@ internal object TripWarnings {
 
     private fun daysLabel(count: Int): String = "$count ${if (count == 1) "day" else "days"}"
 
+    /**
+     * Inclusive overlap in days between two stop ranges. A missing departure means the stay is
+     * open-ended: clamping it to any concrete date inverts future ranges and mutes real overlaps.
+     */
+    private fun stopOverlapDays(
+        aArrival: LocalDate,
+        aDeparture: LocalDate?,
+        bArrival: LocalDate,
+        bDeparture: LocalDate?,
+    ): Int {
+        val start = if (aArrival.isAfter(bArrival)) aArrival else bArrival
+        val aEnd = aDeparture ?: bDeparture ?: start
+        val bEnd = bDeparture ?: aDeparture ?: start
+        val end = if (aEnd.isBefore(bEnd)) aEnd else bEnd
+        if (end.isBefore(start)) return 0
+        return ChronoUnit.DAYS.between(start, end).toInt() + 1
+    }
+
     fun validateTrip(trip: Trip, world: WorldData, today: LocalDate): List<TripWarning> {
         val out = mutableListOf<TripWarning>()
         if (trip.stops.isEmpty()) {
@@ -49,7 +67,9 @@ internal object TripWarnings {
         for (cs in candidate.stops) {
             for (other in trips.filter { it.id != candidate.id }) {
                 for (os in other.stops) {
-                    val overlap = overlapDays(cs.arrival, cs.departure ?: today, os.arrival, os.departure ?: today)
+                    val overlap = stopOverlapDays(cs.arrival, cs.departure, os.arrival, os.departure)
+                    // One overlapping day is a transit/day-trip within a stay, not a collision —
+                    // the tolerance boundary is pinned in TripModelTest (oneDay/twoDay cases).
                     if (overlap <= 1) continue
                     val sameCountry = cs.countryIso2 == os.countryIso2
                     val csRule = rules.forDest(cs.countryIso2)
@@ -165,19 +185,27 @@ internal object TripWarnings {
             }
         }
 
+        // Probe access at every date the answer can change: stop boundaries from today onward,
+        // and the day each held document stops being valid — an open-ended stay has no end date
+        // to catch a grant expiring mid-stay otherwise.
         val dates = linkedSetOf<LocalDate>()
         for (stop in candidate.stops) {
             if (!stop.arrival.isBefore(today)) dates.add(stop.arrival)
-            val end = stop.departure ?: today
-            if (!end.isBefore(today) && !end.isBefore(stop.arrival)) dates.add(end)
+            val end = stop.departure
+            if (end != null && !end.isBefore(today) && !end.isBefore(stop.arrival)) dates.add(end)
+        }
+        for (doc in docs) {
+            val expiry = doc.expiry.toDateOrNull() ?: continue
+            val breaksTheDayAfter = expiry.plusDays(1)
+            if (!breaksTheDayAfter.isBefore(today)) dates.add(breaksTheDayAfter)
         }
         val accessSeen = HashSet<String>()
         for (date in dates) {
             val effective = TripModel.effectiveDocs(docs, trips, world, date)
             val access = AccessModel.compute(effective, world, date)
             for (stop in candidate.stops) {
-                val stopEnd = stop.departure ?: today
-                if (stop.arrival > date || stopEnd < date) continue
+                if (stop.arrival > date) continue
+                if (stop.departure != null && stop.departure < date) continue
                 val a = access[stop.countryIso2]
                 val country = world.countries[stop.countryIso2]?.name ?: stop.countryIso2
                 accessWarningFor(a, country, date)?.let { if (accessSeen.add(it.message)) out.add(it) }
@@ -203,7 +231,7 @@ internal object TripWarnings {
         else -> null
     }
 
-    fun gapWarningsFor(trip: Trip, today: LocalDate): List<TripWarning> {
+    fun gapWarningsFor(trip: Trip): List<TripWarning> {
         val ordered = TripModel.sortedStops(trip.stops)
         val out = mutableListOf<TripWarning>()
         for (i in 0 until ordered.lastIndex) {

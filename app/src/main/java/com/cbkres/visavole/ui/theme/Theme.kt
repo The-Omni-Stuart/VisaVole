@@ -43,7 +43,7 @@ internal fun Visa_VoleTheme(
 
     // Expose the *effective* theme (which may be forced light/dark via the Settings override) so
     // every `isSystemInDarkTheme()` call below the theme reflects what the user is actually seeing
-    // — not just the OS setting. The per-theme status colours (P1-12) key off this.
+    // — not just the OS setting. The per-theme status colours key off this.
     CompositionLocalProvider(LocalEffectiveDarkTheme provides darkTheme) {
         MaterialTheme(
             colorScheme = colorScheme,

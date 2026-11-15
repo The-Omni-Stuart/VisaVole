@@ -19,7 +19,6 @@ import com.cbkres.visavole.domain.DocKind.Custom
 import com.cbkres.visavole.domain.DocKind.Holding
 import com.cbkres.visavole.domain.DocKind.Passport
 import java.time.LocalDate
-import java.time.ZoneOffset
 
 /**
  * Pure access model: given the user's held documents (each passport counts as a nationality) and
@@ -62,7 +61,7 @@ object AccessModel {
         val minId = benefit.residenceMin
         if (minId == null) return true // no minimum — applies to any residence
         val min = ResidenceClass.fromId(minId)
-        // P3-28: a non-null minimum that doesn't parse is a data error — fail closed (deny) rather
+        // a non-null minimum that doesn't parse is a data error — fail closed (deny) rather
         // than treating it as "no minimum" and over-granting permanent-only perks.
         if (min == null) return false
         val effective = doc.residenceClassFor(world) ?: return false
@@ -99,8 +98,8 @@ object AccessModel {
     ): Boolean = statuses?.get(doc.id)?.expired ?: isExpired(doc, docs, world, today, trips)
 
     /**
-     * True when [doc] unlocks nothing at [today]: expired *or* not valid yet — the same test as
-     * [compute]'s skip, which is the only place [notYetValid] was previously honoured.
+     * True when [doc] unlocks nothing at [today]: expired *or* not valid yet — the skip [compute]
+     * applies to every non-passport document. Callers only ever ask about non-passport documents.
      */
     private fun unusableOf(
         doc: Document,
@@ -117,7 +116,7 @@ object AccessModel {
 
     /** A document whose `validFrom` lies after [today] is not usable at [today] yet. */
     internal fun notYetValid(doc: Document, today: LocalDate): Boolean {
-        val from = doc.validFrom?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return false
+        val from = doc.validFrom.toDateOrNull() ?: return false
         return from.isAfter(today)
     }
 
@@ -134,18 +133,18 @@ object AccessModel {
         val map = LinkedHashMap<String, Access>()
         if (!expired) {
             for (c in world.baseline[home].orEmpty()) {
-                merge(map, c.destination, Access(AccessLevel.fromBaselineType(c.type), c.days, "Passport rule"))
+                merge(map, c.destination, Access(AccessLevel.fromBaselineType(c.type), c.days, AccessReason.PassportBaseline))
             }
         }
         for (r in world.regimes) {
             if (home !in r.members) continue
             if (expired && r.level != "freedom-of-movement") continue
             val level = if (r.level == "freedom-of-movement") FREEDOM else VISA_FREE
-            val reason = if (r.level == "freedom-of-movement") "Bloc: ${r.name}" else "Bloc visa-free: ${r.name}"
-            for (m in r.members) merge(map, m, Access(level, null, reason))
+            val label = if (r.level == "freedom-of-movement") "Bloc: ${r.name}" else "Bloc visa-free: ${r.name}"
+            for (m in r.members) merge(map, m, Access(level, null, AccessReason.Grant(label)))
         }
         // Your own country always beats any bloc's freedom of movement.
-        map[home] = Access(FREEDOM, null, "Your country")
+        map[home] = Access(FREEDOM, null, AccessReason.HomeCountry)
         return map
     }
 
@@ -169,18 +168,18 @@ object AccessModel {
                 val rc = if (isResidence) doc.residenceClassFor(world) else null
                 merge(
                     map, h.issuingCountry,
-                    Access(if (isResidence) RESIDENCE else COVERED, null, if (isResidence) "Residence: ${h.name}" else "You hold: ${h.name}", true, rc),
+                    Access(if (isResidence) RESIDENCE else COVERED, null, AccessReason.Grant(if (isResidence) "Residence: ${h.name}" else "You hold: ${h.name}"), true, rc),
                 )
                 val benefitLevel = if (isResidence) VISA_FREE else COVERED
                 for (b in world.benefits[k.holdingId].orEmpty()) {
                     if (!AccessLevel.isEntryBenefit(b.type)) continue // skip transit-only rows
                     // doc.entryType() (not the raw kind field): it returns null for residence docs,
                     // so a legacy/edited residence carrying a stored entryType can never slip
-                    // through entry-restricted grants (P2-31).
+                    // through entry-restricted grants.
                     if (!entryTypeSatisfied(b.entryTypes, doc.entryType())) continue
                     if (!residenceMinSatisfied(doc, world, b)) continue
                     if (!nationalitySatisfied(b.nationalities, homeNats)) continue
-                    merge(map, b.destination, Access(benefitLevel, b.days, "${h.name} (${b.type})", true))
+                    merge(map, b.destination, Access(benefitLevel, b.days, AccessReason.Grant("${h.name} (${b.type})"), true))
                 }
             }
             is Custom -> {
@@ -197,7 +196,7 @@ object AccessModel {
                     storedBloc.level == "visa-free" -> storedBloc
                     else -> world.travelBlocFor(k.countries) ?: storedBloc
                 }
-                // The bloc's members are added only where they don't over-grant (P2-32): a bloc
+                // The bloc's members are added only where they don't over-grant: a bloc
                 // covering ALL the doc's explicit countries unlocks its full membership (the normal
                 // case, e.g. a CZ residence → all of Schengen); a bloc that covers only SOME of them
                 // (the travelBlocFor "any member" fallback) contributes only the intersection, so a
@@ -215,7 +214,7 @@ object AccessModel {
                         isResidence -> VISA_FREE
                         else -> COVERED
                     }
-                    merge(map, c, Access(level, null, "Your ${k.kind}", true, if (level == RESIDENCE) rc else null))
+                    merge(map, c, Access(level, null, AccessReason.Grant("Your ${k.kind}"), true, if (level == RESIDENCE) rc else null))
                 }
                 // A known holding tied to this document also applies its travel perks (entry benefits only).
                 k.holdingId?.let { hid ->
@@ -226,7 +225,7 @@ object AccessModel {
                         if (!entryTypeSatisfied(b.entryTypes, doc.entryType())) continue
                         if (!residenceMinSatisfied(doc, world, b)) continue
                         if (!nationalitySatisfied(b.nationalities, homeNats)) continue
-                        merge(map, b.destination, Access(perkLevel, b.days, "${h.name} (${b.type})", true))
+                        merge(map, b.destination, Access(perkLevel, b.days, AccessReason.Grant("${h.name} (${b.type})"), true))
                     }
                 }
             }
@@ -261,13 +260,14 @@ object AccessModel {
     /**
      * The expensive per-document candidate maps, built once per publish so every gate probe
      * ([bestDocumentId] / [gateDocumentId] inside [com.cbkres.visavole.domain.TripModel]) can share
-     * them instead of rebuilding each doc's full candidate map per zone country (P2-27).
+     * them instead of rebuilding each doc's full candidate map per zone country.
      */
     fun candidateMaps(
         docs: List<Document>,
         world: WorldData,
         statuses: Map<String, DocStatus>,
     ): Map<String, Map<String, Access>> {
+        // Nationality gates resolve over every passport — citizenship does not expire.
         val homeNats = homeCountries(docs)
         return docs.associate { doc ->
             val candidates = when (val k = doc.kind) {
@@ -287,7 +287,7 @@ object AccessModel {
     fun ownVisaCountries(
         docs: List<Document>,
         world: WorldData,
-        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        today: LocalDate,
         trips: List<Trip> = emptyList(),
         statuses: Map<String, DocStatus>? = null,
     ): Set<String> =
@@ -312,7 +312,7 @@ object AccessModel {
         dest: String,
         docs: List<Document>,
         world: WorldData,
-        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        today: LocalDate,
         trips: List<Trip> = emptyList(),
     ): List<DocAccess> =
         docs
@@ -351,7 +351,7 @@ object AccessModel {
         dest: String,
         docs: List<Document>,
         world: WorldData,
-        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        today: LocalDate,
         trips: List<Trip> = emptyList(),
     ): List<Document> =
         docs.filter { d ->
@@ -371,13 +371,15 @@ object AccessModel {
      * preferred when it gives stronger access, or when it is the destination residence document —
      * residents must present that permit at the border. A residence that only ties the best passport
      * (for example a bloc residence granting short-stay access) is also preferred. Expired
-     * non-passport documents are ignored. Returns null when no held document has a documented rule.
+     * documents are ignored — including expired passports whenever any live document covers
+     * [dest]; a sole expired passport still counts. Returns null when no held document has a
+     * documented rule.
      */
     fun bestDocumentId(
         dest: String,
         docs: List<Document>,
         world: WorldData,
-        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        today: LocalDate,
         primaryId: String? = null,
         trips: List<Trip> = emptyList(),
         statuses: Map<String, DocStatus>? = null,
@@ -394,7 +396,7 @@ object AccessModel {
         dest: String,
         docs: List<Document>,
         world: WorldData,
-        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        today: LocalDate,
         trips: List<Trip> = emptyList(),
         statuses: Map<String, DocStatus>? = null,
         candidateMaps: Map<String, Map<String, Access>>? = null,
@@ -410,7 +412,7 @@ object AccessModel {
         dest: String,
         docs: List<Document>,
         world: WorldData,
-        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        today: LocalDate,
         carriedId: String? = null,
         primaryId: String? = null,
         trips: List<Trip> = emptyList(),
@@ -443,8 +445,14 @@ object AccessModel {
                     }
                 candidates[dest]?.takeIf { it.level != UNKNOWN }?.let { doc to it }
             }
-        val bestPassport = bestWithPrimary(evaluated.filter { it.first.kind is Passport }, primaryId)
-        val bestOther = bestWithPrimary(evaluated.filter { it.first.kind !is Passport }, primaryId)
+        // A lapsed passport may keep the *gate* (see gateDocumentId), but in the best pick a live
+        // document must beat it — you cannot present an expired passport. It stays only when
+        // nothing else documents the destination (a sole expired passport keeps its suggestions).
+        val pool = if (ignoreExpiry) evaluated
+        else evaluated.filterNot { it.first.kind is Passport && expiredOf(it.first, docs, world, today, trips, statuses) }
+            .ifEmpty { evaluated }
+        val bestPassport = bestWithPrimary(pool.filter { it.first.kind is Passport }, primaryId)
+        val bestOther = bestWithPrimary(pool.filter { it.first.kind !is Passport }, primaryId)
         return when {
             bestPassport == null -> bestOther?.first?.id
             bestOther == null -> bestPassport.first.id
@@ -503,15 +511,17 @@ object AccessModel {
     fun compute(
         docs: List<Document>,
         world: WorldData,
-        today: LocalDate = LocalDate.now(ZoneOffset.UTC),
+        today: LocalDate,
         trips: List<Trip> = emptyList(),
         statuses: Map<String, DocStatus>? = null,
     ): Map<String, Access> {
         val result = LinkedHashMap<String, Access>()
+        // Nationality gates resolve over every passport — citizenship does not expire.
         val homeNats = homeCountries(docs)
         for (doc in docs) {
-            // A document that is not valid yet unlocks nothing at [today].
-            if (notYetValidOf(doc, today, statuses)) continue
+            // A non-passport document that is not valid yet unlocks nothing at [today]; a passport
+            // evidences a nationality, so a future renewal counts from any date, as elsewhere.
+            if (doc.kind !is Passport && notYetValidOf(doc, today, statuses)) continue
             when (val k = doc.kind) {
                 is Passport -> {
                     // Pure best-of across passports; an expired one still grants home + freedom blocs.
@@ -528,9 +538,6 @@ object AccessModel {
         }
         return result
     }
-
-    fun accessFor(dest: String, docs: List<Document>, world: WorldData): Access =
-        compute(docs, world)[dest] ?: Access(UNKNOWN, null, "No data for $dest")
 
     /**
      * The primary days label for the detail card. A [StayRule] is only shown when it matches the

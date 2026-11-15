@@ -40,7 +40,7 @@ class OnboardingFlowSmokeTest {
         // The passport triggers a home-country world reload; the scaffold's top bar lands after it.
         composeRule.waitForAnyText("Visa Vole", timeoutMillis = LOAD_TIMEOUT_MS)
 
-        composeRule.onNode(hasText("Documents")).performClick()
+        composeRule.clickNavTab("Documents")
         composeRule.waitForAnyText("Passport", "Germany")
         composeRule.onAllNodesWithText("Something went wrong").assertCountEquals(0)
     }
@@ -59,7 +59,7 @@ class OnboardingFlowSmokeTest {
             text.contains("\"kind\":\"passport\"") && text.contains("\"iso2\":\"DE\"")
         }
 
-        composeRule.onNode(hasText("Documents")).performClick()
+        composeRule.clickNavTab("Documents")
         composeRule.waitForAnyText("Passport")
 
         // smoke: recreate() keeps the ViewModel, so this proves the saveable-restore + no-crash
@@ -67,7 +67,7 @@ class OnboardingFlowSmokeTest {
         // process and the decode side is JVM-covered (StateCodecTest, VisaStateStoreTest).
         composeRule.activityRule.scenario.recreate()
         composeRule.waitForAnyText("Visa Vole", timeoutMillis = LOAD_TIMEOUT_MS)
-        composeRule.onNode(hasText("Documents")).performClick()
+        composeRule.clickNavTab("Documents")
         composeRule.waitForAnyText("Passport", "Germany")
     }
 }

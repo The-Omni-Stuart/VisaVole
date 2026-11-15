@@ -18,8 +18,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,10 +37,12 @@ import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.TripStop
 import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.VisaDialog
+import com.cbkres.visavole.ui.VoleAlertDialog
+import com.cbkres.visavole.ui.GuardFindingsDialog
 import com.cbkres.visavole.ui.app.AppState
 import java.util.UUID
 
-// TODO: Refactor This too
+// TODO: Refactor this too
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +73,10 @@ internal fun AddTripDialog(
     var ongoingConflict by remember { mutableStateOf<OngoingConflict?>(null) }
     var splitCommitted by remember { mutableStateOf(false) }
     var showSplitExitConfirm by remember { mutableStateOf(false) }
+    // A split commits its first half to the ViewModel, whose publish trails the commit; while a
+    // split is pending the dialog judges by its own list so later verdicts see the saved half.
+    var splitTrips by remember { mutableStateOf<List<Trip>?>(null) }
+    val judgedTrips = splitTrips ?: ready.trips
 
     fun candidate(): Trip = Trip(currentTripId, stops, note.ifBlank { null })
 
@@ -89,16 +95,16 @@ internal fun AddTripDialog(
 
     /** The shared guard context for this dialog: the effective primary passport is the
      *  tie-breaker document the `trip.passport.*` rules evaluate against. */
-    fun evaluate(trip: Trip, tripsOverride: List<Trip> = ready.trips): GuardResult {
+    fun evaluate(trip: Trip, tripsOverride: List<Trip> = judgedTrips): GuardResult {
         val action = if (isEditingExisting) GuardAction.UpdateTrip(trip) else GuardAction.AddTrip(trip)
         return GuardEngine.evaluate(action, GuardContext.of(ready.docs, tripsOverride, ready.world, ready.starredDocId, today))
     }
 
-    /** The ongoing-cap finding/mutation from [result], evaluating [trip] when none is passed (§13.4). */
+    /** The ongoing-cap finding/mutation from [result]; [trip] is evaluated only when no result is passed. */
     fun ongoingConflictFor(trip: Trip, result: GuardResult = evaluate(trip)): OngoingConflict? {
         val end = result.mutations.firstOrNull { it is GuardMutation.EndTrip } as? GuardMutation.EndTrip
             ?: return null
-        val previous = ready.trips.firstOrNull { it.id == end.tripId } ?: return null
+        val previous = judgedTrips.firstOrNull { it.id == end.tripId } ?: return null
         return OngoingConflict(trip, previous, end.onDate)
     }
 
@@ -118,7 +124,7 @@ internal fun AddTripDialog(
         val conflict = ongoingConflict ?: return
         ongoingConflict = null
         if (closePrevious) {
-            val closedTrips = ready.trips.map {
+            val closedTrips = judgedTrips.map {
                 if (it.id == conflict.previous.id) TripModel.closeTrip(it, conflict.end) else it
             }
             val result = evaluate(conflict.candidate, closedTrips)
@@ -176,12 +182,16 @@ internal fun AddTripDialog(
         }
     }
 
+    fun queueNewStop() {
+        val defaultArrival = TripModel.sortedStops(stops).lastOrNull()?.departure ?: today
+        pendingNewStop = TripStop(UUID.randomUUID().toString(), "", defaultArrival, null)
+    }
+
     fun requestAddStop() {
         if (stops.any { it.departure == null }) {
             showAddStopWarning = true
         } else {
-            val defaultArrival = TripModel.sortedStops(stops).lastOrNull()?.departure ?: today
-            pendingNewStop = TripStop(UUID.randomUUID().toString(), "", defaultArrival, null)
+            queueNewStop()
         }
     }
 
@@ -235,6 +245,7 @@ internal fun AddTripDialog(
         }
         if (isEditingExisting) vm.updateTrip(leftTrip, evaluated = splitResult) else vm.addTrip(leftTrip, evaluated = splitResult)
         splitCommitted = true
+        splitTrips = tripsAfterSplit(judgedTrips, leftTrip, replacedExisting = isEditingExisting)
         vm.snackMessage("First half saved — the rest continues as a new trip")
         stops = rightStops
         note = rightNote ?: ""
@@ -263,6 +274,7 @@ internal fun AddTripDialog(
                 world = ready.world,
                 docs = ready.docs,
                 today = today,
+                statuses = ready.statuses,
                 maxHeight = (LocalConfiguration.current.screenHeightDp * 0.45f).dp,
                 onEdit = { editingStopId = it.id },
                 onRemove = { stop ->
@@ -319,11 +331,12 @@ internal fun AddTripDialog(
                 initial = stop,
                 world = ready.world,
                 docs = ready.docs,
-                trips = ready.trips,
+                trips = judgedTrips,
                 isFinal = ordered.last().id == stop.id,
                 carryDocumentId = ordered.getOrNull(stopIndex - 1)?.documentId,
                 initiallyEditingDeparture = departureFocusStopId == stop.id,
                 primaryDocId = ready.primaryDocId,
+                statuses = ready.statuses,
                 onDone = { updated ->
                     editingStopId = null
                     departureFocusStopId = null
@@ -348,10 +361,11 @@ internal fun AddTripDialog(
             initial = stop,
             world = ready.world,
             docs = ready.docs,
-            trips = ready.trips,
+            trips = judgedTrips,
             isFinal = true,
             carryDocumentId = TripModel.sortedStops(stops).lastOrNull()?.documentId,
             primaryDocId = ready.primaryDocId,
+            statuses = ready.statuses,
             onDone = { updated ->
                 pendingNewStop = null
                 lastStopSnapshot = StopSnapshot(stops)
@@ -368,8 +382,7 @@ internal fun AddTripDialog(
         AddStopWarningDialog(
             onConfirm = {
                 showAddStopWarning = false
-                val defaultArrival = TripModel.sortedStops(stops).lastOrNull()?.departure ?: today
-                pendingNewStop = TripStop(UUID.randomUUID().toString(), "", defaultArrival, null)
+                queueNewStop()
             },
             onDismiss = { showAddStopWarning = false },
         )
@@ -422,14 +435,17 @@ internal fun AddTripDialog(
         }
     }
     saveWarnings?.let { (warnings, canSave) ->
-        SaveWarningsDialog(
-            warnings = warnings,
-            canSave = canSave,
+        GuardFindingsDialog(
+            title = if (canSave) "Check trip" else "Cannot save yet",
+            findings = warnings,
+            confirmLabel = if (canSave) "Save anyway" else null,
+            dismissLabel = "Edit",
+            neutralLabel = if (canSave) null else "Discard",
             onConfirm = {
                 saveWarnings = null
                 save()
             },
-            onBack = {
+            onNeutral = {
                 saveWarnings = null
                 onDismiss()
             },
@@ -437,7 +453,7 @@ internal fun AddTripDialog(
         )
     }
     if (showSplitExitConfirm) {
-        TripAlertDialog(
+        VoleAlertDialog(
             title = "Discard the new trip?",
             confirmLabel = "Discard",
             onConfirm = onDismiss,

@@ -27,8 +27,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -36,10 +34,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -67,6 +64,7 @@ import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import com.cbkres.visavole.ui.screens.map.Severity
 import com.cbkres.visavole.ui.screens.map.severityColor
 import com.cbkres.visavole.ui.theme.ThemePrefs
+import com.cbkres.visavole.ui.VoleAlertDialog
 import kotlin.math.roundToInt
 
 private const val SOURCE_URL = "https://github.com/The-Omni-Stuart/VisaVole"
@@ -236,7 +234,7 @@ internal fun SettingsScreen(
                     "GPLv3",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
-                    // P2-23: the bare labelSmall word was a ~40×20dp target; pad it to a ≥48dp hit
+                    // the bare labelSmall word was a ~40×20dp target; pad it to a ≥48dp hit
                     // area (padding before clickable so the padding counts toward the target).
                     modifier = Modifier
                         .padding(vertical = 16.dp, horizontal = 4.dp)
@@ -257,26 +255,20 @@ internal fun SettingsScreen(
 
     val pending = pendingRestore
     if (pending != null) {
-        AlertDialog(
-            onDismissRequest = { pendingRestore = null },
-            title = { Text("Restore backup?") },
-            text = {
+        VoleAlertDialog(
+            title = "Restore backup?",
+            confirmLabel = "Restore",
+            confirmDestructive = true,
+            onConfirm = {
+                vm.applyRestore(pending)
+                pendingRestore = null
+            },
+            onDismiss = { pendingRestore = null },
+            content = {
                 Text(
                     "Replace your current ${ready.docs.size} documents and ${ready.trips.size} trips " +
                         "with the backup's ${pending.docs.size} documents and ${pending.trips.size} trips?",
                 )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        vm.applyRestore(pending)
-                        pendingRestore = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                ) { Text("Restore") }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingRestore = null }) { Text("Cancel") }
             },
         )
     }
@@ -375,7 +367,7 @@ private fun AppIcon() {
     val context = LocalContext.current
     val density = LocalDensity.current
     val iconRes = remember { context.packageManager.getApplicationInfo(context.packageName, 0).icon }
-    // P3-46: rasterize at the display size (96.dp in px), not a fixed 384 — the old bitmap was
+    // rasterize at the display size (96.dp in px), not a fixed 384 — the old bitmap was
     // ~4x oversized for the 96.dp slot. Capped so a very high density can't over-allocate.
     val size = (96.dp.value * density.density).roundToInt().coerceIn(1, 512)
     // Adaptive icons can't be loaded through painterResource, so rasterize the drawable instead
@@ -406,7 +398,7 @@ private fun AppIcon() {
 private fun openUrl(context: Context, url: String) {
     runCatching {
         // A bare ACTION_VIEW with NO mime type is the correct way to open a web URL: the https
-        // scheme routes it to a browser. (P3-24 first added type="text/html", but on a real device
+        // scheme routes it to a browser. ( first added type="text/html", but on a real device
         // that made the intent match text/html handlers — a notes app — instead of the browser.)
         context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri()))
     }.onFailure {

@@ -43,7 +43,7 @@ jobs:
 
       - name: Run unit tests, lint and build debug APK
         # Tests stay hermetic against the committed visa_data.db; updateVisaDb is opt-in and off the build path.
-        run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --stacktrace
+        run: ./gradlew :app:test :app:lintDebug :app:assembleDebug --stacktrace
 
       - name: Extract version name
         id: version

@@ -2,6 +2,7 @@ package com.cbkres.visavole.domain
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import java.time.LocalDate
 
 /**
  * The dialog → draft → document round trip. [untouchedDraft] replays `AddDocumentDialog`'s state
@@ -14,6 +15,7 @@ class DocDraftTest {
         countries = buildMap {
             put("FR", Country("FR", "France"))
             put("DE", Country("DE", "Germany"))
+            put("ES", Country("ES", "Spain"))
             put("GB", Country("GB", "United Kingdom"))
             for (i in 1..12) put("C%02d".format(i), Country("C%02d".format(i), "Country%02d".format(i)))
         },
@@ -22,6 +24,7 @@ class DocDraftTest {
         holdings = mapOf(
             "fr-res" to Holding("fr-res", "France Residence", "residency", "FR"),
             "fr-visa" to Holding("fr-visa", "France Visa", "short_term_visa", "FR"),
+            "es-permit" to Holding("es-permit", "Spain Permit", "special_permit", "ES"),
         ),
         benefits = emptyMap(),
     )
@@ -61,6 +64,11 @@ class DocDraftTest {
             initCustom.holdingId == null -> ""
             else -> initCustom.holdingId
         }
+        // Auto-holding inference must use the same tab-guarded kind buildDocument guards with:
+        // a legacy "permit" sits on the Visa tab, and inferring with the tab's "visa" would
+        // stamp an auto holding into holdingId on an untouched edit (identity drift → in-use block).
+        val inferredKind =
+            if (initCustom != null && initialTabFor(initCustom.kind) == docType) initCustom.kind else docType.kind
         return DocDraft(
             id = initial.id,
             docType = docType,
@@ -72,7 +80,7 @@ class DocDraftTest {
                 else -> blocChoice
             },
             effectiveHolding = when (holdingChoice) {
-                null -> world.holdingFor(customIso, docType.kind)
+                null -> world.holdingFor(customIso, inferredKind)
                 "" -> null
                 else -> holdingChoice
             },
@@ -112,6 +120,31 @@ class DocDraftTest {
     @Test fun passportEditRoundTripsUnchanged() {
         val initial = passportDocument("GB", "United Kingdom", "2031-05-01", "2021-05-01", id = "p1")
         assertEquals(initial, buildDocument(untouchedDraft(initial), initial, world))
+    }
+
+    @Test fun untouchedPermitEditDoesNotStampAutoHolding() {
+        // A legacy permit opens on the Visa tab; auto-holding inference with the tab's "visa"
+        // kind finds the ES permit holding (visa accepts special_permit) and would stamp it
+        // into holdingId, drifting the document's identity on an edit that touched nothing.
+        val initial = Document(
+            "pm1", "Permit: Spain", DocKind.Custom(setOf("ES"), blocId = null, kind = "permit", holdingId = null, entryType = "multiple"),
+            null, null, null, null,
+        )
+        assertEquals(initial, buildDocument(untouchedDraft(initial), initial, world))
+    }
+
+    @Test fun untouchedPermitEditPassesInUseIdentityGuard() {
+        val permit = Document(
+            "pm2", "Permit: Spain", DocKind.Custom(setOf("ES"), blocId = null, kind = "permit", holdingId = null, entryType = "multiple"),
+            null, null, null, null,
+        )
+        val stay = Trip("tp", listOf(TripStop("ts", "ES", LocalDate.of(2026, 11, 13), null, documentId = permit.id)))
+        val built = buildDocument(untouchedDraft(permit), permit, world)
+        val guard = GuardEngine.evaluate(
+            GuardAction.UpdateDocument(built, permit),
+            GuardContext(listOf(permit), listOf(stay), world, LocalDate.of(2026, 11, 15), null),
+        )
+        assertEquals(emptyList<String>(), guard.findings.map { it.code })
     }
 
     @Test fun holdingEditRoundTripsUnchanged() {

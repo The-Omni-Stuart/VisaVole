@@ -20,14 +20,20 @@ class VisaDb(context: Context) {
     private val appContext: Context = context.applicationContext
     private val dbFile: File = File(appContext.filesDir, DB_NAME)
     private val metaFile: File = File(appContext.filesDir, "$DB_NAME.meta")
+    @Volatile
     private var db: SQLiteDatabase? = null
+    private val openLock = Any()
 
     val database: SQLiteDatabase
         get() {
             db?.takeIf { it.isOpen }?.let { return it }
-            ensureCopied()
-            db = openWithSelfHeal()
-            return db!!
+            // Without this, two racing first-callers could both ensureCopied() — one deleting
+            // the file while the other is mid-open.
+            synchronized(openLock) {
+                db?.takeIf { it.isOpen }?.let { return it }
+                ensureCopied()
+                return openWithSelfHeal().also { db = it }
+            }
         }
 
     /**

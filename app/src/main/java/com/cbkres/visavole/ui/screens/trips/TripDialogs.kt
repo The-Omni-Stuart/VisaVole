@@ -7,91 +7,21 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.cbkres.visavole.domain.GuardFinding
-import com.cbkres.visavole.domain.GuardSeverity
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.WorldData
+import com.cbkres.visavole.ui.VoleAlertDialog
 import com.cbkres.visavole.ui.VisaDialog
-import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
-import com.cbkres.visavole.ui.screens.map.SAVABLE_DANGER_CODES
-import com.cbkres.visavole.ui.screens.map.Severity
-import com.cbkres.visavole.ui.screens.map.severityColor
 import java.time.LocalDate
 
-@Composable
-internal fun TripAlertDialog(
-    title: String,
-    confirmLabel: String?,
-    onConfirm: () -> Unit,
-    confirmEnabled: Boolean = true,
-    neutralLabel: String? = null,
-    onNeutral: (() -> Unit)? = null,
-    dismissLabel: String = "Cancel",
-    onDismiss: () -> Unit,
-    content: @Composable () -> Unit,
-) {
-    VisaDialog(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(20.dp)) {
-            Text(title, style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(12.dp))
-            content()
-            Spacer(Modifier.height(20.dp))
-            if (neutralLabel != null && confirmLabel != null) {
-                Button(
-                    onClick = onConfirm,
-                    enabled = confirmEnabled,
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text(confirmLabel) }
-                Spacer(Modifier.height(12.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
-                        onClick = { onNeutral?.invoke() ?: onDismiss() },
-                        modifier = Modifier.weight(1f)
-                    ) { Text(neutralLabel) }
-                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                        Text(
-                            dismissLabel
-                        )
-                    }
-                }
-            } else if (neutralLabel != null) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
-                        onClick = { onNeutral?.invoke() ?: onDismiss() },
-                        modifier = Modifier.weight(1f)
-                    ) { Text(neutralLabel) }
-                    OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f)) {
-                        Text(
-                            dismissLabel
-                        )
-                    }
-                }
-            } else {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedButton(onClick = onDismiss) { Text(dismissLabel) }
-                    if (confirmLabel != null) {
-                        Spacer(Modifier.width(12.dp))
-                        Button(onClick = onConfirm, enabled = confirmEnabled) { Text(confirmLabel) }
-                    }
-                }
-            }
-        }
-    }
-}internal data class OngoingConflict(val candidate: Trip, val previous: Trip, val end: LocalDate)
+internal data class OngoingConflict(val candidate: Trip, val previous: Trip, val end: LocalDate)
 
 @Composable
 internal fun GapDialog(
@@ -186,7 +116,7 @@ internal fun OngoingConfirmDialog(
 /** Warns that adding a stop to an ongoing trip closes the current stop. */
 @Composable
 internal fun AddStopWarningDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    TripAlertDialog(
+    VoleAlertDialog(
         title = "Add stop to ongoing trip",
         confirmLabel = "Add stop",
         onConfirm = onConfirm,
@@ -204,7 +134,7 @@ internal fun OngoingConflictDialog(
     onKeepBoth: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    TripAlertDialog(
+    VoleAlertDialog(
         title = "Another trip is ongoing",
         confirmLabel = "Close previous & add",
         onConfirm = onClosePrevious,
@@ -218,42 +148,6 @@ internal fun OngoingConflictDialog(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        },
-    )
-}
-
-/** Lists guard findings for the candidate trip; blocks forbid saving, warnings allow it. */
-@Composable
-internal fun SaveWarningsDialog(
-    warnings: List<GuardFinding>,
-    canSave: Boolean,
-    onConfirm: () -> Unit,
-    onBack: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    TripAlertDialog(
-        title = if (canSave) "Check trip" else "Cannot save yet",
-        confirmLabel = if (canSave) "Save anyway" else null,
-        confirmEnabled = canSave,
-        onConfirm = onConfirm,
-        neutralLabel = if (canSave) null else "Discard",
-        onNeutral = onBack,
-        dismissLabel = "Edit",
-        onDismiss = onDismiss,
-        content = {
-            Column {
-                warnings.forEach { f ->
-                    Text(
-                        "${f.title}: ${f.message}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = severityColor(
-                            if (f.severity == GuardSeverity.BLOCK || f.code in SAVABLE_DANGER_CODES) Severity.BAD else Severity.WARN,
-                            LocalEffectiveDarkTheme.current,
-                        ),
-                        modifier = Modifier.padding(vertical = 3.dp),
-                    )
-                }
-            }
         },
     )
 }

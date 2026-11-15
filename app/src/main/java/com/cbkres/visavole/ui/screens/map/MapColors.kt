@@ -8,7 +8,7 @@ import com.cbkres.visavole.domain.AccessLevel
 /**
  * The effective dark/light theme the user is actually seeing. It may be forced light/dark via the
  * Settings override, so it is not necessarily the OS setting — provided once at the root by
- * `Visa_VoleTheme` and read by the per-theme status colours (P1-12) instead of
+ * `Visa_VoleTheme` and read by the per-theme status colours instead of
  * `isSystemInDarkTheme()`, so a forced theme drives the right contrast set.
  */
 val LocalEffectiveDarkTheme: ProvidableCompositionLocal<Boolean> = compositionLocalOf { false }
@@ -32,8 +32,11 @@ val COVERED_OWN = Color(0xFFA12AFA)
 
 // A uniform residence shade.
 val RESIDENCE_FILL = Color(0xFF14DC9D)
-// Dark-theme text variants of the two map special cases (brighter so they keep AA contrast on a
-// near-black surface — the base [HOME]/[COVERED_OWN] shades were tuned for light surfaces).
+// Text tones for the two map special cases: the bright [HOME]/[COVERED_OWN] fills are for the
+// canvas, these are the same hues darkened to clear AA on a light surface and lightened for a
+// near-black one.
+val HOME_TONE = Color(0xFF045CE3)
+val COVERED_OWN_TONE = Color(0xFF9326E4)
 val HOME_DARK = Color(0xFF60A5FA)
 val COVERED_OWN_DARK = Color(0xFFC084FC)
 
@@ -41,27 +44,27 @@ val COVERED_OWN_DARK = Color(0xFFC084FC)
  * The single severity → colour table: one entry per access level with three renderings. [fill] is
  * the bright canvas choropleth (same in both themes — it sits on the ocean, a large graphic that
  * only needs 3:1); [tone] is the darker shade for labels/chips on a *light* surface; [darkTone]
- * is the brighter shade for the same labels/chips on a *dark* surface (P1-12 — the old single
+ * is the brighter shade for the same labels/chips on a *dark* surface ( — the old single
  * shade failed WCAG AA on near-black). Every level colour in the app (map fills, status pills,
  * detail-card text) derives from this table — best (blue / teal / green) -> worst (red), worst-first.
  */
-private data class LevelPalette(val fill: Color, val tone: Color, val darkTone: Color)
+internal data class LevelPalette(val fill: Color, val tone: Color, val darkTone: Color)
 
-private val LEVEL_PALETTES: Map<AccessLevel, LevelPalette> = mapOf(
-    AccessLevel.FREEDOM to LevelPalette(Color(0xFF5BDCEC), Color(0xFF00B8D4), Color(0xFF67E8F9)),       // cyan — bloc citizenship
-    AccessLevel.RESIDENCE to LevelPalette(RESIDENCE_FILL, Color(0xFF00C48C), Color(0xFF6EE7B7)),         // teal — residence permit
-    AccessLevel.VISA_FREE to LevelPalette(Color(0xFF44F17A), Color(0xFF00D26A), Color(0xFF86EFAC)),      // green — visa-free / on arrival, no step needed
-    AccessLevel.COVERED to LevelPalette(Color(0xFFBD6AFC), Color(0xFFBD6AFC), Color(0xFFD8B4FE)),        // magenta — covered via a visa's travel bloc
-    AccessLevel.ETA to LevelPalette(Color(0xFFB9F04A), Color(0xFF7CB342), Color(0xFFC5E1A5)),            // lime — quick pre-authorisation (eTA/ESTA/ETIAS)
-    AccessLevel.E_VISA to LevelPalette(Color(0xFFFFD84A), Color(0xFFCA8A04), Color(0xFFFBBF24)),          // yellow — e-visa, apply online
+internal val LEVEL_PALETTES: Map<AccessLevel, LevelPalette> = mapOf(
+    AccessLevel.FREEDOM to LevelPalette(Color(0xFF5BDCEC), Color(0xFF026980), Color(0xFF67E8F9)),       // cyan — bloc citizenship
+    AccessLevel.RESIDENCE to LevelPalette(RESIDENCE_FILL, Color(0xFF027256), Color(0xFF6EE7B7)),         // teal — residence permit
+    AccessLevel.VISA_FREE to LevelPalette(Color(0xFF44F17A), Color(0xFF0B6B35), Color(0xFF86EFAC)),      // green — visa-free / on arrival, no step needed
+    AccessLevel.COVERED to LevelPalette(Color(0xFFBD6AFC), Color(0xFF8B2BE2), Color(0xFFD8B4FE)),        // magenta — covered via a visa's travel bloc
+    AccessLevel.ETA to LevelPalette(Color(0xFFB9F04A), Color(0xFF456E0C), Color(0xFFC5E1A5)),            // lime — quick pre-authorisation (eTA/ESTA/ETIAS)
+    AccessLevel.E_VISA to LevelPalette(Color(0xFFFFD84A), Color(0xFF7C5A00), Color(0xFFFBBF24)),          // yellow — e-visa, apply online
     AccessLevel.VISA_REQUIRED to LevelPalette(Color(0xFF94A3B8), Color(0xFF475569), Color(0xFF94A3B8)),  // grey — embassy visit
-    AccessLevel.REFUSED to LevelPalette(Color(0xFFFB1604), Color(0xFFFB1604), Color(0xFFFCA5A5)),         // red — no entry
+    AccessLevel.REFUSED to LevelPalette(Color(0xFFFB1604), Color(0xFFC2190B), Color(0xFFFCA5A5)),         // red — no entry
 )
 
-// The single neutral slate for "no data / unknown" on status surfaces (allowance rings, no-data
-// country fills, and their label tones) — one value so the ring and the map can't drift apart.
+// The single neutral slate for the allowance ring and no-data country fills — one value so the
+// ring and the map can't drift apart; the text tone below is the darker AA-safe slate.
 val NO_DATA = Color(0xFF64748B)
-private val NO_DATA_PALETTE = LevelPalette(NO_DATA, NO_DATA, Color(0xFF94A3B8))        // slate — no data
+private val NO_DATA_PALETTE = LevelPalette(NO_DATA, Color(0xFF475569), Color(0xFF94A3B8))        // slate — no data
 
 private fun paletteFor(level: AccessLevel?): LevelPalette =
     level?.let { LEVEL_PALETTES[it] } ?: NO_DATA_PALETTE
@@ -82,12 +85,12 @@ internal fun mapFill(level: AccessLevel?, isHome: Boolean = false, isOwn: Boolea
 
 /**
  * Label/pill tone for a level on theme-driven surfaces — same special cases as [mapFill], but the
- * shade is theme-aware (P1-12): [isDark] picks the brighter [LevelPalette.darkTone] on a near-black
+ * shade is theme-aware: [isDark] picks the brighter [LevelPalette.darkTone] on a near-black
  * surface so the text keeps AA contrast, and the darker [LevelPalette.tone] on a light one.
  */
 internal fun statusTone(level: AccessLevel?, isDark: Boolean, isHome: Boolean = false, isOwn: Boolean = false): Color = when {
-    isHome -> if (isDark) HOME_DARK else HOME
-    level == AccessLevel.COVERED && isOwn -> if (isDark) COVERED_OWN_DARK else COVERED_OWN
+    isHome -> if (isDark) HOME_DARK else HOME_TONE
+    level == AccessLevel.COVERED && isOwn -> if (isDark) COVERED_OWN_DARK else COVERED_OWN_TONE
     else -> paletteFor(level).let { if (isDark) it.darkTone else it.tone }
 }
 
@@ -107,10 +110,10 @@ const val DIM_ALPHA = 0.35f
 enum class Severity { OK, CAUTION, WARN, BAD }
 
 /**
- * The one place a severity becomes a concrete text shade (P1-12). Two sets, chosen by [isDark]:
+ * The one place a severity becomes a concrete text shade. Two sets, chosen by [isDark]:
  * the darker Material -700 shades on light surfaces, the brighter -400 shades on near-black
  * surfaces, so the text keeps ≥4.5:1 in both themes. (The old single amber `#CA8A04` failed AA as
- * light-theme text; it now only appears in the dark set, where it passes.)
+ * light-theme text; it now appears in neither text set.)
  */
 internal fun severityColor(severity: Severity, isDark: Boolean): Color = if (isDark) {
     when (severity) {

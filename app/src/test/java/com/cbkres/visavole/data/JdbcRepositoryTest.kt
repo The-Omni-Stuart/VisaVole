@@ -96,7 +96,7 @@ class JdbcRepositoryTest {
 
     @Test
     fun parseIso2ArrayIsLenientAndShared() {
-        // P3-31: the Android (org.json) and JVM (string-split) repositories used to parse members
+        // the Android (org.json) and JVM (string-split) repositories used to parse members
         // differently — a malformed string crashed Android but loaded leniently on the JVM, so the
         // divergence was untestable. They now share this one lenient parser, which never throws.
         assertEquals(listOf("AT", "BE"), parseIso2Array("[\"AT\", \"BE\"]"))

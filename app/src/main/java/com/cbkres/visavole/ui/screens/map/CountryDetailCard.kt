@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.Access
 import com.cbkres.visavole.domain.AccessLevel
+import com.cbkres.visavole.domain.AccessReason
 import com.cbkres.visavole.domain.DocAccess
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.StatusPill
@@ -57,7 +58,7 @@ internal fun CountryDetailCard(
         shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 0.dp, bottomEnd = 0.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         tonalElevation = 0.dp,
-        // P3-57: no drop shadow — the default 3dp elevation read as a shadow on the card's
+        // no drop shadow — the default 3dp elevation read as a shadow on the card's
         // lower edge and washed out the last breakdown row (the card is a flat bottom sheet).
         shadowElevation = 0.dp,
     ) {
@@ -91,11 +92,7 @@ internal fun CountryDetailCard(
                 isHome -> "Passport: ${homePassport.orEmpty()}"
                 access == null || access.level == AccessLevel.UNKNOWN -> ""
                 else -> {
-                    val reason = when {
-                        access.reason == "Passport rule" -> ""
-                        access.reason.startsWith("No data") -> "No documented rule"
-                        else -> access.reason
-                    }
+                    val reason = accessReasonLabel(access.reason)
                     (reason + classSuffix).trim()
                 }
             }
@@ -183,7 +180,7 @@ internal fun CountryDetailCard(
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
                                         val isYourCountry =
-                                            entry.access.reason == "Your country"
+                                            entry.access.reason == AccessReason.HomeCountry
 
                                         Text(
                                             if (isYourCountry) {
@@ -236,3 +233,13 @@ internal fun CountryDetailCard(
         }
     }
 }
+
+/**
+ * The detail card's subtext for [reason]: blank for reasons the level line already says. The
+ * decision is by reason type, so rewording a label can never resurrect or silence the line.
+ */
+internal fun accessReasonLabel(reason: AccessReason?): String =
+    when (reason) {
+        null, AccessReason.PassportBaseline -> ""
+        else -> reason.label
+    }

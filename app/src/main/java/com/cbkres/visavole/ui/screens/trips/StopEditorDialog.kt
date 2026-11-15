@@ -23,8 +23,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.AccessModel
+import com.cbkres.visavole.domain.DocStatus
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripModel
@@ -45,6 +46,7 @@ import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.VisaDatePickerDialog
 import com.cbkres.visavole.ui.VisaDialog
+import com.cbkres.visavole.ui.VoleAlertDialog
 import com.cbkres.visavole.ui.components.forms.CountryPicker
 import com.cbkres.visavole.ui.components.forms.SelectionField
 import com.cbkres.visavole.ui.hazeAlphas
@@ -67,6 +69,7 @@ internal fun StopEditorDialog(
     carryDocumentId: String? = null,
     initiallyEditingDeparture: Boolean = false,
     primaryDocId: String? = null,
+    statuses: Map<String, DocStatus> = emptyMap(),
 ) {
     var stop by remember { mutableStateOf(initial) }
     var countryQuery by remember { mutableStateOf("") }
@@ -91,12 +94,16 @@ internal fun StopEditorDialog(
             stop = stop.copy(documentId = preferred)
         }
     }
-    val rule = remember(stop.countryIso2, stop.arrival, docs, world) {
-        world.stayRuleFor(stop.countryIso2, AccessModel.validHomeCountries(docs, world, stop.arrival), stop.arrival)
+    val validHomes = remember(docs, world, stop.arrival, statuses) {
+        AccessModel.validHomeCountries(docs, world, stop.arrival, statuses = statuses)
     }
-    val stopAccess = remember(stop.countryIso2, stop.arrival, docs, trips) {
-        AccessModel.compute(docs, world, stop.arrival, trips)[stop.countryIso2]
+    val rule = world.stayRuleFor(stop.countryIso2, validHomes, stop.arrival)
+    // One whole-world compute per date: picking another country indexes this map instead of
+    // re-running the access model.
+    val accessByCountry = remember(docs, world, stop.arrival, trips, statuses) {
+        AccessModel.compute(docs, world, stop.arrival, trips, statuses)
     }
+    val stopAccess = accessByCountry[stop.countryIso2]
     val accessWarning = TripModel.accessWarningFor(
         stopAccess,
         world.countries[stop.countryIso2]?.name ?: stop.countryIso2,
@@ -271,7 +278,7 @@ private fun StopAccessWarningDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    TripAlertDialog(
+    VoleAlertDialog(
         title = warning.title,
         confirmLabel = "Save anyway",
         onConfirm = onConfirm,

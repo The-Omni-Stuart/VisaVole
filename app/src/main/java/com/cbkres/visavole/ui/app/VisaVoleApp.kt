@@ -2,10 +2,15 @@ package com.cbkres.visavole.ui.app
 
 import android.app.Application
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.screens.ErrorScreen
@@ -25,6 +30,16 @@ internal fun VisaVoleApp(
         factory = ViewModelProvider.AndroidViewModelFactory.getInstance(app),
     )
     val state by vm.state.collectAsState(initial = AppState.Loading)
+    // An app left open across UTC midnight must show today's numbers, not yesterday's: the VM
+    // re-reads its `today` on every resume and republishes only when the date actually rolled.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _: LifecycleOwner, event ->
+            if (event == Lifecycle.Event.ON_RESUME) vm.onResume()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     when (val s = state) {
         AppState.Loading -> LoadingScreen()
         is AppState.Failed -> ErrorScreen(s.message) { vm.retryLoad() }

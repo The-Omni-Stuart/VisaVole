@@ -2,6 +2,7 @@ package com.cbkres.visavole.ui.screens.map
 
 import com.cbkres.visavole.domain.Access
 import com.cbkres.visavole.domain.AccessLevel
+import com.cbkres.visavole.domain.AccessReason
 import com.cbkres.visavole.domain.ResidenceClass
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -14,7 +15,7 @@ import org.junit.Test
  */
 class MapPaintKeyTest {
 
-    private fun access(iso: String, days: Int?) = iso to Access(AccessLevel.VISA_FREE, days, "Passport rule")
+    private fun access(iso: String, days: Int?) = iso to Access(AccessLevel.VISA_FREE, days, AccessReason.PassportBaseline)
 
     @Test fun equalMapsAcrossImplementationsShareAKey() {
         val entries = listOf(access("DE", 90), access("FR", 90), access("US", null))
@@ -40,8 +41,8 @@ class MapPaintKeyTest {
 
     @Test fun residenceClassAndReasonParticipateInEquality() {
         // The key leans on Access being a data class; pin the fields the map paints from.
-        val withClass = Access(AccessLevel.RESIDENCE, null, "Residence", true, ResidenceClass.LONG_TERM)
-        val without = Access(AccessLevel.RESIDENCE, null, "Residence", true, null)
+        val withClass = Access(AccessLevel.RESIDENCE, null, fromDocument = true, residenceClass = ResidenceClass.LONG_TERM)
+        val without = Access(AccessLevel.RESIDENCE, null, fromDocument = true)
         assertNotEquals(withClass, without)
         assertNotEquals(
             mapPaintKey(mapOf("DE" to withClass), emptySet(), emptySet()),

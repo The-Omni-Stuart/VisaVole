@@ -1,22 +1,18 @@
 package com.cbkres.visavole.ui.screens.documents
 
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -36,6 +32,7 @@ import com.cbkres.visavole.ui.screens.map.Severity
 import com.cbkres.visavole.ui.screens.map.severityColor
 import com.cbkres.visavole.ui.toUtcIsoDate
 import com.cbkres.visavole.ui.toUtcMillis
+import com.cbkres.visavole.ui.VoleAlertDialog
 import java.time.LocalDate
 
 /** The validity-period button and its two chained pickers (valid-from → expiry). */
@@ -56,7 +53,7 @@ internal fun ValidityPeriodField(
     }
     var showValidFromPicker by remember { mutableStateOf(false) }
     var showValidToPicker by remember { mutableStateOf(false) }
-    // P3-55: when the parent bumps [reopenToken], open the requested picker so a half-set validity
+    // when the parent bumps [reopenToken], open the requested picker so a half-set validity
     // can be completed without hunting for the field again.
     LaunchedEffect(reopenToken) {
         if (reopenToken != 0) {
@@ -134,15 +131,12 @@ internal fun MultiCountryConfirmDialog(
     onDismiss: () -> Unit,
 ) {
     val names = (doc.kind as? DocKind.Custom)?.countries?.sortedBy { countries[it]?.name ?: it } ?: emptyList()
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onConfirm) { Text("Save anyway") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Back") }
-        },
-        text = {
+    VoleAlertDialog(
+        confirmLabel = "Save anyway",
+        onConfirm = onConfirm,
+        dismissLabel = "Back",
+        onDismiss = onDismiss,
+        content = {
             val warn = severityColor(
                 Severity.WARN,
                 LocalEffectiveDarkTheme.current
@@ -163,33 +157,6 @@ internal fun MultiCountryConfirmDialog(
     )
 }
 
-/** Confirms a save whose guard run produced warnings none of the other confirms covered. */
-@Composable
-internal fun SaveWarningsDialog(
-    warnings: List<GuardFinding>,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Check document") },
-        text = {
-            Column {
-                warnings.forEach { f ->
-                    Text(
-                        "${f.title}: ${f.message}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = severityColor(Severity.WARN, LocalEffectiveDarkTheme.current),
-                        modifier = Modifier.padding(vertical = 3.dp),
-                    )
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("Save anyway") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Edit") } },
-    )
-}
-
 /** Confirms an accompanying mutation (e.g. expiring a superseded document) that a save implies. */
 @Composable
 internal fun PendingMutationDialog(
@@ -197,16 +164,13 @@ internal fun PendingMutationDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onConfirm) { Text("Confirm") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Back") }
-        },
-        title = { Text(warn?.title ?: "Heads up") },
-        text = { Text(warn?.message ?: "This action will also change another of your documents.") },
+    VoleAlertDialog(
+        title = warn?.title ?: "Heads up",
+        confirmLabel = "Confirm",
+        onConfirm = onConfirm,
+        dismissLabel = "Back",
+        onDismiss = onDismiss,
+        content = { Text(warn?.message ?: "This action will also change another of your documents.") },
     )
 }
 
@@ -217,22 +181,17 @@ internal fun BlockedFindingDialog(
     hasDuplicate: Boolean,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
-    onCancel: () -> Unit,
+    onDiscard: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = {
-            if (hasDuplicate) onCancel()
-            onDismiss()
-        },
-        confirmButton = {
-            TextButton(onClick = onConfirm) { Text(if (hasDuplicate) "Edit existing" else "Got it") }
-        },
-        dismissButton = {
-            if (hasDuplicate) {
-                TextButton(onClick = onCancel) { Text("Cancel") }
-            }
-        },
-        title = { Text(finding.title) },
-        text = { Text(finding.message) },
+    VoleAlertDialog(
+        // Back returns to the half-filled form; leaving the editor is an explicitly labelled act.
+        title = finding.title,
+        confirmLabel = if (hasDuplicate) "Edit existing" else "Got it",
+        onConfirm = onConfirm,
+        neutralLabel = if (hasDuplicate) "Discard" else null,
+        onNeutral = onDiscard,
+        dismissLabel = null,
+        onDismiss = onDismiss,
+        content = { Text(finding.message) },
     )
 }

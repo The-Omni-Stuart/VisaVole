@@ -205,7 +205,7 @@ class DocStatusTest {
     @Test fun replacementWithoutValidFromArchivesImmediately() {
         // The validity field is optional in the add dialog, so a replacement usually has no
         // validFrom — the supersession still happens, and (user decision 2026-09-27) archives the
-        // old doc IMMEDIATELY rather than leaving it in a "replaced from today" limbo (P1-1).
+        // old doc IMMEDIATELY rather than leaving it in a "replaced from today" limbo.
         val v1 = visa("v1", setOf("CA"), expiry = "2028-01-01", supersededBy = "v2")
         val v2 = visa("v2", setOf("CA"), expiry = "2029-01-01")
         val s = DocStatus.of(v1, listOf(v1, v2), emptyList(), world(), today)
@@ -242,7 +242,7 @@ class DocStatusTest {
 
     @Test fun inProgressSingleEntryKeepsOwnDateExpiry() {
         // While the (only) entry is being used, exhaustion is NOT the effective expiry — the
-        // stay runs on the document's own date, so "expires today" must not appear (P1-6).
+        // stay runs on the document's own date, so "expires today" must not appear.
         val v1 = visa("v1", setOf("CA"), entry = "single", expiry = "2027-01-01")
         val t = Trip("t1", listOf(stop("s1", "CA", LocalDate.of(2026, 9, 1), null, "v1")))
         val s = DocStatus.of(v1, listOf(v1), listOf(t), world(), today)

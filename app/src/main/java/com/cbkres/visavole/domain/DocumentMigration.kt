@@ -21,7 +21,7 @@ object DocumentMigration {
     fun effectivePrimaryId(
         docs: List<Document>,
         primaryId: String?,
-        today: LocalDate = LocalDate.now(),
+        today: LocalDate,
     ): String? {
         if (primaryId != null) {
             val d = docs.firstOrNull { it.id == primaryId }
@@ -41,9 +41,9 @@ object DocumentMigration {
      * the unified [DocStatus] reduces to exactly this date check (no entry counts, never
      * superseded), so this helper needs no trip/world context.
      */
-    fun isExpiredDoc(doc: Document, today: LocalDate = LocalDate.now()): Boolean {
+    fun isExpiredDoc(doc: Document, today: LocalDate): Boolean {
         if (doc.kind !is DocKind.Passport) return false
         val iso = doc.expiry ?: return false
-        return runCatching { LocalDate.parse(iso) }.getOrNull()?.let { it.isBefore(today) } ?: false
+        return iso.toDateOrNull()?.isBefore(today) ?: false
     }
 }

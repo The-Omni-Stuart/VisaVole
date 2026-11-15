@@ -9,25 +9,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.DocKind
+import com.cbkres.visavole.domain.DocStatus
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.GuardAction
 import com.cbkres.visavole.domain.GuardContext
@@ -52,8 +49,10 @@ import com.cbkres.visavole.ui.screens.EmptyState
 import com.cbkres.visavole.ui.screens.ScreenHeader
 import com.cbkres.visavole.ui.screens.SectionLabel
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
+import com.cbkres.visavole.ui.VoleAlertDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import kotlin.time.Duration.Companion.milliseconds
 
 /** 24 months in days — a passport / residence enters the top display this close to its expiry. */
@@ -85,9 +84,7 @@ internal fun DocumentsScreen(
     val guardCtx = remember(ready.docs, ready.trips, ready.world, ready.starredDocId, today) {
         GuardContext.of(ready.docs, ready.trips, ready.world, ready.starredDocId, today)
     }
-    val removeBlockings: Map<String, GuardResult> = remember(guardCtx) {
-        ready.docs.associateBy({ it.id }, { d -> GuardEngine.evaluate(GuardAction.RemoveDocument(d.id), guardCtx) })
-    }
+    val removeBlockings = ready.removeBlockings
     // Card callbacks read the blockings through this so their identities stay stable across
     // publishes (a fresh per-publish map in a captured lambda would force every card to recompose).
     val blockings by rememberUpdatedState(removeBlockings)
@@ -123,8 +120,8 @@ internal fun DocumentsScreen(
             // The tab-top allowance display (the same one the Trips tab uses), fed from the
             // documents that actually have an expiry to watch: every visa, plus passports /
             // residence permits with under 24 months left.
-            // P3-44: remember the per-publish filters — docAllowances is O(allowances × docs) and
-            // these used to re-run on every recomposition, i.e. every scroll frame via P1-14.
+            // remember the per-publish filters — docAllowances is O(allowances × docs) and
+            // these used to re-run on every recomposition, i.e. every scroll frame via.
             val docAllowances = remember(ready.allowances, ready.docs, ready.world) {
                 ready.allowances.filter { a ->
                     val doc = ready.docs.firstOrNull { it.id == a.key.removePrefix("doc:") } ?: return@filter false
@@ -155,7 +152,7 @@ internal fun DocumentsScreen(
             val passportNumber = remember(ready.docs) { passportNumbers(ready.docs) }
             val docsListState = scrollState
             // State-taking overload: the per-frame haze read stays inside HazeBox, so scrolling
-            // recomposes only the haze edges — not the whole screen and every visible card (P1-14).
+            // recomposes only the haze edges — not the whole screen and every visible card.
             HazeBox(
                 docsListState,
                 MaterialTheme.colorScheme.background,
@@ -174,6 +171,7 @@ internal fun DocumentsScreen(
                             allowances = docAllowances,
                             primary = docPrimary,
                             focusedKey = effectiveFocusAllowance,
+                            today = ready.today,
                             onFocus = focus::toggle,
                             titleRow = { a ->
                                 val doc =
@@ -240,42 +238,29 @@ internal fun DocumentsScreen(
                             )
                         }
                         items(active, key = { it.id }) { doc ->
-                            val iso = (doc.kind as? DocKind.Passport)?.iso2
-                            val sameNatCount = iso?.let { validPassportIsoCounts[it] ?: 0 } ?: 0
+                            val sameNatCount = (doc.kind as? DocKind.Passport)?.iso2
+                                ?.let { validPassportIsoCounts[it] } ?: 0
                             // Callback identities pinned per document so cards whose doc did not
                             // change can skip recomposition when the screen republishes.
-                            val star: (() -> Unit)? =
-                                if (doc.kind is DocKind.Passport && sameNatCount >= 2) {
-                                    remember(doc) { { vm.setPrimary(doc.id) } }
-                                } else null
-                            val number = iso?.let {
-                                if ((passportIsoTotal[it]
-                                        ?: 0) >= 2
-                                ) passportNumber[doc.id] else null
-                            }
-                            DocumentCard(
+                            DocumentListCard(
                                 doc,
-                                ready.world,
+                                ready,
                                 today,
-                                statuses[doc.id],
-                                supersededByLabel = doc.supersededBy?.let { id ->
-                                    ready.docs.firstOrNull { d -> d.id == id }?.let {
-                                        docTitle(
-                                            it,
-                                            ready.world
-                                        )
-                                    }
-                                },
-                                canRemove = removeBlockings[doc.id]?.canProceed == true,
-                                passportNumber = number,
+                                statuses,
+                                removeBlockings,
+                                blockings,
+                                flashes,
+                                passportIsoTotal,
+                                passportNumber,
+                                star = if (doc.kind is DocKind.Passport && sameNatCount >= 2) {
+                                    remember(doc) { { vm.setPrimary(doc.id) } }
+                                } else null,
                                 isPrimary = doc.id == ready.primaryDocId,
                                 onRemove = remember(doc) { { removingDoc = doc } },
                                 onRemoveBlocked = remember(doc) {
                                     { blockedRemove = blockings[doc.id]?.findings?.firstOrNull() }
                                 },
                                 onEdit = remember(doc) { { editing = doc } },
-                                onStar = star,
-                                flashTrigger = flashes.countFor(doc.id),
                             )
                         }
                     }
@@ -288,35 +273,23 @@ internal fun DocumentsScreen(
                         items(archived, key = { it.id }) { doc ->
                             // An expired passport can never be the primary, so it shows no star — but
                             // it keeps its stable "(N)" number so it stays identifiable after expiry.
-                            val iso = (doc.kind as? DocKind.Passport)?.iso2
-                            val number = iso?.let {
-                                if ((passportIsoTotal[it]
-                                        ?: 0) >= 2
-                                ) passportNumber[doc.id] else null
-                            }
-                            DocumentCard(
+                            DocumentListCard(
                                 doc,
-                                ready.world,
+                                ready,
                                 today,
-                                statuses[doc.id],
-                                supersededByLabel = doc.supersededBy?.let { id ->
-                                    ready.docs.firstOrNull { d -> d.id == id }?.let {
-                                        docTitle(
-                                            it,
-                                            ready.world
-                                        )
-                                    }
-                                },
-                                canRemove = removeBlockings[doc.id]?.canProceed == true,
-                                passportNumber = number,
+                                statuses,
+                                removeBlockings,
+                                blockings,
+                                flashes,
+                                passportIsoTotal,
+                                passportNumber,
+                                star = null,
                                 isPrimary = false,
                                 onRemove = remember(doc) { { removingDoc = doc } },
                                 onRemoveBlocked = remember(doc) {
                                     { blockedRemove = blockings[doc.id]?.findings?.firstOrNull() }
                                 },
                                 onEdit = remember(doc) { { editing = doc } },
-                                onStar = null,
-                                flashTrigger = flashes.countFor(doc.id),
                             )
                         }
                     }
@@ -325,27 +298,23 @@ internal fun DocumentsScreen(
         }
     }
     blockedRemove?.let { finding ->
-        AlertDialog(
-            onDismissRequest = { blockedRemove = null },
-            title = { Text(finding.title) },
-            text = { Text(finding.message) },
-            confirmButton = { TextButton(onClick = { blockedRemove = null }) { Text("OK") } },
+        VoleAlertDialog(
+            title = finding.title,
+            confirmLabel = "OK",
+            onConfirm = { blockedRemove = null },
+            dismissLabel = null,
+            onDismiss = { blockedRemove = null },
+            content = { Text(finding.message) },
         )
     }
     removingDoc?.let { doc ->
-        AlertDialog(
-            onDismissRequest = { removingDoc = null },
-            title = { Text("Delete document") },
-            text = { Text("Delete this document? The map's access will be recalculated.") },
-            confirmButton = {
-                Button(
-                    onClick = { vm.removeDocument(doc.id); removingDoc = null },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                ) { Text("Delete") }
-            },
-            dismissButton = {
-                TextButton(onClick = { removingDoc = null }) { Text("Cancel") }
-            },
+        VoleAlertDialog(
+            title = "Delete document",
+            confirmLabel = "Delete",
+            confirmDestructive = true,
+            onConfirm = { vm.removeDocument(doc.id); removingDoc = null },
+            onDismiss = { removingDoc = null },
+            content = { Text("Delete this document? The map's access will be recalculated.") },
         )
     }
     if (showAdd) {
@@ -371,4 +340,46 @@ internal fun DocumentsScreen(
             )
         }
     }
+}
+
+/** One document row, shared by the Active and Archive sections; the sections differ only in the
+ *  primary star and its callback, which the caller supplies already pinned per document. */
+@Composable
+private fun DocumentListCard(
+    doc: Document,
+    ready: AppState.Ready,
+    today: LocalDate,
+    statuses: Map<String, DocStatus>,
+    removeBlockings: Map<String, GuardResult>,
+    blockings: Map<String, GuardResult>,
+    flashes: FlashTrigger,
+    passportIsoTotal: Map<String, Int>,
+    passportNumber: Map<String, Int>,
+    star: (() -> Unit)?,
+    isPrimary: Boolean,
+    onRemove: () -> Unit,
+    onRemoveBlocked: () -> Unit,
+    onEdit: () -> Unit,
+) {
+    val iso = (doc.kind as? DocKind.Passport)?.iso2
+    val number = iso?.let {
+        if ((passportIsoTotal[it] ?: 0) >= 2) passportNumber[doc.id] else null
+    }
+    DocumentCard(
+        doc,
+        ready.world,
+        today,
+        statuses[doc.id],
+        supersededByLabel = doc.supersededBy?.let { id ->
+            ready.docs.firstOrNull { d -> d.id == id }?.let { docTitle(it, ready.world) }
+        },
+        canRemove = removeBlockings[doc.id]?.canProceed == true,
+        passportNumber = number,
+        isPrimary = isPrimary,
+        onRemove = onRemove,
+        onRemoveBlocked = onRemoveBlocked,
+        onEdit = onEdit,
+        onStar = star,
+        flashTrigger = flashes.countFor(doc.id),
+    )
 }

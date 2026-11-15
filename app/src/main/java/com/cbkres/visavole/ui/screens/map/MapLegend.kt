@@ -23,6 +23,7 @@ import com.cbkres.visavole.domain.Access
 import com.cbkres.visavole.domain.AccessLevel
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.hazeAlphas
+import com.cbkres.visavole.ui.tapSink
 
 /**
  * The legend's numbers: per-level counts over the non-home access entries (homes get their own
@@ -54,7 +55,11 @@ internal fun MapLegend(counts: Map<AccessLevel?, Int>, homeCount: Int = 1) {
     )
     val legendScroll = rememberScrollState()
     val (legendStart, legendEnd) = legendScroll.hazeAlphas()
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 0.dp) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 0.dp,
+        modifier = Modifier.tapSink(),
+    ) {
         HazeBox(
             legendStart,
             legendEnd,
@@ -100,7 +105,7 @@ internal fun MapLegend(counts: Map<AccessLevel?, Int>, homeCount: Int = 1) {
                     }
                 }
                 // Slate swatch: countries with no documented rule render slate on the map but had no
-                // legend entry (P3-15).
+                // legend entry.
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         Modifier

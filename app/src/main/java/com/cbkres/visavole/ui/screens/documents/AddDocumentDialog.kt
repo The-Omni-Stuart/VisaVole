@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -19,11 +18,10 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,6 +41,7 @@ import com.cbkres.visavole.domain.WorldData
 import com.cbkres.visavole.domain.buildDocument
 import com.cbkres.visavole.domain.defaultResidenceClassFor
 import com.cbkres.visavole.domain.duplicateSignature
+import com.cbkres.visavole.domain.initialTabFor
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.VisaDialog
 import com.cbkres.visavole.ui.components.forms.CountryPicker
@@ -50,6 +49,8 @@ import com.cbkres.visavole.ui.components.forms.SelectionField
 import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.toUtcIsoDate
 import com.cbkres.visavole.ui.toUtcMillis
+import com.cbkres.visavole.ui.GuardFindingsDialog
+import com.cbkres.visavole.ui.VoleAlertDialog
 import java.time.ZoneOffset
 import java.util.UUID
 
@@ -123,7 +124,7 @@ internal fun AddDocumentDialog(
     var residenceClassEdited by remember { mutableStateOf(false) } // an explicit pick, vs the TEMPORARY fallback on a doc that stored no class
     var expiryDate by remember { mutableStateOf(initial?.expiry?.toUtcMillis()) }
     var validFromDate by remember { mutableStateOf(initial?.validFrom?.toUtcMillis()) }
-    // P3-55: a validity period is both-or-neither. When a save is attempted with exactly one date
+    // a validity period is both-or-neither. When a save is attempted with exactly one date
     // set, show a fix dialog and re-open the requested picker in the field.
     var showValidityPairDialog by remember { mutableStateOf(false) }
     var validityReopenToken by remember { mutableStateOf(0) }
@@ -148,7 +149,12 @@ internal fun AddDocumentDialog(
         "" -> null
         else -> customBlocChoice
     }
-    val inferredHolding = world.holdingFor(customIso, docType.kind)
+    // Infer with the kind buildDocument guards (not the tab's): a legacy "permit" opens on the
+    // Visa tab, and inferring with "visa" would stamp an auto holding into holdingId on an
+    // untouched edit, drifting the identity the in-use guard protects.
+    val inferredKind =
+        if (initCustom != null && initialTabFor(initCustom.kind) == docType) initCustom.kind else docType.kind
+    val inferredHolding = world.holdingFor(customIso, inferredKind)
     val effectiveHolding: String? = when (holdingChoice) {
         null -> inferredHolding
         "" -> null
@@ -210,43 +216,25 @@ internal fun AddDocumentDialog(
         world,
     )
 
-    // Run the pending document through the centralised guard. Blocks stop the save; the
-    // multi-country warning asks once; accompanying mutations (e.g. expiring a superseded doc)
-    // get their own confirm. [skipMultiCountry] lets "Save anyway" re-run the rest. The
-    // ViewModel backstops the very same rules before persisting.
-    fun saveDoc(doc: Document, skipMultiCountry: Boolean) {
-        val action = if (initial != null) GuardAction.UpdateDocument(doc, initial) else GuardAction.AddDocument(doc)
-        val result = GuardEngine.evaluate(action, guard)
-        if (result.blocks.isNotEmpty()) {
-            val block = result.blocks.first()
-            blocked = block
-            blockedDuplicate = if (block.code == "doc.duplicate") {
-                guard.docs.firstOrNull { it.id != doc.id && it.duplicateSignature() == doc.duplicateSignature() }
-            } else {
-                null
+    // The guard's decision chain lives in [decideDocSave] (JVM-pinned by DocSaveChainTest); the
+    // dialogs below only render one step and re-enter with the matching skip flag.
+    fun runSave(doc: Document, skipMultiCountry: Boolean = false, skipMutation: Boolean = false) {
+        when (val step = decideDocSave(doc, guard, skipMultiCountry, skipMutation)) {
+            is DocSaveDecision.Blocked -> {
+                blocked = step.finding
+                blockedDuplicate = step.duplicate
             }
-            return
+            DocSaveDecision.ConfirmMultiCountry -> multiCountryDoc = doc
+            is DocSaveDecision.ConfirmMutation -> {
+                pendingMutationDoc = doc
+                pendingMutationWarn = step.warning
+            }
+            is DocSaveDecision.ShowSaveWarnings -> saveWarnings = doc to step.warnings
+            is DocSaveDecision.Save -> {
+                onAdd(doc)
+                onDismiss()
+            }
         }
-        if (!skipMultiCountry && result.warnings.any { it.code == "doc.visa.multiCountry" }) {
-            multiCountryDoc = doc
-            return
-        }
-        if (result.mutations.isNotEmpty()) {
-            pendingMutationDoc = doc
-            pendingMutationWarn = result.warnings.firstOrNull { it.code == "doc.single.perCountry" }
-                ?: result.warnings.firstOrNull()
-            return
-        }
-        // Any remaining warning (e.g. doc.inUse.entriesPlanned) must reach the user before the
-        // edit commits. The multi-country warning is excluded: its own confirm already ran for
-        // this evaluate call — "Save anyway" there re-runs with skipMultiCountry.
-        val unconfirmed = result.warnings.filterNot { it.code == "doc.visa.multiCountry" }
-        if (unconfirmed.isNotEmpty()) {
-            saveWarnings = doc to unconfirmed
-            return
-        }
-        onAdd(doc)
-        onDismiss()
     }
 
     VisaDialog(
@@ -415,11 +403,11 @@ internal fun AddDocumentDialog(
                     Spacer(Modifier.width(12.dp))
                     Button(onClick = {
                         if ((validFromDate == null) xor (expiryDate == null)) {
-                            // P3-55: exactly one date set — can't save a half validity period.
+                            // exactly one date set — can't save a half validity period.
                             validityReopenPicker = if (validFromDate == null) 1 else 2
                             showValidityPairDialog = true
                         } else {
-                            saveDoc(build(), false)
+                            runSave(build())
                         }
                     }, enabled = valid) {
                         Text(if (initial == null) "Add" else "Save")
@@ -430,23 +418,23 @@ internal fun AddDocumentDialog(
     }
 
     if (showValidityPairDialog) {
-        AlertDialog(
-            onDismissRequest = { showValidityPairDialog = false },
-            title = { Text("Validity period") },
-            text = { Text("A validity period needs both a start and an end date. Set the missing one, or clear both.") },
-            confirmButton = {
-                Button(onClick = {
-                    validityReopenToken++
-                    showValidityPairDialog = false
-                }) { Text("Set both dates") }
+        VoleAlertDialog(
+            title = "Validity period",
+            confirmLabel = "Set both dates",
+            onConfirm = {
+                validityReopenToken++
+                showValidityPairDialog = false
             },
-            dismissButton = {
-                TextButton(onClick = {
-                    validFromDate = null
-                    expiryDate = null
-                    showValidityPairDialog = false
-                }) { Text("Clear both") }
+            // "Clear both" is an action, not a dismissal: Back returns to the form.
+            neutralLabel = "Clear both",
+            onNeutral = {
+                validFromDate = null
+                expiryDate = null
+                showValidityPairDialog = false
             },
+            dismissLabel = null,
+            onDismiss = { showValidityPairDialog = false },
+            content = { Text("A validity period needs both a start and an end date. Set the missing one, or clear both.") },
         )
     }
 
@@ -456,7 +444,7 @@ internal fun AddDocumentDialog(
             countries = countries,
             onConfirm = {
                 multiCountryDoc = null
-                saveDoc(doc, true)
+                runSave(doc, skipMultiCountry = true)
             },
             onDismiss = { multiCountryDoc = null },
         )
@@ -466,8 +454,7 @@ internal fun AddDocumentDialog(
             warn = pendingMutationWarn,
             onConfirm = {
                 pendingMutationDoc = null
-                onAdd(doc)
-                onDismiss()
+                runSave(doc, skipMutation = true)
             },
             onDismiss = { pendingMutationDoc = null },
         )
@@ -482,10 +469,24 @@ internal fun AddDocumentDialog(
                 if (dup != null) onEditExisting(dup)
             },
             onDismiss = { blocked = null },
-            onCancel = {
+            onDiscard = {
                 blocked = null
                 onDismiss()
             },
+        )
+    }
+    saveWarnings?.let { (doc, warnings) ->
+        GuardFindingsDialog(
+            title = "Check document",
+            findings = warnings,
+            confirmLabel = "Save anyway",
+            dismissLabel = "Edit",
+            onConfirm = {
+                saveWarnings = null
+                onAdd(doc)
+                onDismiss()
+            },
+            onDismiss = { saveWarnings = null },
         )
     }
 }

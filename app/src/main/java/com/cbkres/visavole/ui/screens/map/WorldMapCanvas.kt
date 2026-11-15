@@ -49,6 +49,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.cbkres.visavole.ui.tapSink
 import com.cbkres.visavole.data.WorldMapData
 import com.cbkres.visavole.domain.Access
 import kotlinx.coroutines.Job
@@ -124,7 +125,7 @@ internal fun WorldMapCanvas(
     // SETTLED bottom padding (the measured card height), so the country is not visually
     // “inside” the control box or the card. It must not be derived from the animated padding —
     // that changes every frame while the card slides in, and keying the effect on it would
-    // cancel and restart the 350 ms tween on every one of those frames. The settled value
+    // cancel and restart the 600 ms tween on every one of those frames. The settled value
     // changes at most once per selection (when the card is first measured), so the tween runs
     // to completion.
     val centeringBottomInsetPx = if (selected != null) {
@@ -160,7 +161,7 @@ internal fun WorldMapCanvas(
     val baseScale = if (canvasSize.width > 0f) baseScaleFor(geometry, canvasSize.width, canvasSize.height) else 1f
 
     // Job of the running centre-on-country tween, so a pan starting mid-tween can cancel it
-    // (otherwise the tween keeps writing zoom/centre for up to 350 ms and the finger loses).
+    // (otherwise the tween keeps writing zoom/centre for up to 600 ms and the finger loses).
     var centeringJob by remember { mutableStateOf<Job?>(null) }
 
     // Smoothly centre and zoom in when a country becomes selected.
@@ -196,7 +197,7 @@ internal fun WorldMapCanvas(
     // has changed (e.g. the country-card slide animating controlsBottomPadding): a fresh lambda
     // per recomposition forces a full redraw of every fill and stroke, while the keyed captures
     // here (zoom/centre/selection/geometry) change exactly when a redraw is needed.
-    // P3-23: the ocean follows the effective theme (it was a fixed dark navy, so it stayed a dark
+    // the ocean follows the effective theme (it was a fixed dark navy, so it stayed a dark
     // island under a light app). The bright country fills and navy borders read on both.
     val surf = MaterialTheme.colorScheme.surface
     val isDarkSurf = (0.299f * surf.red + 0.587f * surf.green + 0.114f * surf.blue) < 0.5f
@@ -218,7 +219,7 @@ internal fun WorldMapCanvas(
                     val vyMin = centerWorld.y - (ds.height * invSc) / 2f - cullPad
                     val vxMax = centerWorld.x + (ds.width * invSc) / 2f + cullPad
                     val vyMax = centerWorld.y + (ds.height * invSc) / 2f + cullPad
-                    // P3-42: hoist the border Stroke — it was allocated per shape per frame (~204/frame).
+                    // hoist the border Stroke — it was allocated per shape per frame (~204/frame).
                     val borderStroke = Stroke(width = hair)
                     // Pass 1: fills. Pass 2: borders on top of every fill so shared borders are
                     // crisp (not overdrawn by a neighbour's fill). Width is constant on screen.
@@ -243,7 +244,7 @@ internal fun WorldMapCanvas(
     }
 
     Box(modifier.clipToBounds()) {
-        // P2-19: the Canvas is the app's primary surface (all per-country colour) but had no
+        // the Canvas is the app's primary surface (all per-country colour) but had no
         // semantics, so TalkBack skipped it entirely. Give it a description — and, when a country
         // is selected, announce it.
         val mapDescription = selected?.let { iso -> geometry.countries[iso]?.name }
@@ -294,7 +295,7 @@ internal fun WorldMapCanvas(
                                     val c = Offset((p0.x + p1.x) / 2f, (p0.y + p1.y) / 2f)
                                     val dist = distBetween(p0, p1)
                                     val now = SystemClock.uptimeMillis()
-                                    // P3-21: the pair is the two lowest-id pressed pointers, so if that set
+                                    // the pair is the two lowest-id pressed pointers, so if that set
                                     // changes (a finger lifts or a new one lands while 2+ are down) the
                                     // centroid/distance now come from a different pair — treating them as a
                                     // delta from the previous pair's values would jump the map. Re-anchor
@@ -521,7 +522,7 @@ internal fun WorldMapCanvas(
                 // float over the zoomed-out view (the centring effect only runs on a selection).
                 latestOnTap(null)
                 zoom = 1f
-                centerWorld = Offset(geometry.width * DEFAULT_CENTER_X_FRACTION, geometry.height / 2f)
+                centerWorld = defaultCenter(geometry)
             },
         )
     }
@@ -543,6 +544,7 @@ private fun BoxScope.MapZoomControls(
         shape = MaterialTheme.shapes.large,
         modifier = Modifier
             .align(Alignment.BottomEnd)
+            .tapSink()
             .padding(horizontal = 12.dp)
             .padding(top = 12.dp, bottom = controlsBottomPadding)
             .onSizeChanged { onHeightChanged(Dp(it.height / density.density)) },

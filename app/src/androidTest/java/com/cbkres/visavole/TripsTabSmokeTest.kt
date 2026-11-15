@@ -32,7 +32,7 @@ class TripsTabSmokeTest {
         composeRule.onboardingPickGermany()
         composeRule.onboardingFinishWithSkip()
 
-        composeRule.onNode(hasText("Trips")).performClick()
+        composeRule.clickNavTab("Trips")
         composeRule.waitForAnyText("No trips yet. Add your first trip to start tracking allowances.")
 
         composeRule.onNode(hasText("Add trip")).performClick()
