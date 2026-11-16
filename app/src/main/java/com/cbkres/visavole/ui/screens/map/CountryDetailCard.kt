@@ -107,6 +107,10 @@ internal fun CountryDetailCard(
             AnimatedContent(
                 targetState = breakdown,
                 transitionSpec = {
+                    // sizeTransform = null everywhere: the container must jump to the rows' final
+                    // height on the first transition frame. Morphing the size during the reveal
+                    // made the card creep upward for ~500 ms, and the map's centre-on-country
+                    // tween kept restarting against each of those height steps.
                     if (targetState == null) {
                         // Switching country: go to loading immediately.
                         fadeIn(tween(0)) togetherWith fadeOut(tween(0))
@@ -118,7 +122,7 @@ internal fun CountryDetailCard(
                                 delayMillis = 150,
                             )
                         ) togetherWith fadeOut(tween(120))
-                    }
+                    }.using(sizeTransform = null)
                 },
                 label = "breakdownContent",
             ) { currentBreakdown ->

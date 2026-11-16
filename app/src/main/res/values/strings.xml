@@ -1,9 +1,10 @@
 <resources>
     <string name="app_name">Visa Vole</string>
 
-    <string name="settings_data_build">Data build %1$s · rules verified %2$s · review %3$s</string>
     <string name="status_today">Today · %1$s</string>
-    <string name="settings_data_build_unknown">Data build date unknown</string>
+    <string name="settings_data_build_unknown">No build date</string>
+    <string name="settings_data_build_details">Data build %1$s, rules verified %2$s, next review %3$s</string>
+    <string name="settings_data_build_no_details">The bundled dataset carries no audit dates</string>
     <plurals name="settings_data_lapsed">
         <item quantity="one">%1$d rule past its expiry date</item>
         <item quantity="other">%1$d rules past their expiry date</item>
@@ -12,7 +13,14 @@
         <item quantity="one">%1$d rule expiring within 30 days</item>
         <item quantity="other">%1$d rules expiring within 30 days</item>
     </plurals>
+    <plurals name="settings_data_lapsed_pill">
+        <item quantity="one">%1$d lapsed</item>
+        <item quantity="other">%1$d lapsed</item>
+    </plurals>
+    <plurals name="settings_data_lapsing_soon_pill">
+        <item quantity="one">%1$d expiring</item>
+        <item quantity="other">%1$d expiring</item>
+    </plurals>
     <string name="settings_data_warn_separator"> · </string>
-    <string name="settings_data_warn_icon">Expiring rules warning</string>
-    <string name="settings_data_source">View data source</string>
+    <string name="settings_data_source">VisaDB</string>
 </resources>

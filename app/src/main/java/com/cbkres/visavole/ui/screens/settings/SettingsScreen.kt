@@ -14,6 +14,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,12 +44,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.createBitmap
@@ -210,8 +216,6 @@ internal fun SettingsScreen(
             ) {
                 Text("Restore from Backup")
             }
-            Spacer(Modifier.height(16.dp))
-            DataBuildRow(ready)
             Spacer(Modifier.height(48.dp))
 
             Text(
@@ -250,6 +254,8 @@ internal fun SettingsScreen(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(Modifier.height(16.dp))
+            DataBuildFooter(ready)
         }
     }
 
@@ -275,13 +281,15 @@ internal fun SettingsScreen(
 }
 
 /**
- * The bundled dataset's own build row, under the backup buttons: an age dot, the audit dates from
- * the DB's `meta` table, and a warning line when the load-time probes caught lapsed or soon-lapsing
- * stay rules. Freshness is bounded by the refresh cadence, so the copy says "data build", never
- * "out of date" — the link opens the upstream dataset for anyone who wants to check it.
+ * The bundled dataset's audit trail as two compact pills under the version line: a freshness dot
+ * with the build date, plus a counts pill only when the load-time probes caught lapsed or
+ * soon-lapsing stay rules. Freshness is bounded by the refresh cadence, so the copy says "data
+ * build", never "out of date"; the full audit dates live in the pill's accessibility label, and the
+ * small source link (below the pills, like the GPLv3 link) opens the upstream dataset.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DataBuildRow(ready: AppState.Ready) {
+private fun DataBuildFooter(ready: AppState.Ready) {
     val context = LocalContext.current
     val isDark = LocalEffectiveDarkTheme.current
     val meta = ready.world.visaDbMeta
@@ -299,61 +307,97 @@ private fun DataBuildRow(ready: AppState.Ready) {
         FreshnessLevel.RED -> severityColor(Severity.BAD, isDark)
         FreshnessLevel.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant
     }
+    val pills = dataBuildPills(
+        meta = meta,
+        unknownLabel = stringResource(R.string.settings_data_build_unknown),
+        warningParts = listOfNotNull(
+            meta.lapsedRules.takeIf { it > 0 }
+                ?.let { pluralStringResource(R.plurals.settings_data_lapsed_pill, it, it) },
+            meta.lapsingSoon.takeIf { it > 0 }
+                ?.let { pluralStringResource(R.plurals.settings_data_lapsing_soon_pill, it, it) },
+        ),
+        separator = stringResource(R.string.settings_data_warn_separator),
+    )
     val complete = meta.generated.isNotBlank() && meta.rulesVerifiedAt.isNotBlank() && meta.nextReview.isNotBlank()
-    val body = if (complete) {
-        stringResource(R.string.settings_data_build, meta.generated, meta.rulesVerifiedAt, meta.nextReview)
+    val details = if (complete) {
+        stringResource(R.string.settings_data_build_details, meta.generated, meta.rulesVerifiedAt, meta.nextReview)
     } else {
-        stringResource(R.string.settings_data_build_unknown)
+        stringResource(R.string.settings_data_build_no_details)
     }
-    val suffix = listOfNotNull(
-        meta.lapsedRules.takeIf { it > 0 }
-            ?.let { pluralStringResource(R.plurals.settings_data_lapsed, it, it) },
-        meta.lapsingSoon.takeIf { it > 0 }
-            ?.let { pluralStringResource(R.plurals.settings_data_lapsing_soon, it, it) },
-    ).joinToString(stringResource(R.string.settings_data_warn_separator))
+    val warnText = severityColor(Severity.WARN, isDark)
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Pill(
+                label = pills.buildLabel,
+                labelColour = MaterialTheme.colorScheme.onSurfaceVariant,
+                containerColour = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.10f),
+                leading = {
+                    Box(
+                        Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(dotColour),
+                    )
+                },
+                a11yLabel = details,
+            )
+            pills.warningLabel?.let { label ->
+                // The pill text is compact ("2 lapsed"); the announcement spells the counts out.
+                Pill(
+                    label = label,
+                    labelColour = warnText,
+                    containerColour = warnText.copy(alpha = 0.12f),
+                    leading = {
+                        Icon(
+                            Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = warnText,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    },
+                    a11yLabel = listOfNotNull(
+                        meta.lapsedRules.takeIf { it > 0 }
+                            ?.let { pluralStringResource(R.plurals.settings_data_lapsed, it, it) },
+                        meta.lapsingSoon.takeIf { it > 0 }
+                            ?.let { pluralStringResource(R.plurals.settings_data_lapsing_soon, it, it) },
+                    ).joinToString(stringResource(R.string.settings_data_warn_separator)),
+                )
+            }
+        }
+        Text(
+            stringResource(R.string.settings_data_source),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+            // Same affordance as the GPLv3 link: pad the small label to a ≥48dp touch target.
+            modifier = Modifier
+                .padding(vertical = 16.dp, horizontal = 4.dp)
+                .clickable { openUrl(context, VISA_DB_URL) },
+        )
+    }
+}
+
+@Composable
+private fun Pill(
+    label: String,
+    labelColour: Color,
+    containerColour: Color,
+    a11yLabel: String,
+    leading: @Composable (() -> Unit)? = null,
+) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(containerColour)
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+            .clearAndSetSemantics { text = AnnotatedString(a11yLabel) },
     ) {
-        Box(
-            Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(dotColour),
-        )
-        Spacer(Modifier.size(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                body,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            if (freshness.warn) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Filled.Warning,
-                        contentDescription = stringResource(R.string.settings_data_warn_icon),
-                        tint = severityColor(Severity.WARN, isDark),
-                        modifier = Modifier.size(14.dp),
-                    )
-                    Spacer(Modifier.size(6.dp))
-                    Text(
-                        suffix,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = severityColor(Severity.WARN, isDark),
-                    )
-                }
-            }
-            Text(
-                stringResource(R.string.settings_data_source),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary,
-                // Same affordance as the GPLv3 link: pad the small label to a ≥48dp touch target.
-                modifier = Modifier
-                    .padding(vertical = 16.dp, horizontal = 4.dp)
-                    .clickable { openUrl(context, VISA_DB_URL) },
-            )
-        }
+        leading?.invoke()
+        Text(label, style = MaterialTheme.typography.labelSmall, color = labelColour)
     }
 }
 

@@ -56,6 +56,7 @@ import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.screens.EmptyState
 import com.cbkres.visavole.ui.tapSink
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -110,33 +111,35 @@ internal fun MapScreen(
     val density = LocalDensity.current
     var searchBarH by remember { mutableStateOf(0.dp) }
     var cardH by remember { mutableStateOf(0.dp) }
-    var lastStableCardH by remember { mutableStateOf(0.dp) }
+    // cardH creeps for ~500 ms after a card appears (rows fill in). The centre-on-country tween
+    // now tracks that live height, so it no longer cares — this debounced value is only for the
+    // switch envelope, which holds the previous card's height while the new card's rows load.
+    var stableCardH by remember { mutableStateOf(0.dp) }
+    LaunchedEffect(cardH) {
+        delay(150)
+        stableCardH = cardH
+    }
     var legendH by remember { mutableStateOf(0.dp) }
     val selName = selected?.let { iso -> s.world.countries[iso]?.name ?: s.geometry.countries[iso]?.name ?: iso }
     // selName falls back to the ISO code, so it is null exactly when nothing is selected.
     val cardVisible = selected != null
-    // The bottom padding the map's floating UI keeps between itself and the card/legend: the
-    // measured card height plus 24dp while a card is up, the legend height plus 8dp otherwise.
+    // Was a card already up before this selection changed? Computed once on the recomposition
+    // that carries the new selection, before any re-layout (self-guarded like shownQuery):
+    // a switch morphs the card, an open-from-closed keeps the alpha04 snap.
+    var seenSelected by remember { mutableStateOf(selected) }
+    var openBefore by remember { mutableStateOf(false) }
+    if (seenSelected != selected) {
+        openBefore = seenSelected != null
+        seenSelected = selected
+    }
+    // The bottom padding the map's floating zoom controls keep: live card height plus 24dp,
+    // so the panel rides along with the card's morph.
     val controlsTargetBottomPadding =
         if (cardVisible) cardH + 24.dp
         else legendH + 8.dp
-
-    val centeringBottomPadding =
-        if (cardVisible) {
-            if (lastStableCardH > 0.dp) {
-                lastStableCardH + 24.dp
-            } else {
-                24.dp
-            }
-        } else {
-            legendH + 8.dp
-        }
     // Animated (same spring as the card slide). The map canvas is never shrunk for the card —
     // the card slides over the full-bleed map — so no dark band can appear between the map
-    // edge and the card while the fixed 420dp drop exceeds the card's actual height. The
-    // floating zoom controls ride cardH above the bottom, keeping them 24dp above the card's
-    // top edge. The map's focus-fit uses the SETTLED padding instead, so its centre-on-country
-    // target is stable while the card slides in (see WorldMapCanvas).
+    // edge and the card while the fixed 420dp drop exceeds the card's actual height.
     val cardAnimSpec = spring<Dp>(Spring.DampingRatioNoBouncy, Spring.StiffnessMedium)
     val controlsBottomPadding by animateDpAsState(
         targetValue = controlsTargetBottomPadding,
@@ -157,7 +160,7 @@ internal fun MapScreen(
             homeCountries = s.homeCountries,
             ownVisaCountries = s.ownVisaCountries,
             controlsBottomPadding = controlsBottomPadding,
-            centeringBottomPadding = centeringBottomPadding,
+            centeringInsetNow = { if (cardVisible) cardH + 24.dp else legendH + 8.dp },
             topInset = searchBarH,
             modifier = Modifier.fillMaxSize(),
         )
@@ -236,34 +239,30 @@ internal fun MapScreen(
                             translationY = cardDrop.toPx()
                         }
 
-                        // These two belong OUTSIDE animateContentSize.
-                        // They paint the entire animated envelope, including the
-                        // temporary extra space while a large card shrinks.
+                        // Paint the card's rounded silhouette behind the content so a height
+                        // change never exposes bare map.
                         .clip(detailCardShape)
                         .background(
                             MaterialTheme.colorScheme.surfaceContainerHigh
                         )
 
-                        // The wrapper changes height, not CountryDetailCard itself.
-                        .animateContentSize(
-                            animationSpec = tween(600),
-                            alignment = Alignment.TopCenter,
-                            finishedListener = { _, targetSize ->
-                                if (breakdown != null) {
-                                    lastStableCardH =
-                                        Dp(targetSize.height / density.density)
-                                }
-                            },
-                        )
-
-                        // While the next country is loading, hold exactly the
-                        // previous finished card height.
+                        // Switch-only envelope: when a card was already up, the new country
+                        // holds the settled height while its breakdown loads, then morphs into
+                        // place. Opening from closed stays the alpha04 snap.
                         .then(
-                            if (
-                                breakdown == null &&
-                                lastStableCardH > 0.dp
-                            ) {
-                                Modifier.height(lastStableCardH)
+                            if (openBefore) {
+                                Modifier
+                                    .animateContentSize(
+                                        animationSpec = tween(250),
+                                        alignment = Alignment.TopCenter,
+                                    )
+                                    .then(
+                                        if (breakdown == null && stableCardH > 0.dp) {
+                                            Modifier.height(stableCardH)
+                                        } else {
+                                            Modifier
+                                        }
+                                    )
                             } else {
                                 Modifier
                             }

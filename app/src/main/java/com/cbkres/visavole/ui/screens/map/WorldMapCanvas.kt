@@ -114,25 +114,16 @@ internal fun WorldMapCanvas(
     homeCountries: Set<String> = emptySet(),
     ownVisaCountries: Set<String> = emptySet(),
     controlsBottomPadding: Dp = 24.dp,
-    centeringBottomPadding: Dp = 24.dp,
+    // The live bottom inset (controls + card) the centre-on-country tween aims above. The tween
+    // reads it each frame so a card that grows/shrinks as its rows arrive eases into the fit
+    // within one continuous ramp instead of restarting.
+    centeringInsetNow: () -> Dp,
     topInset: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
     val topInsetPx = with(density) { topInset.toPx() }
     var controlsH by remember { mutableStateOf(0.dp) }
-    // The bottom inset the centre-on-country tween aims for: the controls' height plus the
-    // SETTLED bottom padding (the measured card height), so the country is not visually
-    // “inside” the control box or the card. It must not be derived from the animated padding —
-    // that changes every frame while the card slides in, and keying the effect on it would
-    // cancel and restart the 600 ms tween on every one of those frames. The settled value
-    // changes at most once per selection (when the card is first measured), so the tween runs
-    // to completion.
-    val centeringBottomInsetPx = if (selected != null) {
-        with(density) { (controlsH + centeringBottomPadding + 12.dp).toPx() }
-    } else {
-        0f
-    }
     // Keyed by content (see mapPaintKey): a publish that leaves the colours equal — e.g. starring
     // a passport — must not rebuild the ~204 fills and repaint the world.
     val paintKey = remember(access, homeCountries, ownVisaCountries) {
@@ -150,6 +141,7 @@ internal fun WorldMapCanvas(
         }
     }
     val latestOnTap by rememberUpdatedState(onCountryTap)
+    val latestInset by rememberUpdatedState(centeringInsetNow)
     val latestSelected by rememberUpdatedState(selected)
     val pointerScope = rememberCoroutineScope()
 
@@ -161,28 +153,38 @@ internal fun WorldMapCanvas(
     val baseScale = if (canvasSize.width > 0f) baseScaleFor(geometry, canvasSize.width, canvasSize.height) else 1f
 
     // Job of the running centre-on-country tween, so a pan starting mid-tween can cancel it
-    // (otherwise the tween keeps writing zoom/centre for up to 600 ms and the finger loses).
+    // (otherwise the tween keeps writing zoom/centre for up to 350 ms and the finger loses).
     var centeringJob by remember { mutableStateOf<Job?>(null) }
 
-    // Smoothly centre and zoom in when a country becomes selected.
-    LaunchedEffect(selected, recenterNonce, canvasSize, topInsetPx, centeringBottomInsetPx) {
+    // Smoothly centre and zoom in when a country becomes selected. Duration matches the alpha04
+    // feel: longer tweens read as lag and fight a follow-up pan for longer.
+    // NOT keyed on the bottom inset: the card's height settles a few frames into the selection
+    // (rows arrive async, and on a switch the height morphs). Keying on it restarted the tween
+    // mid-flight — the "wall". Instead each frame recomputes the fit from the current inset, so
+    // one continuous ramp eases into the settled framing.
+    LaunchedEffect(selected, recenterNonce, canvasSize, topInsetPx) {
         if (selected == null || canvasSize.width <= 0f) return@LaunchedEffect
         val f = focus[selected] ?: return@LaunchedEffect
         centeringJob = coroutineContext[Job]
         val w = canvasSize.width
         val h = canvasSize.height
         val top = topInsetPx.coerceIn(0f, h)
-        val bottom = centeringBottomInsetPx.coerceIn(0f, h - top)
-        val visibleH = (h - top - bottom).coerceAtLeast(1f)
         val bs = baseScaleFor(geometry, w, h)
-        val targetZoom = (minOf(w * 0.75f / f.bbox.w, visibleH * 0.75f / f.bbox.h) / bs).coerceIn(MIN_ZOOM, MAX_ZOOM)
-        // The canvas itself is centred on `centerWorld`; shift the centre so the selected country
-        // lands in the middle of the *visible* strip between the search bar and the bottom UI.
-        val visibleCenterShift = Offset(0f, (top - bottom) / (2f * bs * targetZoom))
-        val targetCenter = clampCenter(f.point - visibleCenterShift, bs * targetZoom, geometry, w, h, locked = false)
+        val bottomInsetNow = { with(density) { (controlsH + latestInset() + 12.dp).toPx() } }
+        // One fit computation from the current bottom inset.
+        fun fitFor(bottom: Float): Pair<Float, Offset> {
+            val visibleH = (h - top - bottom).coerceAtLeast(1f)
+            val targetZoom = (minOf(w * 0.75f / f.bbox.w, visibleH * 0.75f / f.bbox.h) / bs).coerceIn(MIN_ZOOM, MAX_ZOOM)
+            // The canvas itself is centred on `centerWorld`; shift the centre so the selected
+            // country lands in the middle of the *visible* strip between the search bar and the bottom UI.
+            val visibleCenterShift = Offset(0f, (top - bottom) / (2f * bs * targetZoom))
+            val targetCenter = clampCenter(f.point - visibleCenterShift, bs * targetZoom, geometry, w, h, locked = false)
+            return targetZoom to targetCenter
+        }
         val fromZoom = zoom
         val fromCenter = centerWorld
-        Animatable(0f).animateTo(1f, tween(600)) {
+        Animatable(0f).animateTo(1f, tween(350)) {
+            val (targetZoom, targetCenter) = fitFor(bottomInsetNow().coerceIn(0f, h - top))
             val k = value
             zoom = fromZoom + (targetZoom - fromZoom) * k
             centerWorld = Offset(
