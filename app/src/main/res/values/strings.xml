@@ -22,5 +22,6 @@
         <item quantity="other">%1$d expiring</item>
     </plurals>
     <string name="settings_data_warn_separator"> · </string>
-    <string name="settings_data_source">VisaDB</string>
+    <string name="settings_data_build_label">Database</string>
+    <string name="settings_data_source_open">Open database source</string>
 </resources>

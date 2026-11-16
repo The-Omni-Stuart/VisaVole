@@ -52,6 +52,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
@@ -132,7 +134,7 @@ internal fun SettingsScreen(
             Text("Visa Vole", style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(4.dp))
             Text(
-                "Developed by cbk-res, and co.",
+                "Developed by The Omni Stuart © 2026",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -241,7 +243,7 @@ internal fun SettingsScreen(
                     // the bare labelSmall word was a ~40×20dp target; pad it to a ≥48dp hit
                     // area (padding before clickable so the padding counts toward the target).
                     modifier = Modifier
-                        .padding(vertical = 16.dp, horizontal = 4.dp)
+                        .padding(vertical = 16.dp)
                         .clickable { openUrl(context, LICENSE_URL) },
                 )
             }
@@ -284,8 +286,8 @@ internal fun SettingsScreen(
  * The bundled dataset's audit trail as two compact pills under the version line: a freshness dot
  * with the build date, plus a counts pill only when the load-time probes caught lapsed or
  * soon-lapsing stay rules. Freshness is bounded by the refresh cadence, so the copy says "data
- * build", never "out of date"; the full audit dates live in the pill's accessibility label, and the
- * small source link (below the pills, like the GPLv3 link) opens the upstream dataset.
+ * build", never "out of date"; the full audit dates live in the pill's accessibility label, and
+ * tapping the version pill (the row's only link) opens the upstream dataset page.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -325,25 +327,39 @@ private fun DataBuildFooter(ready: AppState.Ready) {
         stringResource(R.string.settings_data_build_no_details)
     }
     val warnText = severityColor(Severity.WARN, isDark)
+    val openLabel = stringResource(R.string.settings_data_source_open)
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalArrangement = Arrangement.spacedBy(8.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
         ) {
-            Pill(
-                label = pills.buildLabel,
-                labelColour = MaterialTheme.colorScheme.onSurfaceVariant,
-                containerColour = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.10f),
-                leading = {
-                    Box(
-                        Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(dotColour),
-                    )
-                },
-                a11yLabel = details,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    stringResource(R.string.settings_data_build_label),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Pill(
+                    label = pills.buildLabel,
+                    labelColour = MaterialTheme.colorScheme.onSurfaceVariant,
+                    containerColour = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.10f),
+                    leading = {
+                        Box(
+                            Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(dotColour),
+                        )
+                    },
+                    a11yLabel = details,
+                    onClick = { openUrl(context, VISA_DB_URL) },
+                    onClickLabel = openLabel,
+                )
+            }
             pills.warningLabel?.let { label ->
                 // The pill text is compact ("2 lapsed"); the announcement spells the counts out.
                 Pill(
@@ -367,15 +383,6 @@ private fun DataBuildFooter(ready: AppState.Ready) {
                 )
             }
         }
-        Text(
-            stringResource(R.string.settings_data_source),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.primary,
-            // Same affordance as the GPLv3 link: pad the small label to a ≥48dp touch target.
-            modifier = Modifier
-                .padding(vertical = 16.dp, horizontal = 4.dp)
-                .clickable { openUrl(context, VISA_DB_URL) },
-        )
     }
 }
 
@@ -386,15 +393,29 @@ private fun Pill(
     containerColour: Color,
     a11yLabel: String,
     leading: @Composable (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
+    onClickLabel: String? = null,
 ) {
+    val surface = Modifier
+        .background(containerColour)
+        .padding(horizontal = 12.dp, vertical = 7.dp)
+    // Clip before clickable so the tap ripple is clipped to the pill, not its square bounds.
+    val modifier = if (onClick != null) {
+        Modifier
+            .clip(RoundedCornerShape(50))
+            .clickable(onClickLabel = onClickLabel, onClick = onClick)
+            .semantics { contentDescription = a11yLabel }
+            .then(surface)
+    } else {
+        Modifier
+            .clip(RoundedCornerShape(50))
+            .clearAndSetSemantics { text = AnnotatedString(a11yLabel) }
+            .then(surface)
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(containerColour)
-            .padding(horizontal = 10.dp, vertical = 5.dp)
-            .clearAndSetSemantics { text = AnnotatedString(a11yLabel) },
+        modifier = modifier,
     ) {
         leading?.invoke()
         Text(label, style = MaterialTheme.typography.labelSmall, color = labelColour)
