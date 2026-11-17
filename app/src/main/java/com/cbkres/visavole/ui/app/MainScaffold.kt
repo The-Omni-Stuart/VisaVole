@@ -12,10 +12,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.ConnectingAirports
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -153,19 +153,19 @@ internal fun MainScaffold(
                     NavigationBarItem(
                         selected = tab == 0,
                         onClick = { tab = 0 },
-                        icon = { Icon(Icons.Filled.Place, contentDescription = null) },
+                        icon = { Icon(Icons.Filled.TravelExplore, contentDescription = null) },
                         label = { Text("Map") },
                     )
                     NavigationBarItem(
                         selected = tab == 1,
                         onClick = { tab = 1 },
-                        icon = { Icon(Icons.Filled.Face, contentDescription = null) },
+                        icon = { Icon(Icons.Filled.MenuBook, contentDescription = null) },
                         label = { Text("Documents") },
                     )
                     NavigationBarItem(
                         selected = tab == 2,
                         onClick = { tab = 2 },
-                        icon = { Icon(Icons.Filled.DateRange, contentDescription = null) },
+                        icon = { Icon(Icons.Filled.ConnectingAirports, contentDescription = null) },
                         label = { Text("Trips") },
                     )
                 }
