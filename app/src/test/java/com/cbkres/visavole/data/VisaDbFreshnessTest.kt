@@ -35,10 +35,14 @@ class VisaDbFreshnessTest {
 
     @Test
     fun bundledDbReadsBackFreshnessMeta() {
+        // The audit dates are stamped by the upstream build, so pin the shape and the ordering rather
+        // than one build's calendar — literal dates fail the suite on every legitimate asset refresh.
         val meta = JdbcRepository.load(bundledDb()).visaDbMeta
-        assertEquals("2026-11-13", meta.generated)
-        assertEquals("2026-09-02", meta.rulesVerifiedAt)
-        assertEquals("2026-12-01", meta.nextReview)
+        val generated = LocalDate.parse(meta.generated)
+        val verified = LocalDate.parse(meta.rulesVerifiedAt)
+        val review = LocalDate.parse(meta.nextReview)
+        assertTrue("next review $review must come after the verification $verified", review.isAfter(verified))
+        assertTrue("rules verified $verified cannot post-date the build $generated", !verified.isAfter(generated))
         assertEquals(0, meta.lapsedRules)
         assertEquals(0, meta.lapsingSoon)
     }
