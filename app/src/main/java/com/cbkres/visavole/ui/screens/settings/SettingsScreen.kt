@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -45,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -172,7 +174,13 @@ internal fun SettingsScreen(
                 Spacer(Modifier.height(12.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        // Announced as the switch it toggles, and the row (not the label) is the touch target.
+                        .clickable(role = Role.Switch) { onDynamicColorChanged(!dynamicColor) }
+                        .heightIn(min = 48.dp)
+                        .padding(horizontal = 4.dp),
                 ) {
                     Text(
                         "Dynamic color",
@@ -274,8 +282,15 @@ internal fun SettingsScreen(
             onDismiss = { pendingRestore = null },
             content = {
                 Text(
-                    "Replace your current ${ready.docs.size} documents and ${ready.trips.size} trips " +
-                        "with the backup's ${pending.docs.size} documents and ${pending.trips.size} trips?",
+                    "Replace your current " +
+                        pluralStringResource(R.plurals.settings_docs_count, ready.docs.size, ready.docs.size) +
+                        " and " +
+                        pluralStringResource(R.plurals.settings_trips_count, ready.trips.size, ready.trips.size) +
+                        " with the backup's " +
+                        pluralStringResource(R.plurals.settings_docs_count, pending.docs.size, pending.docs.size) +
+                        " and " +
+                        pluralStringResource(R.plurals.settings_trips_count, pending.trips.size, pending.trips.size) +
+                        "?",
                 )
             },
         )

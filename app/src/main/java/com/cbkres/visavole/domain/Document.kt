@@ -1,9 +1,10 @@
 package com.cbkres.visavole.domain
 
+import java.io.Serializable
 import java.util.UUID
 
 /** What a document is, and what it unlocks. */
-sealed class DocKind {
+sealed class DocKind : Serializable {
     /** A nationality. Contributes the passport's baseline corridors + its bloc (regime) freedom. */
     data class Passport(val iso2: String) : DocKind()
 
@@ -42,7 +43,7 @@ data class Document(
     // `validFrom` (see DocStatus), so it follows the replacement's edits and revives when the
     // replacement is deleted (the ViewModel clears dangling pointers). Passports are never superseded.
     val supersededBy: String? = null,
-)
+) : Serializable
 
 /** A brand-new passport for [iso2]; [countryName] (from the world data) drives the default label. */
 internal fun passportDocument(

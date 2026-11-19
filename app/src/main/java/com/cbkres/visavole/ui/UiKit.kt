@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -318,13 +319,15 @@ internal fun VisaSnackbarHost(hostState: SnackbarHostState, modifier: Modifier =
         hostState = hostState,
         modifier = modifier,
         snackbar = { data ->
+            // Settings hides the nav bar, so the host's Scaffold inset collapses: the safe area is its own.
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 tonalElevation = 2.dp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
+                    .safeDrawingPadding()
+                    .padding(12.dp),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

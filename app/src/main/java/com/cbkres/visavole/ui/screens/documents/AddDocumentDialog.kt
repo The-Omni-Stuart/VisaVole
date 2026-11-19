@@ -22,11 +22,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.DocDraft
 import com.cbkres.visavole.domain.DocKind
@@ -119,9 +119,9 @@ internal fun AddDocumentDialog(
             },
         )
     } // null=auto, ""=none, else holding id
-    var entryType by remember { mutableStateOf(initCustom?.entryType ?: "multiple") } // "single" | "double" | "multiple" (visa only)
-    var residenceClass by remember { mutableStateOf(initial?.residenceClass ?: ResidenceClass.TEMPORARY) } // residence only
-    var residenceClassEdited by remember { mutableStateOf(false) } // an explicit pick, vs the TEMPORARY fallback on a doc that stored no class
+    var entryType by rememberSaveable { mutableStateOf(initCustom?.entryType ?: "multiple") } // "single" | "double" | "multiple" (visa only)
+    var residenceClass by rememberSaveable { mutableStateOf(initial?.residenceClass ?: ResidenceClass.TEMPORARY) } // residence only
+    var residenceClassEdited by rememberSaveable { mutableStateOf(false) } // an explicit pick, vs the TEMPORARY fallback on a doc that stored no class
     var expiryDate by remember { mutableStateOf(initial?.expiry?.toUtcMillis()) }
     var validFromDate by remember { mutableStateOf(initial?.validFrom?.toUtcMillis()) }
     // a validity period is both-or-neither. When a save is attempted with exactly one date
@@ -240,7 +240,6 @@ internal fun AddDocumentDialog(
     VisaDialog(
         onDismissRequest = onDismiss,
         width = 400.dp,
-        maxHeight = (LocalConfiguration.current.screenHeightDp - 96).dp,
         dismissable = false,
     ) {
         val docDialogScroll = rememberScrollState()
@@ -250,7 +249,6 @@ internal fun AddDocumentDialog(
             docEnd,
             MaterialTheme.colorScheme.surfaceContainerHigh,
             modifier = Modifier.fillMaxWidth()
-                .heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp)
         ) {
             Column(Modifier.padding(20.dp).verticalScroll(docDialogScroll)) {
                 Text(

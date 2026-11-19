@@ -20,12 +20,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalConfiguration
+import com.cbkres.visavole.ui.LocalVisaDialogHeight
 import com.cbkres.visavole.domain.GuardAction
 import com.cbkres.visavole.domain.GuardContext
 import com.cbkres.visavole.domain.GuardEngine
@@ -45,6 +48,17 @@ import java.util.UUID
 // TODO: Refactor this too
 
 @OptIn(ExperimentalMaterial3Api::class)
+/** A form dialog's usable height: measured from the window, with the screen's as the fallback. */
+@Composable
+private fun dialogUsableHeight(): Dp {
+    val measured = LocalVisaDialogHeight.current
+    if (measured != null) return measured
+    return (LocalConfiguration.current.screenHeightDp - 96).dp
+}
+
+/** The stop list's share of that height, so a long trip scrolls inside the dialog instead of off it. */
+@Composable
+internal fun dialogHeightForStops(): Dp = dialogUsableHeight() * 0.45f
 @Composable
 internal fun AddTripDialog(
     vm: AccessViewModel,
@@ -53,13 +67,13 @@ internal fun AddTripDialog(
     onDismiss: () -> Unit,
 ) {
     val today = ready.today
-    var stops by remember { mutableStateOf(TripModel.sortedStops(initial?.stops ?: emptyList())) }
-    var note by remember { mutableStateOf(initial?.note ?: "") }
-    var currentTripId by remember { mutableStateOf(initial?.id ?: UUID.randomUUID().toString()) }
-    var isEditingExisting by remember { mutableStateOf(initial != null) }
-    var editingStopId by remember { mutableStateOf<String?>(null) }
+    var stops by rememberSaveable { mutableStateOf(TripModel.sortedStops(initial?.stops ?: emptyList())) }
+    var note by rememberSaveable { mutableStateOf(initial?.note ?: "") }
+    var currentTripId by rememberSaveable { mutableStateOf(initial?.id ?: UUID.randomUUID().toString()) }
+    var isEditingExisting by rememberSaveable { mutableStateOf(initial != null) }
+    var editingStopId by rememberSaveable { mutableStateOf<String?>(null) }
     var departureFocusStopId by remember { mutableStateOf<String?>(null) }
-    var pendingNewStop by remember { mutableStateOf<TripStop?>(null) }
+    var pendingNewStop by rememberSaveable { mutableStateOf<TripStop?>(null) }
     var showAddStopWarning by remember { mutableStateOf(false) }
     var showOngoingConfirm by remember { mutableStateOf(false) }
     var gapIndex by remember { mutableStateOf<Int?>(null) }
@@ -260,7 +274,6 @@ internal fun AddTripDialog(
     VisaDialog(
         onDismissRequest = { requestDismiss() },
         width = 400.dp,
-        maxHeight = (LocalConfiguration.current.screenHeightDp - 96).dp,
         dismissable = false,
     ) {
         Column(Modifier.padding(20.dp)) {
@@ -275,7 +288,7 @@ internal fun AddTripDialog(
                 docs = ready.docs,
                 today = today,
                 statuses = ready.statuses,
-                maxHeight = (LocalConfiguration.current.screenHeightDp * 0.45f).dp,
+                maxHeight = dialogHeightForStops(),
                 onEdit = { editingStopId = it.id },
                 onRemove = { stop ->
                     lastStopSnapshot = StopSnapshot(stops)

@@ -1,5 +1,6 @@
 package com.cbkres.visavole.domain
 
+import java.io.Serializable
 import java.time.LocalDate
 
 enum class TripStatus {
@@ -14,13 +15,13 @@ data class TripStop(
     val arrival: LocalDate,
     val departure: LocalDate?,
     val documentId: String? = null,
-)
+) : Serializable
 
 data class Trip(
     val id: String,
     val stops: List<TripStop>,
     val note: String? = null,
-) {
+) : Serializable {
     val firstArrival: LocalDate
         get() = stops.minOfOrNull { it.arrival } ?: LocalDate.MAX
 

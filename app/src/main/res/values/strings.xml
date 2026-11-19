@@ -5,6 +5,14 @@
     <string name="settings_data_build_unknown">No build date</string>
     <string name="settings_data_build_details">Data build %1$s, rules verified %2$s, next review %3$s</string>
     <string name="settings_data_build_no_details">The bundled dataset carries no audit dates</string>
+    <plurals name="settings_docs_count">
+        <item quantity="one">%1$d document</item>
+        <item quantity="other">%1$d documents</item>
+    </plurals>
+    <plurals name="settings_trips_count">
+        <item quantity="one">%1$d trip</item>
+        <item quantity="other">%1$d trips</item>
+    </plurals>
     <plurals name="settings_data_lapsed">
         <item quantity="one">%1$d rule past its expiry date</item>
         <item quantity="other">%1$d rules past their expiry date</item>

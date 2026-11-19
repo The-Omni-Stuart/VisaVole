@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -66,8 +67,8 @@ internal fun DocumentsScreen(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
-    var showAdd by remember { mutableStateOf(false) }
-    var editing by remember { mutableStateOf<Document?>(null) }
+    var showAdd by rememberSaveable { mutableStateOf(false) }
+    var editing by rememberSaveable { mutableStateOf<Document?>(null) }
     var blockedRemove by remember { mutableStateOf<GuardFinding?>(null) }
     var removingDoc by remember { mutableStateOf<Document?>(null) }
     // Shared tab-top display state (the same pair the Trips tab uses): which document's allowance

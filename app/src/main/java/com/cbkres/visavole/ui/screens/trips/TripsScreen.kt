@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -64,8 +65,8 @@ internal fun TripsScreen(
     val focus = remember { AllowanceFocus() }
     val flashes = remember { FlashTrigger() }
     var listViewportPx by remember { mutableStateOf(0) }
-    var showAdd by remember { mutableStateOf(false) }
-    var editingTrip by remember { mutableStateOf<Trip?>(null) }
+    var showAdd by rememberSaveable { mutableStateOf(false) }
+    var editingTrip by rememberSaveable { mutableStateOf<Trip?>(null) }
     var deletingTrip by remember { mutableStateOf<Trip?>(null) }
     var endingTrip by remember { mutableStateOf<Trip?>(null) }
     val zoneAllowances = remember(ready.allowances) { ready.allowances.filter { !it.key.startsWith("doc:") } }

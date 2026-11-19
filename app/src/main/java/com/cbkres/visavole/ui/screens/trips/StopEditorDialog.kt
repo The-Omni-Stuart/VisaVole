@@ -25,11 +25,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.AccessModel
@@ -71,9 +71,9 @@ internal fun StopEditorDialog(
     primaryDocId: String? = null,
     statuses: Map<String, DocStatus> = emptyMap(),
 ) {
-    var stop by remember { mutableStateOf(initial) }
-    var countryQuery by remember { mutableStateOf("") }
-    var docTouched by remember { mutableStateOf(initial.documentId != null) }
+    var stop by rememberSaveable { mutableStateOf(initial) }
+    var countryQuery by rememberSaveable { mutableStateOf("") }
+    var docTouched by rememberSaveable { mutableStateOf(initial.documentId != null) }
     var showArrival by remember { mutableStateOf(false) }
     var showDeparture by remember { mutableStateOf(initiallyEditingDeparture) }
     var pendingAccessWarning by remember { mutableStateOf<TripWarning?>(null) }
@@ -116,7 +116,6 @@ internal fun StopEditorDialog(
     VisaDialog(
         onDismissRequest = onDismiss,
         width = 400.dp,
-        maxHeight = (LocalConfiguration.current.screenHeightDp - 96).dp,
         dismissable = false,
     ) {
         val stopDialogScroll = rememberScrollState()
@@ -126,7 +125,6 @@ internal fun StopEditorDialog(
             stopEnd,
             MaterialTheme.colorScheme.surfaceContainerHigh,
             modifier = Modifier.fillMaxWidth()
-                .heightIn(max = (LocalConfiguration.current.screenHeightDp - 96).dp)
         ) {
             Column(Modifier.padding(20.dp).verticalScroll(stopDialogScroll)) {
                 Text(
