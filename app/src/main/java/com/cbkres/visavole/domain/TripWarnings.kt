@@ -129,8 +129,7 @@ internal object TripWarnings {
         for (key in zones) {
             val usage = usageWith[key] ?: continue
             val rule = usage.rule ?: continue
-            val used = if (rule.windowType == "rolling") rollingUsage(rule, usage.segments, asOf).first
-            else perEntryUsage(rule, usage.segments, asOf).first
+            val used = usageOn(rule, usage.segments, asOf).first
             val total = rule.windowDays ?: continue
             val overstay = (used - total).coerceAtLeast(0)
             if (overstay > 0) {

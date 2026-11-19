@@ -75,6 +75,20 @@ enum class AllowanceStatus {
     UNKNOWN,
 }
 
+/**
+ * When a rolling allowance gives used days back, or null where none come back over time — a
+ * per-entry allowance resets at a border, so a date printed for it would be an invention.
+ */
+data class Recovery(
+    /** First date a used day has left the window. */
+    val firstSliceBackOn: LocalDate,
+    /** From this date the allowance is whole again. */
+    val wholeAgainOn: LocalDate,
+    /** Days consumed today. Never more than [totalDays]. */
+    val daysBack: Int,
+    val totalDays: Int,
+)
+
 data class AllowanceSnapshot(
     val key: String,
     val title: String,

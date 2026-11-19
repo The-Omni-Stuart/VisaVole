@@ -113,8 +113,7 @@ internal fun zoneSnapshot(
 ): AllowanceSnapshot? {
     val rule = usage.rule ?: return null
     val kind = if (rule.windowType == "rolling") AllowanceKind.ROLLING else AllowanceKind.PER_ENTRY
-    val (used, overstay) = if (kind == AllowanceKind.ROLLING) rollingUsage(rule, usage.segments, asOf)
-    else perEntryUsage(rule, usage.segments, asOf)
+    val (used, overstay) = usageOn(rule, usage.segments, asOf)
     val windowDays = rule.windowDays
     val rawRemaining = windowDays?.let { it - used }
     val cap = expiryCapFor(rule, docs, world, asOf, trips, statuses, candidateMaps)
@@ -291,4 +290,38 @@ internal fun perEntryUsage(rule: StayRule, segments: List<ZoneSegment>, asOf: Lo
     }
     val overstay = rule.windowDays?.let { (used - it).coerceAtLeast(0) } ?: 0
     return used to overstay
+}
+
+/** The one place the window type picks the arithmetic; [on] makes "as of today" a caller's choice. */
+internal fun usageOn(rule: StayRule, segments: List<ZoneSegment>, on: LocalDate): Pair<Int, Int> =
+    if (rule.windowType == "rolling") rollingUsage(rule, segments, on) else perEntryUsage(rule, segments, on)
+
+/** Days left against [rule] as of [on], before any document caps it. Null when the rule sets no limit. */
+internal fun remainingOn(rule: StayRule, segments: List<ZoneSegment>, on: LocalDate): Int? =
+    rule.windowDays?.let { it - usageOn(rule, segments, on).first }
+
+/**
+ * When a rolling window's used days come back: a day leaves `[on - period + 1, on]` once `on`
+ * reaches `day + period`, so the first slice returns on `firstUsed + period` and the pool is whole
+ * on `lastUsed + period`. Closed form — the publish path cannot afford a day walk; only the test walks.
+ * Null when it does not refill over time: per-entry, no period (L2), or nothing used.
+ */
+internal fun rollingRecovery(rule: StayRule, segments: List<ZoneSegment>, today: LocalDate): Recovery? {
+    if (rule.windowType != "rolling") return null
+    val period = rule.windowPeriodDays ?: return null
+    val total = rule.windowDays ?: return null
+    val daysBack = usageOn(rule, segments, today).first
+    if (daysBack <= 0) return null
+    // Only days already spent can come back: a stay still ahead of today has consumed nothing.
+    val used = mergedSegments(segments).mapNotNull { (start, end) ->
+        val hi = if (end.isBefore(today)) end else today
+        if (start.isAfter(hi)) null else start to hi
+    }
+    if (used.isEmpty()) return null
+    return Recovery(
+        firstSliceBackOn = used.minOf { it.first }.plusDays(period.toLong()),
+        wholeAgainOn = used.maxOf { it.second }.plusDays(period.toLong()),
+        daysBack = daysBack.coerceAtMost(total),
+        totalDays = total,
+    )
 }
