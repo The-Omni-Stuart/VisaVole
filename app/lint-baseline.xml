@@ -47,39 +47,6 @@
 
     <issue
         id="GradleDependency"
-        message="A newer version of androidx.lifecycle:lifecycle-runtime-compose than 2.9.1 is available: 2.11.0"
-        errorLine1="lifecycle = &quot;2.9.1&quot;"
-        errorLine2="            ~~~~~~~">
-        <location
-            file="../gradle/libs.versions.toml"
-            line="5"
-            column="13"/>
-    </issue>
-
-    <issue
-        id="GradleDependency"
-        message="A newer version of androidx.lifecycle:lifecycle-viewmodel-compose than 2.9.1 is available: 2.11.0"
-        errorLine1="lifecycle = &quot;2.9.1&quot;"
-        errorLine2="            ~~~~~~~">
-        <location
-            file="../gradle/libs.versions.toml"
-            line="5"
-            column="13"/>
-    </issue>
-
-    <issue
-        id="GradleDependency"
-        message="A newer version of androidx.lifecycle:lifecycle-viewmodel-ktx than 2.9.1 is available: 2.11.0"
-        errorLine1="lifecycle = &quot;2.9.1&quot;"
-        errorLine2="            ~~~~~~~">
-        <location
-            file="../gradle/libs.versions.toml"
-            line="5"
-            column="13"/>
-    </issue>
-
-    <issue
-        id="GradleDependency"
         message="A newer version of androidx.activity:activity-compose than 1.12.1 is available: 1.13.0"
         errorLine1="activityCompose = &quot;1.12.1&quot;"
         errorLine2="                  ~~~~~~~~">
@@ -91,7 +58,7 @@
 
     <issue
         id="GradleDependency"
-        message="A newer version of androidx.compose:compose-bom than 2026.02.01 is available: 2026.09.00"
+        message="A newer version of androidx.compose:compose-bom than 2026.02.01 is available: 2026.11.01"
         errorLine1="composeBom = &quot;2026.02.01&quot;"
         errorLine2="             ~~~~~~~~~~~~">
         <location
@@ -123,24 +90,13 @@
     </issue>
 
     <issue
-        id="NewerVersionAvailable"
-        message="A newer version of org.xerial:sqlite-jdbc than 3.49.1.0 is available: 3.54.1.0"
-        errorLine1="sqliteJdbc = &quot;3.49.1.0&quot;"
-        errorLine2="             ~~~~~~~~~~">
-        <location
-            file="../gradle/libs.versions.toml"
-            line="11"
-            column="14"/>
-    </issue>
-
-    <issue
         id="ConfigurationScreenWidthHeight"
         message="Using Configuration.screenHeightDp instead of LocalWindowInfo.current.containerSize"
         errorLine1="        maxHeight = (LocalConfiguration.current.screenHeightDp - 96).dp,"
         errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/cbkres/visavole/ui/screens/documents/AddDocumentDialog.kt"
-            line="255"
+            line="243"
             column="22"/>
     </issue>
 
@@ -151,7 +107,7 @@
         errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/cbkres/visavole/ui/screens/documents/AddDocumentDialog.kt"
-            line="265"
+            line="253"
             column="34"/>
     </issue>
 
@@ -162,7 +118,7 @@
         errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/cbkres/visavole/ui/screens/trips/AddTripDialog.kt"
-            line="252"
+            line="263"
             column="22"/>
     </issue>
 
@@ -173,7 +129,7 @@
         errorLine2="                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/cbkres/visavole/ui/screens/trips/AddTripDialog.kt"
-            line="266"
+            line="278"
             column="30"/>
     </issue>
 
@@ -184,7 +140,7 @@
         errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/cbkres/visavole/ui/screens/trips/StopEditorDialog.kt"
-            line="112"
+            line="119"
             column="22"/>
     </issue>
 
@@ -195,7 +151,7 @@
         errorLine2="                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/cbkres/visavole/ui/screens/trips/StopEditorDialog.kt"
-            line="122"
+            line="129"
             column="34"/>
     </issue>
 
@@ -261,7 +217,7 @@
         errorLine2="    ~~~~~~~~">
         <location
             file="src/main/java/com/cbkres/visavole/ui/screens/map/WorldMapCanvas.kt"
-            line="118"
+            line="122"
             column="5"/>
     </issue>
 
@@ -283,7 +239,7 @@
         errorLine2="                                          ~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/cbkres/visavole/ui/screens/documents/AddDocumentDialog.kt"
-            line="129"
+            line="130"
             column="43"/>
     </issue>
 
@@ -294,7 +250,7 @@
         errorLine2="                                           ~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/cbkres/visavole/ui/screens/documents/AddDocumentDialog.kt"
-            line="130"
+            line="131"
             column="44"/>
     </issue>
 
@@ -305,7 +261,7 @@
         errorLine2="                                     ~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/cbkres/visavole/ui/screens/documents/DocumentsScreen.kt"
-            line="81"
+            line="80"
             column="38"/>
     </issue>
 
@@ -316,7 +272,7 @@
         errorLine2="                                     ~~~~~~~~~~~~~~">
         <location
             file="src/main/java/com/cbkres/visavole/ui/screens/trips/TripsScreen.kt"
-            line="69"
+            line="66"
             column="38"/>
     </issue>
 
@@ -327,7 +283,7 @@
         errorLine2="                     ~~~~~~">
         <location
             file="src/main/java/com/cbkres/visavole/ui/screens/map/MapScreen.kt"
-            line="328"
+            line="325"
             column="22"/>
     </issue>
 
