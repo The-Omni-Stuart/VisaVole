@@ -7,7 +7,10 @@ import com.cbkres.visavole.domain.Holding
 import com.cbkres.visavole.domain.Regime
 import com.cbkres.visavole.domain.StayRule
 import com.cbkres.visavole.domain.VisaDbMeta
+import com.cbkres.visavole.domain.grantValidOn
 import com.cbkres.visavole.domain.WorldData
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 /**
  * Loads the bundled [VisaDb] into an in-memory [WorldData].
@@ -17,31 +20,33 @@ import com.cbkres.visavole.domain.WorldData
  */
 class VisaRepository(private val db: VisaDb) {
 
-    fun loadWorld(homePassports: Set<String>): WorldData {
+    fun loadWorld(homePassports: Set<String>, today: LocalDate = LocalDate.now(ZoneOffset.UTC)): WorldData {
         val conn = db.database
         return WorldData(
             countries = loadCountries(conn),
-            baseline = loadBaseline(conn, homePassports),
+            baseline = loadBaseline(conn, homePassports, today),
             regimes = loadRegimes(conn),
             holdings = loadHoldings(conn),
             benefits = loadBenefits(conn),
             stayRules = loadStayRules(conn),
-            visaDbMeta = loadVisaDbMeta(conn),
+            visaDbMeta = loadVisaDbMeta(conn, today),
         )
     }
 
-    /** The `meta` audit dates plus the two shared expiry probes; an absent `meta` table degrades to defaults. */
-    private fun loadVisaDbMeta(c: android.database.sqlite.SQLiteDatabase): VisaDbMeta {
+    /** The `meta` audit dates plus the four shared expiry probes; an absent `meta` table degrades to defaults. */
+    private fun loadVisaDbMeta(c: android.database.sqlite.SQLiteDatabase, today: LocalDate): VisaDbMeta {
         val values = HashMap<String, String>()
         runCatching {
             c.rawQuery(SQL_META_FRESHNESS, null).use { cur ->
                 while (cur.moveToNext()) values[cur.getString(0)] = cur.getString(1)
             }
         }
-        val (from, to) = lapsingSoonWindow()
+        val (from, to) = lapsingSoonWindow(today)
         val lapsed = countQuery(c, SQL_STAY_RULES_LAPSED, arrayOf(from))
         val lapsingSoon = countQuery(c, SQL_STAY_RULES_LAPSING_SOON, arrayOf(from, to))
-        return visaDbMeta(values, lapsed, lapsingSoon)
+        val lapsedCorridors = countQuery(c, SQL_GRANTS_LAPSED, arrayOf(from))
+        val corridorsLapsingSoon = countQuery(c, SQL_GRANTS_LAPSING_SOON, arrayOf(from, to))
+        return visaDbMeta(values, lapsed, lapsingSoon, lapsedCorridors, corridorsLapsingSoon)
     }
 
     private fun countQuery(c: android.database.sqlite.SQLiteDatabase, sql: String, args: Array<String>): Int =
@@ -57,19 +62,25 @@ class VisaRepository(private val db: VisaDb) {
         return out
     }
 
-    private fun loadBaseline(c: android.database.sqlite.SQLiteDatabase, homePassports: Set<String>): Map<String, List<Corridor>> {
+    private fun loadBaseline(
+        c: android.database.sqlite.SQLiteDatabase,
+        homePassports: Set<String>,
+        today: LocalDate,
+    ): Map<String, List<Corridor>> {
         if (homePassports.isEmpty()) return emptyMap()
         val out = HashMap<String, MutableList<Corridor>>()
         homePassports.toList().chunked(BASELINE_CHUNK).forEach { chunk ->
             val placeholders = chunk.joinToString(",") { "?" }
             c.rawQuery(
-                "SELECT passport, destination, type, days FROM visa_rules WHERE passport IN ($placeholders)",
+                "SELECT passport, destination, type, days, valid_to FROM visa_rules WHERE passport IN ($placeholders)",
                 chunk.toTypedArray(),
             ).use { cur ->
                 while (cur.moveToNext()) {
                     val p = cur.getString(0)
                     val days = if (cur.isNull(3)) null else cur.getInt(3)
-                    out.getOrPut(p) { mutableListOf() }.add(Corridor(p, cur.getString(1), cur.getString(2), days))
+                    val validTo = cur.getString(4)
+                    if (!grantValidOn(null, validTo, today)) continue
+                    out.getOrPut(p) { mutableListOf() }.add(Corridor(p, cur.getString(1), cur.getString(2), days, validTo))
                 }
             }
         }

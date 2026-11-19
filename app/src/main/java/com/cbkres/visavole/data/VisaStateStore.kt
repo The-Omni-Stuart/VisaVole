@@ -72,48 +72,55 @@ internal class VisaStateStore(
         }
     }
 
-    /**
-     * Reads the persisted state, or null when there is no state file (fresh install) or it could
-     * not be read. A file that cannot be decoded is quarantined rather than ignored, so the next
-     * write can never destroy the user's only copy of the data. Partially readable files carry
-     * their unreadable-record count (M6) so the caller can warn the user. Must be called on an
-     * IO dispatcher.
-     */
+    /** Damaged content is quarantined so a later write cannot clobber it; an unreadable file is left in place and persisting is disabled instead. */
     fun load(): LoadedState? {
         val f = file
-        try {
-            if (!f.exists()) return null
-            // baseline the mtime we read so the first persist() doesn't false-positive on a
-            // pre-existing (older) file.
-            lastPersistMs = f.lastModified()
-            val decoded = StateCodec.decode(f.readText())
-            return LoadedState(decoded.state, decoded.droppedRecords)
+        if (!f.exists()) return null
+        // baseline the mtime we read, or the first persist() false-positives on an older file.
+        lastPersistMs = f.lastModified()
+        val text = try {
+            f.readText()
         } catch (e: Exception) {
-            // Never start empty on top of a file we could not read: the next persist() would
-            // overwrite it and the user's data would be gone for good. Quarantine it instead,
-            // so it can be inspected or recovered later.
-            Log.e(TAG, "Could not decode state file $f; quarantining", e)
-            val quarantine = File(f.parentFile, "${f.name}.corrupt-${System.currentTimeMillis()}")
-            if (f.renameTo(quarantine)) {
-                Log.w(TAG, "Quarantined unreadable state file as $quarantine")
-            } else {
-                // Renaming failed: copy the file aside best-effort, keep the original untouched
-                // and BLOCK persisting for this process — writing would destroy the user's data.
-                try {
-                    f.copyTo(quarantine, overwrite = false)
-                    Log.w(TAG, "Copied unreadable state file to $quarantine")
-                } catch (copyError: Exception) {
-                    Log.e(TAG, "Could not copy $f to $quarantine", copyError)
-                }
-                stateFileBlocked = true
-                Log.e(TAG, "Unreadable state file $f could not be quarantined; persisting disabled for this process")
-            }
-            // cap the quarantine files so repeated decode failures don't accumulate forever.
-            // parentFile is @Nullable in java.io.File (null only for a parentless path, which the
-            // caller's filesDir-based path never is), so prune only when there is a directory.
-            f.parentFile?.let { pruneQuarantined(it) }
+            return unreadableWithoutQuarantine(f, e)
+        }
+        val decoded = try {
+            StateCodec.decode(text)
+        } catch (e: Exception) {
+            quarantineUndecodable(f, e)
             return null
         }
+        return LoadedState(decoded.state, decoded.droppedRecords)
+    }
+
+    /** The file is intact on disk but unreadable right now: keep it, and refuse to overwrite it. */
+    private fun unreadableWithoutQuarantine(f: File, cause: Exception): LoadedState? {
+        Log.e(TAG, "Could not read state file $f; leaving it in place and disabling persisting", cause)
+        blockPersisting(f)
+        return null
+    }
+
+    private fun blockPersisting(f: File) {
+        stateFileBlocked = true
+        Log.e(TAG, "State file $f is still present and unusable; persisting disabled for this process")
+    }
+
+    private fun quarantineUndecodable(f: File, cause: Exception) {
+        Log.e(TAG, "Could not decode state file $f; quarantining", cause)
+        val quarantine = File(f.parentFile, "${f.name}.corrupt-${System.currentTimeMillis()}")
+        if (f.renameTo(quarantine)) {
+            Log.w(TAG, "Quarantined unreadable state file as $quarantine")
+        } else {
+            // Rename failed: copy aside best-effort, leave the original, and stop persisting.
+            try {
+                f.copyTo(quarantine, overwrite = false)
+                Log.w(TAG, "Copied unreadable state file to $quarantine")
+            } catch (copyError: Exception) {
+                Log.e(TAG, "Could not copy $f to $quarantine", copyError)
+            }
+            blockPersisting(f)
+        }
+        // parentFile is nullable only for a parentless path, which a filesDir path never is.
+        f.parentFile?.let { pruneQuarantined(it) }
     }
 
     /**

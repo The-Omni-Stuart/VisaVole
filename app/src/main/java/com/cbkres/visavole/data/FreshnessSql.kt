@@ -20,18 +20,33 @@ internal const val SQL_STAY_RULES_LAPSED =
 internal const val SQL_STAY_RULES_LAPSING_SOON =
     "SELECT COUNT(*) FROM stay_rules WHERE valid_to IS NOT NULL AND valid_to >= ? AND valid_to <= ?"
 
+/** Per-corridor expiry is a different table but the same two probes. */
+internal const val SQL_GRANTS_LAPSED =
+    "SELECT COUNT(*) FROM visa_rules WHERE valid_to IS NOT NULL AND valid_to < ?"
+
+internal const val SQL_GRANTS_LAPSING_SOON =
+    "SELECT COUNT(*) FROM visa_rules WHERE valid_to IS NOT NULL AND valid_to >= ? AND valid_to <= ?"
+
 internal const val LAPSING_SOON_DAYS = 30L
 
 /** The inclusive window [today, today + 30 d] used by the lapsing-soon probe, as ISO strings. */
 internal fun lapsingSoonWindow(today: LocalDate = LocalDate.now(ZoneOffset.UTC)): Pair<String, String> =
     today.toString() to today.plusDays(LAPSING_SOON_DAYS).toString()
 
-/** Folds the freshness `meta` rows and the two probe counts into a [VisaDbMeta]; absent keys stay "". */
-internal fun visaDbMeta(values: Map<String, String>, lapsedRules: Int, lapsingSoon: Int): VisaDbMeta =
+/** Folds the freshness `meta` rows and the four expiry probes into a [VisaDbMeta]; absent keys stay "". */
+internal fun visaDbMeta(
+    values: Map<String, String>,
+    lapsedRules: Int,
+    lapsingSoon: Int,
+    lapsedCorridors: Int,
+    corridorsLapsingSoon: Int,
+): VisaDbMeta =
     VisaDbMeta(
         generated = values["generated"] ?: "",
         rulesVerifiedAt = values["rules_verified_at"] ?: "",
         nextReview = values["next_review"] ?: "",
         lapsedRules = lapsedRules,
         lapsingSoon = lapsingSoon,
+        lapsedCorridors = lapsedCorridors,
+        corridorsLapsingSoon = corridorsLapsingSoon,
     )

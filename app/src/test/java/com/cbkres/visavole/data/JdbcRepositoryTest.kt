@@ -23,7 +23,7 @@ class JdbcRepositoryTest {
                     "window_days INTEGER, window_period_days INTEGER, extension INTEGER, " +
                     "multiple_entry INTEGER, nationalities TEXT, valid_from TEXT, valid_to TEXT, source TEXT, note TEXT)",
             )
-            st.executeUpdate("CREATE TABLE visa_rules (passport TEXT, destination TEXT, type TEXT, days INTEGER)")
+            st.executeUpdate("CREATE TABLE visa_rules (passport TEXT, destination TEXT, type TEXT, days INTEGER, valid_to TEXT)")
             st.executeUpdate("CREATE TABLE mobility_regimes (id TEXT, name TEXT, level TEXT, members TEXT)")
             st.executeUpdate("CREATE TABLE visa_holdings (id TEXT, name TEXT, category TEXT, issuing_country TEXT)")
             // No residence_min column: the hasColumn() branch must drop it from the SELECT.
@@ -34,8 +34,8 @@ class JdbcRepositoryTest {
         c.createStatement().use { st ->
             st.executeUpdate("INSERT INTO countries VALUES ('CZ','Czechia')")
             st.executeUpdate("INSERT INTO countries VALUES ('DE','Germany')")
-            st.executeUpdate("INSERT INTO visa_rules VALUES ('CZ','DE','free',NULL)")
-            st.executeUpdate("INSERT INTO visa_rules VALUES ('CZ','FR','visa',90)")
+            st.executeUpdate("INSERT INTO visa_rules VALUES ('CZ','DE','free',NULL,NULL)")
+            st.executeUpdate("INSERT INTO visa_rules VALUES ('CZ','FR','visa',90,NULL)")
             st.executeUpdate("INSERT INTO mobility_regimes VALUES ('eu','EU','level','[\"AT\", \"BE\"]')")
             st.executeUpdate("INSERT INTO mobility_regimes VALUES ('empty','Empty','level',NULL)")
             st.executeUpdate("INSERT INTO visa_holdings VALUES ('h1','Holding','residence','DE')")
@@ -116,7 +116,7 @@ class JdbcRepositoryTest {
         inMemory().use { c ->
             c.createStatement().use { st ->
                 for (i in 0 until BASELINE_CHUNK + 100) {
-                    st.executeUpdate("INSERT INTO visa_rules VALUES ('P$i','DE','free',$i)")
+                    st.executeUpdate("INSERT INTO visa_rules VALUES ('P$i','DE','free',$i,NULL)")
                 }
             }
             val passports = (0 until BASELINE_CHUNK + 100).map { "P$it" }.toSet()

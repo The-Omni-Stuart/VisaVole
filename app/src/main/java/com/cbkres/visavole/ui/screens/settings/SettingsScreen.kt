@@ -317,6 +317,10 @@ private fun DataBuildFooter(ready: AppState.Ready) {
                 ?.let { pluralStringResource(R.plurals.settings_data_lapsed_pill, it, it) },
             meta.lapsingSoon.takeIf { it > 0 }
                 ?.let { pluralStringResource(R.plurals.settings_data_lapsing_soon_pill, it, it) },
+            meta.lapsedCorridors.takeIf { it > 0 }
+                ?.let { pluralStringResource(R.plurals.settings_data_lapsed_pill, it, it) },
+            meta.corridorsLapsingSoon.takeIf { it > 0 }
+                ?.let { pluralStringResource(R.plurals.settings_data_lapsing_soon_pill, it, it) },
         ),
         separator = stringResource(R.string.settings_data_warn_separator),
     )
@@ -379,6 +383,10 @@ private fun DataBuildFooter(ready: AppState.Ready) {
                             ?.let { pluralStringResource(R.plurals.settings_data_lapsed, it, it) },
                         meta.lapsingSoon.takeIf { it > 0 }
                             ?.let { pluralStringResource(R.plurals.settings_data_lapsing_soon, it, it) },
+                        meta.lapsedCorridors.takeIf { it > 0 }
+                            ?.let { pluralStringResource(R.plurals.settings_data_grants_lapsed, it, it) },
+                        meta.corridorsLapsingSoon.takeIf { it > 0 }
+                            ?.let { pluralStringResource(R.plurals.settings_data_grants_lapsing_soon, it, it) },
                     ).joinToString(stringResource(R.string.settings_data_warn_separator)),
                 )
             }

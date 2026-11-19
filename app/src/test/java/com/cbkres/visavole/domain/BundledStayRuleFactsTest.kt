@@ -62,11 +62,10 @@ class BundledStayRuleFactsTest {
     }
 
     @Test
-    fun eacVisaIsOneConsumedTicketNotASlidingPool() {
-        // The EAC single visa grants one 90-day allowance across KE/RW/UG. Modelled as rolling it
-        // refilled a day at a time forever, which alpha 5 would have labelled with confident dates.
+    fun eacVisaIsOneConsumedTicketThatNeverRefills() {
+        // Neither a rolling refill nor a border refill describes a visa that grants the days once.
         val rule = ruleFor("KE", "US")
-        assertEquals("per-entry", rule?.windowType)
+        assertEquals("lifetime", rule?.windowType)
         assertNull("a consumed single ticket has no sliding period", rule?.windowPeriodDays)
         assertEquals("the three states still share the one allowance", "stay:eac", poolKey("RW", "US"))
         assertEquals("stay:eac", poolKey("UG", "US"))
@@ -87,11 +86,27 @@ class BundledStayRuleFactsTest {
         // missing member silently makes a legal entry look illegal. Greece was absent for exactly
         // this path: 28 members where the pool has 29.
         val bloc = world.travelBlocFor(setOf("DE"))
-        val pool = world.stayRules.filter { it.zoneId == "schengen" }.flatMap { it.countries }.toSet()
-        assertEquals("the bloc and the pool must agree on membership", pool, bloc?.members?.toSet())
+        val pool = world.stayRules.filter { it.zoneId == "schengen" }
+        val membership = pool.filter { it.id == "schengen" }.flatMap { it.countries }.toSet()
+        assertEquals("the bloc and the pool must agree on membership", membership, bloc?.members?.toSet())
         assertTrue("Greece must be covered by a Schengen document", bloc?.members?.contains("GR") == true)
         // The design intent: short-stay travel, not freedom of movement, so the opt-outs stay out.
         assertFalse("Ireland is not part of the Schengen travel area", bloc?.members?.contains("IE") == true)
         assertFalse("Cyprus is not part of the Schengen travel area", bloc?.members?.contains("CY") == true)
+    }
+
+    @Test
+    fun microstatesShareThePoolWithoutClaimingMembership() {
+        val pool = world.stayRules.filter { it.zoneId == "schengen" }
+        val microstates = listOf("MC", "SM", "VA", "AD")
+        assertEquals("the four must be the only rows beyond the member list",
+                     microstates.toSet(), pool.filter { it.id != "schengen" }.flatMap { it.countries }.toSet())
+        for (dest in microstates) {
+            val rule = ruleFor(dest, "US")
+            assertEquals("$dest must be metered inside the Schengen pool", "stay:schengen", rule?.let(world::zoneKeyFor))
+            assertEquals("$dest must not redefine the pool's window", "rolling", rule?.windowType)
+            assertEquals("$dest must not resize the pool", 90, rule?.windowDays)
+            assertEquals("$dest must not rescale the pool", 180, rule?.windowPeriodDays)
+        }
     }
 }

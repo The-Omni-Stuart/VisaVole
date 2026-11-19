@@ -7,10 +7,13 @@ import com.cbkres.visavole.domain.Holding
 import com.cbkres.visavole.domain.Regime
 import com.cbkres.visavole.domain.StayRule
 import com.cbkres.visavole.domain.VisaDbMeta
+import com.cbkres.visavole.domain.grantValidOn
 import com.cbkres.visavole.domain.WorldData
 import java.io.File
 import java.sql.Connection
 import java.sql.DriverManager
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 /** Chunk size for the passport-filtered baseline query; SQLite's variable limit is 999. */
 internal const val BASELINE_CHUNK = 500
@@ -25,21 +28,21 @@ internal const val BASELINE_CHUNK = 500
  */
 object JdbcRepository {
 
-    fun load(dbFile: File, homePassports: Set<String>? = null): WorldData =
-        DriverManager.getConnection("jdbc:sqlite:" + dbFile.absolutePath).use { load(it, homePassports) }
+    fun load(dbFile: File, homePassports: Set<String>? = null, today: LocalDate = LocalDate.now(ZoneOffset.UTC)): WorldData =
+        DriverManager.getConnection("jdbc:sqlite:" + dbFile.absolutePath).use { load(it, homePassports, today) }
 
-    fun load(conn: Connection, homePassports: Set<String>? = null): WorldData {
+    fun load(conn: Connection, homePassports: Set<String>? = null, today: LocalDate = LocalDate.now(ZoneOffset.UTC)): WorldData {
         val countries = loadCountries(conn)
-        val baseline = loadBaseline(conn, homePassports)
+        val baseline = loadBaseline(conn, homePassports, today)
         val regimes = loadRegimes(conn)
         val holdings = loadHoldings(conn)
         val benefits = loadBenefits(conn)
         val stayRules = loadStayRules(conn)
-        return WorldData(countries, baseline, regimes, holdings, benefits, stayRules, loadVisaDbMeta(conn))
+        return WorldData(countries, baseline, regimes, holdings, benefits, stayRules, loadVisaDbMeta(conn, today))
     }
 
-    /** The `meta` audit dates plus the two shared expiry probes; an absent `meta` table degrades to defaults. */
-    private fun loadVisaDbMeta(c: Connection): VisaDbMeta {
+    /** The `meta` audit dates plus the four shared expiry probes; an absent `meta` table degrades to defaults. */
+    private fun loadVisaDbMeta(c: Connection, today: LocalDate): VisaDbMeta {
         val values = HashMap<String, String>()
         runCatching {
             c.createStatement().use { st ->
@@ -48,10 +51,12 @@ object JdbcRepository {
                 }
             }
         }
-        val (from, to) = lapsingSoonWindow()
+        val (from, to) = lapsingSoonWindow(today)
         val lapsed = countQuery(c, SQL_STAY_RULES_LAPSED, listOf(from))
         val lapsingSoon = countQuery(c, SQL_STAY_RULES_LAPSING_SOON, listOf(from, to))
-        return visaDbMeta(values, lapsed, lapsingSoon)
+        val lapsedCorridors = countQuery(c, SQL_GRANTS_LAPSED, listOf(from))
+        val corridorsLapsingSoon = countQuery(c, SQL_GRANTS_LAPSING_SOON, listOf(from, to))
+        return visaDbMeta(values, lapsed, lapsingSoon, lapsedCorridors, corridorsLapsingSoon)
     }
 
     private fun countQuery(c: Connection, sql: String, args: List<String>): Int = runCatching {
@@ -71,16 +76,16 @@ object JdbcRepository {
         return out
     }
 
-    private fun loadBaseline(c: Connection, homePassports: Set<String>?): Map<String, List<Corridor>> {
+    private fun loadBaseline(c: Connection, homePassports: Set<String>?, today: LocalDate): Map<String, List<Corridor>> {
         if (homePassports != null && homePassports.isEmpty()) return emptyMap()
         val out = HashMap<String, MutableList<Corridor>>()
         // Unfiltered reads the whole table; filtered runs the same chunked IN query as Android.
         val queries: List<Pair<String, List<String>>> = if (homePassports == null) {
-            listOf("SELECT passport, destination, type, days FROM visa_rules" to emptyList())
+            listOf("SELECT passport, destination, type, days, valid_to FROM visa_rules" to emptyList())
         } else {
             homePassports.sorted().chunked(BASELINE_CHUNK).map { chunk ->
                 val placeholders = chunk.joinToString(",") { "?" }
-                "SELECT passport, destination, type, days FROM visa_rules WHERE passport IN ($placeholders)" to chunk
+                "SELECT passport, destination, type, days, valid_to FROM visa_rules WHERE passport IN ($placeholders)" to chunk
             }
         }
         for ((sql, args) in queries) {
@@ -91,7 +96,10 @@ object JdbcRepository {
                         val p = rs.getString("passport")
                         val d = rs.getInt("days")
                         val days = if (rs.wasNull()) null else d
-                        out.getOrPut(p) { mutableListOf() }.add(Corridor(p, rs.getString("destination"), rs.getString("type"), days))
+                        val validTo = rs.getString("valid_to")
+                        if (!grantValidOn(null, validTo, today)) continue
+                        out.getOrPut(p) { mutableListOf() }
+                            .add(Corridor(p, rs.getString("destination"), rs.getString("type"), days, validTo))
                     }
                 }
             }

@@ -151,6 +151,21 @@ class VisaStateStoreTest {
     }
 
     @Test
+    fun aFileItCouldNotReadIsLeftWhereItIs() {
+        // A directory at the state path fails on read, not decode — quarantine would evict good data.
+        assertTrue("the state path must be a directory for this test", stateFile.mkdir())
+
+        assertNull(store.load())
+
+        assertTrue("an unreadable file must not be moved", stateFile.isDirectory)
+        assertTrue("a read failure must not leave quarantine files behind",
+                   dir.listFiles { f: File -> f.name.contains(".corrupt-") }.orEmpty().isEmpty())
+        store.save(PersistedState(primaryDocId = null, docs = emptyList(), trips = emptyList()))
+        assertTrue("persisting must stay blocked while the state path is unusable",
+                   stateFile.isDirectory && stateFile.listFiles().orEmpty().isEmpty())
+    }
+
+    @Test
     fun quarantineFilesArePrunedToTheThreeNewest() {
         // Quarantine names end in 13-digit epoch millis, so name order is age order. Seed 5 stale
         // ones; reading a corrupt state file adds a 6th (now) — only the 3 newest may survive.

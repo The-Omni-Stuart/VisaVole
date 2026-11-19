@@ -5,11 +5,21 @@ import java.time.LocalDate
 /** A country as stored in the VisaDB `countries` table. */
 data class Country(val iso2: String, val name: String)
 
-/**
- * One baseline rule from `visa_rules`: what a [passport] nationality needs to enter [destination].
- * [type] is one of: visa-free, e-visa, eta, visa-on-arrival, visa-required, refused.
- */
-data class Corridor(val passport: String, val destination: String, val type: String, val days: Int?)
+/** What a [passport] nationality needs to enter [destination]; [type] is visa-free, e-visa, eta, visa-on-arrival, visa-required or refused, and [validTo] ends the grant. */
+data class Corridor(
+    val passport: String,
+    val destination: String,
+    val type: String,
+    val days: Int?,
+    val validTo: String? = null,
+)
+
+/** Whether a grant with these bounds stands on [today]; absent bounds never block. */
+internal fun grantValidOn(validFrom: String?, validTo: String?, today: LocalDate): Boolean {
+    validFrom.toDateOrNull()?.let { if (it.isAfter(today)) return false }
+    validTo.toDateOrNull()?.let { if (it.isBefore(today)) return false }
+    return true
+}
 
 /** A mobility bloc from `mobility_regimes`; [members] are ISO2 codes, [level] is freedom-of-movement or visa-free. */
 data class Regime(val id: String, val name: String, val level: String, val members: List<String>)
@@ -95,6 +105,10 @@ data class VisaDbMeta(
     val lapsedRules: Int = 0,
     /** Rows with `valid_to` in [load date, load date + 30 d] (NULLs excluded). */
     val lapsingSoon: Int = 0,
+    /** `visa_rules` corridors past their `valid_to`, which are dropped rather than applied. */
+    val lapsedCorridors: Int = 0,
+    /** Corridors whose `valid_to` falls in the same 30-day window. */
+    val corridorsLapsingSoon: Int = 0,
 )
 
 /** In-memory snapshot of the whole VisaDB, loaded once and read by the pure [AccessModel]. */
@@ -250,11 +264,8 @@ data class WorldData(
         return syntheticStayRuleFor(dest, days)
     }
 
-    private fun isStayRuleValidOn(rule: StayRule, today: LocalDate): Boolean {
-        rule.validFrom.toDateOrNull()?.let { if (it.isAfter(today)) return false }
-        rule.validTo.toDateOrNull()?.let { if (it.isBefore(today)) return false }
-        return true
-    }
+    private fun isStayRuleValidOn(rule: StayRule, today: LocalDate): Boolean =
+        grantValidOn(rule.validFrom, rule.validTo, today)
 
     /** Stable allowance-pool key: shared zones pool together, standalone rules do not. */
     fun zoneKeyFor(rule: StayRule): String = when {
