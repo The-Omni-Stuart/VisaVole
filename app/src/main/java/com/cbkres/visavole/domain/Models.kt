@@ -71,7 +71,9 @@ data class StayRule(
             windowDays != null -> "$windowDays (rolling)"
             else -> "rolling"
         }
-        else -> if (windowDays != null) "$windowDays per entry" else "per entry"
+        "per-entry" -> if (windowDays != null) "$windowDays per entry" else "per entry"
+        // "per entry" would promise a border reset this row does not grant.
+        else -> if (windowDays != null) "$windowDays total (never refills)" else "never refills"
     }
 
     /**
@@ -232,7 +234,9 @@ data class WorldData(
             "*" in nats -> 1 // any nationality
             else -> 0
         }
-        val explicit = cands.maxByOrNull { score(it.nationalities) }
+        // Two rules can score identically, so the id decides: the answer must not move with row order.
+        val explicit = cands
+            .maxWithOrNull(compareBy({ score(it.nationalities) }, { it.id }))
             ?.takeIf { score(it.nationalities) > 0 }
         if (explicit != null) return explicit
         if (!allowSynthetic) return null

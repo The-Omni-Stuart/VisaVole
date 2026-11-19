@@ -94,12 +94,17 @@ internal fun zoneUsages(
     return out
 }
 
-/**
- * The tighter of two rules pooling into one zone: the smallest windowDays wins (null = no stated
- * limit, weakest), rule id breaks ties so the pick never depends on stop order either.
- */
-private fun tighterRule(current: StayRule?, candidate: StayRule?): StayRule =
-    listOfNotNull(current, candidate).minWith(compareBy({ it.windowDays ?: Int.MAX_VALUE }, { it.id }))
+/** Most restrictive first: a never-refilling pool must not lose a zone to a looser rule of the same size. */
+internal val StayRule.windowClass: Int
+    get() = when (windowType) {
+        "per-entry" -> 2
+        "rolling" -> 1
+        else -> 0
+    }
+
+// Day counts cannot settle a zone whose rules disagree on window type: at equal days the tie fell to the id string.
+internal fun tighterRule(current: StayRule?, candidate: StayRule?): StayRule =
+    listOfNotNull(current, candidate).minWith(compareBy({ it.windowClass }, { it.windowDays ?: Int.MAX_VALUE }, { it.id }))
 
 internal fun zoneSnapshot(
     key: String,
@@ -112,7 +117,11 @@ internal fun zoneSnapshot(
     candidateMaps: Map<String, Map<String, Access>>? = null,
 ): AllowanceSnapshot? {
     val rule = usage.rule ?: return null
-    val kind = if (rule.windowType == "rolling") AllowanceKind.ROLLING else AllowanceKind.PER_ENTRY
+    val kind = when (rule.windowType) {
+        "rolling" -> AllowanceKind.ROLLING
+        "per-entry" -> AllowanceKind.PER_ENTRY
+        else -> AllowanceKind.LIFETIME
+    }
     val (used, overstay) = usageOn(rule, usage.segments, asOf)
     val windowDays = rule.windowDays
     val rawRemaining = windowDays?.let { it - used }
@@ -292,20 +301,30 @@ internal fun perEntryUsage(rule: StayRule, segments: List<ZoneSegment>, asOf: Lo
     return used to overstay
 }
 
-/** The one place the window type picks the arithmetic; [on] makes "as of today" a caller's choice. */
+// Nothing slides, so only days already spent have left the pool.
+internal fun lifetimeUsage(rule: StayRule, segments: List<ZoneSegment>, asOf: LocalDate): Pair<Int, Int> {
+    var used = 0
+    for ((s, e) in mergedSegments(segments)) {
+        val hi = if (e.isBefore(asOf)) e else asOf
+        if (!s.isAfter(hi)) used += ChronoUnit.DAYS.between(s, hi).toInt() + 1
+    }
+    val overstay = rule.windowDays?.let { (used - it).coerceAtLeast(0) } ?: 0
+    return used to overstay
+}
+
+/** Metered as a lifetime pool when the type is unrecognised: per-entry is the only reading that can over-grant. */
 internal fun usageOn(rule: StayRule, segments: List<ZoneSegment>, on: LocalDate): Pair<Int, Int> =
-    if (rule.windowType == "rolling") rollingUsage(rule, segments, on) else perEntryUsage(rule, segments, on)
+    when (rule.windowType) {
+        "rolling" -> rollingUsage(rule, segments, on)
+        "per-entry" -> perEntryUsage(rule, segments, on)
+        else -> lifetimeUsage(rule, segments, on)
+    }
 
 /** Days left against [rule] as of [on], before any document caps it. Null when the rule sets no limit. */
 internal fun remainingOn(rule: StayRule, segments: List<ZoneSegment>, on: LocalDate): Int? =
     rule.windowDays?.let { it - usageOn(rule, segments, on).first }
 
-/**
- * When a rolling window's used days come back: a day leaves `[on - period + 1, on]` once `on`
- * reaches `day + period`, so the first slice returns on `firstUsed + period` and the pool is whole
- * on `lastUsed + period`. Closed form — the publish path cannot afford a day walk; only the test walks.
- * Null when it does not refill over time: per-entry, no period (L2), or nothing used.
- */
+/** Days return as they leave the window: slice `n` is whole again on `day(n) + period`, in closed form. */
 internal fun rollingRecovery(rule: StayRule, segments: List<ZoneSegment>, today: LocalDate): Recovery? {
     if (rule.windowType != "rolling") return null
     val period = rule.windowPeriodDays ?: return null

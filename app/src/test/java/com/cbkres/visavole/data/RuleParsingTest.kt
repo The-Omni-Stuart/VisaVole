@@ -31,4 +31,13 @@ class RuleParsingTest {
         assertEquals(emptySet<String>(), parseEntryTypes(null))
         assertEquals(emptySet<String>(), parseEntryTypes("  "))
     }
+
+    @Test
+    fun aJsonEncodedListParsesToTheSameTypesAsCsv() {
+        // A quoted token that failed to match would silently void the entry-type gate.
+        assertEquals(setOf("double", "multiple"), parseEntryTypes("[\"double\",\"multiple\"]"))
+        assertEquals(setOf("single"), parseEntryTypes("[\"single\"]"))
+        assertEquals("a literal null in the list is not an entry type", setOf("multiple"), parseEntryTypes("null, multiple"))
+        assertEquals(emptySet<String>(), parseEntryTypes("[]"))
+    }
 }

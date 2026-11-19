@@ -61,10 +61,15 @@ internal fun referencedDocumentIds(trips: List<Trip>): Set<String> =
 enum class AllowanceKind {
     ROLLING,
     PER_ENTRY,
+    LIFETIME,
     DOCUMENT_VALIDITY,
     ENTRY_COUNT,
     UNLIMITED,
 }
+
+/** True when the allowance is a stay window (days in a zone), as opposed to a document's own life. */
+internal val AllowanceKind.isWindow: Boolean
+    get() = this == AllowanceKind.ROLLING || this == AllowanceKind.PER_ENTRY || this == AllowanceKind.LIFETIME
 
 enum class AllowanceStatus {
     OK,
