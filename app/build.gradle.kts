@@ -95,6 +95,12 @@ android {
     }
 }
 
+// Asset-reading tests must re-run when the bundled DB changes.
+tasks.withType<Test>().configureEach {
+    inputs.file("src/main/assets/visa_data.db")
+    inputs.file("src/main/assets/visa_data.db.sha256")
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.core.ktx)
