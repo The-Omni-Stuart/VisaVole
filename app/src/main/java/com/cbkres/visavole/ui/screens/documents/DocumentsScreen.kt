@@ -2,6 +2,7 @@ package com.cbkres.visavole.ui.screens.documents
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,7 +48,7 @@ import com.cbkres.visavole.ui.components.statuscard.FlashTrigger
 import com.cbkres.visavole.ui.components.statuscard.StatusCard
 import com.cbkres.visavole.ui.docTitle
 import com.cbkres.visavole.ui.docTypeBadge
-import com.cbkres.visavole.ui.screens.AddButtonRow
+import com.cbkres.visavole.ui.screens.AddFab
 import com.cbkres.visavole.ui.screens.EmptyState
 import com.cbkres.visavole.ui.screens.ScreenHeader
 import com.cbkres.visavole.ui.screens.SectionLabel
@@ -95,7 +97,7 @@ internal fun DocumentsScreen(
             "Documents",
             "Add the passport and papers you hold — the map updates to match."
         )
-        AddButtonRow("Add document") { showAdd = true }
+        Box(Modifier.weight(1f)) {
         if (ready.docs.isEmpty()) {
             EmptyState("No documents yet. Start with a passport or a residence permit.")
         } else {
@@ -158,14 +160,14 @@ internal fun DocumentsScreen(
             HazeBox(
                 docsListState,
                 MaterialTheme.colorScheme.background,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.fillMaxSize()
             ) {
                 LazyColumn(
                     state = docsListState,
                     modifier = Modifier
                         .fillMaxSize()
                         .onSizeChanged { listViewportPx = it.height },
-                    contentPadding = PaddingValues(top = 12.dp),
+                    contentPadding = PaddingValues(top = 12.dp, bottom = 66.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     item(key = "allowances") {
@@ -296,6 +298,8 @@ internal fun DocumentsScreen(
                     }
                 }
             }
+        }
+        AddFab("Add document", Modifier.align(Alignment.BottomEnd)) { showAdd = true }
         }
     }
     blockedRemove?.let { finding ->

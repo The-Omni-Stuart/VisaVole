@@ -18,7 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 private val HAZE_SIZE = 48.dp
-private const val HAZE_RAMP = 80f
+private const val HAZE_RAMP = 24f
 
 /**
  * Soft edge fades that sit on top of a scrollable region so items melt into the

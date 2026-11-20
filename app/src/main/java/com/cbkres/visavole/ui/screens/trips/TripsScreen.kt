@@ -2,6 +2,7 @@ package com.cbkres.visavole.ui.screens.trips
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -22,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
@@ -38,7 +40,7 @@ import com.cbkres.visavole.ui.app.AppState
 import com.cbkres.visavole.ui.components.statuscard.AllowanceFocus
 import com.cbkres.visavole.ui.components.statuscard.FlashTrigger
 import com.cbkres.visavole.ui.components.statuscard.StatusCard
-import com.cbkres.visavole.ui.screens.AddButtonRow
+import com.cbkres.visavole.ui.screens.AddFab
 import com.cbkres.visavole.ui.screens.EmptyState
 import com.cbkres.visavole.ui.screens.ScreenHeader
 import com.cbkres.visavole.ui.screens.SectionLabel
@@ -100,20 +102,30 @@ internal fun TripsScreen(
         }
 
         val tripsListState = scrollState
+        val expandTrip: (Trip) -> Unit = { trip ->
+            val opening = trip.id !in expandedTrips
+            toggleExpanded(trip.id)
+            if (opening) {
+                tripIndex[trip.id]?.let { target ->
+                    scope.launch { tripsListState.animateScrollToItem(target) }
+                }
+            }
+        }
 
-        HazeBox(
-            tripsListState,
-            MaterialTheme.colorScheme.background,
-            modifier = Modifier.weight(1f)
-        ) {
-            LazyColumn(
-                state = tripsListState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .onSizeChanged { listViewportPx = it.height },
-                contentPadding = PaddingValues(top = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+        Box(Modifier.weight(1f)) {
+            HazeBox(
+                tripsListState,
+                MaterialTheme.colorScheme.background,
+                modifier = Modifier.fillMaxSize()
             ) {
+                LazyColumn(
+                    state = tripsListState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .onSizeChanged { listViewportPx = it.height },
+                    contentPadding = PaddingValues(top = 12.dp, bottom = 66.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                 val hasTrips =
                     sections.upcoming.isNotEmpty() ||
                             sections.current.isNotEmpty() ||
@@ -172,7 +184,7 @@ internal fun TripsScreen(
                         ) { trip ->
                             // Callback identities pinned per trip so cards whose trip did not
                             // change can skip recomposition when the screen republishes.
-                            val onExpand = remember(trip) { { toggleExpanded(trip.id) } }
+                            val onExpand = remember(trip) { { expandTrip(trip) } }
                             val onEdit = remember(trip) { { editingTrip = trip } }
                             val onDelete = remember(trip) { { deletingTrip = trip } }
                             TripCard(
@@ -203,7 +215,7 @@ internal fun TripsScreen(
                             items = sections.current,
                             key = { it.id }
                         ) { trip ->
-                            val onExpand = remember(trip) { { toggleExpanded(trip.id) } }
+                            val onExpand = remember(trip) { { expandTrip(trip) } }
                             val onEdit = remember(trip) { { editingTrip = trip } }
                             val onEnd = remember(trip) { { endingTrip = trip } }
                             val onDelete = remember(trip) { { deletingTrip = trip } }
@@ -235,7 +247,7 @@ internal fun TripsScreen(
                             items = sections.previous,
                             key = { it.id }
                         ) { trip ->
-                            val onExpand = remember(trip) { { toggleExpanded(trip.id) } }
+                            val onExpand = remember(trip) { { expandTrip(trip) } }
                             val onEdit = remember(trip) { { editingTrip = trip } }
                             val onDelete = remember(trip) { { deletingTrip = trip } }
                             TripCard(
@@ -263,9 +275,10 @@ internal fun TripsScreen(
                         )
                     }
                 }
+                }
             }
+            AddFab("Add trip", Modifier.align(Alignment.BottomEnd)) { showAdd = true }
         }
-        AddButtonRow("Add trip") { showAdd = true }
     }
 
     if (showAdd) {
