@@ -173,7 +173,6 @@ internal fun DocumentsScreen(
                             allowances = docAllowances,
                             primary = docPrimary,
                             focusedKey = effectiveFocusAllowance,
-                            today = ready.today,
                             onFocus = focus::toggle,
                             titleRow = { a ->
                                 val doc =

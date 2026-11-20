@@ -119,6 +119,7 @@ class AllowanceSummaryTest {
             wholeAgainOn = LocalDate.of(2027, 4, 18),
             daysBack = 6,
             sliceDays = 6,
+            inProgress = false,
             totalDays = 90,
         ),
     )
@@ -126,9 +127,21 @@ class AllowanceSummaryTest {
     @Test
     fun recoveryLinePrintsBothDatesAtHomeAndGoesQuietInsideTheZone() {
         val atHome = recovering()
-        assertEquals("regenerates from 2027-04-01 to 2027-04-18", allowanceAlternateLine(atHome))
+        assertEquals("Regenerating from 2027-04-01 (6 days)", allowanceAlternateLine(atHome))
         assertEquals(null, allowanceAlternateLine(atHome.copy(currentTripId = "trip")))
         assertEquals(null, allowanceAlternateLine(atHome.copy(overstayDays = 1)))
+    }
+
+    @Test
+    fun aRunningRecoveryLocksTheFaceToPresentTenseAndStaysSilentInsideTheZone() {
+        val running = recovering().copy(recovery = recovering().recovery!!.copy(inProgress = true))
+        assertEquals("Regenerating for 6 days", allowanceAlternateLine(running))
+        assertEquals(false, allowanceFaceRotates(running))
+        assertEquals(null, allowanceAlternateLine(running.copy(currentTripId = "trip")))
+        assertEquals(
+            "Allowance: 84 of 90 days left; regenerating for 6 days",
+            allowanceSpokenDescription(running),
+        )
     }
 
     @Test
@@ -152,7 +165,7 @@ class AllowanceSummaryTest {
     @Test
     fun theSpokenDescriptionCarriesBothHalvesInOneStaticString() {
         val text = allowanceSpokenDescription(recovering())
-        assertEquals("Allowance: 84 of 90 days left; recovering from 1 April, whole again 18 April", text)
+        assertEquals("Allowance: 84 of 90 days left; regenerating from 1 April (6 days)", text)
         assertEquals(false, text.contains("2027-04-01"))
     }
 }

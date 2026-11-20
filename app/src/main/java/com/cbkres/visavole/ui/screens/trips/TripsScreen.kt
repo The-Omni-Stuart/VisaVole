@@ -125,16 +125,9 @@ internal fun TripsScreen(
                             allowances = zoneAllowances,
                             primary = focus.primaryAllowance(zoneAllowances),
                             focusedKey = focus.effectiveFocusKey(zoneAllowances),
-                            today = ready.today,
                             onFocus = focus::toggle,
                             onRingClick = { snap ->
-                                val trip =
-                                    (snap.currentTripId ?: snap.relevantTripIds.firstOrNull())
-                                        ?.let { id ->
-                                            ready.trips.firstOrNull { trip ->
-                                                trip.id == id
-                                            }
-                                        }
+                                val trip = ringTargetTrip(snap, sections.current, sections.previous)
 
                                 if (trip != null) {
                                     if (trip.id !in expandedTrips) {

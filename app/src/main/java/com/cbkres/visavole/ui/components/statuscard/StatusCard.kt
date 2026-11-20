@@ -1,5 +1,7 @@
 package com.cbkres.visavole.ui.components.statuscard
 
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -27,19 +29,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.cbkres.visavole.R
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.LocalReducedMotion
 import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.ringColor
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
-import com.cbkres.visavole.ui.toUtcIsoDate
 import kotlinx.coroutines.delay
-import java.time.LocalDate
 
 /**
  * The tab-top allowance display, shared by the Trips tab (zone allowances) and the Documents tab
@@ -56,7 +54,6 @@ internal fun StatusCard(
     allowances: List<AllowanceSnapshot>,
     primary: AllowanceSnapshot?,
     focusedKey: String?,
-    today: LocalDate,
     onFocus: (String) -> Unit,
     onRingClick: (AllowanceSnapshot) -> Unit = {},
     titleRow: (@Composable RowScope.(AllowanceSnapshot) -> Unit)? = null,
@@ -65,9 +62,11 @@ internal fun StatusCard(
         Text("No allowances to track yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
-    val rotates = primary?.let { allowanceFaceRotates(it) || ringDaysFaceRotates(it) } ?: false
+    val lockedRecovery = primary?.let { it.recovery?.inProgress == true && allowanceAlternateLine(it) != null } ?: false
+    val rotates = !lockedRecovery && (primary?.let { allowanceFaceRotates(it) || ringDaysFaceRotates(it) } ?: false)
     val reducedMotion = LocalReducedMotion.current
     var faceFlip by remember(primary?.key) { mutableStateOf(false) }
+    val shownFlip = lockedRecovery || faceFlip
     LaunchedEffect(rotates, reducedMotion, primary?.key) {
         if (!rotates || reducedMotion) {
             faceFlip = false
@@ -79,14 +78,13 @@ internal fun StatusCard(
         }
     }
     primary?.let {
-        val alternate = if (faceFlip) allowanceAlternateLine(it) else null
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
                     .clip(CircleShape) // clip the ripple to the donut
                     .clickable(onClick = { onRingClick(it) }),
             ) {
-                Deportometer(it, faceFlip = faceFlip)
+                Deportometer(it, faceFlip = shownFlip)
             }
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -101,33 +99,18 @@ internal fun StatusCard(
                         Text(it.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    it.subtitle?.let { s -> Text(s, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    // The date sits here so the recovery line below gets the whole row width.
+                it.subtitle?.let { s -> Text(s, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                Crossfade(targetState = shownFlip, animationSpec = tween(300)) { flip ->
+                    val line = if (flip) allowanceAlternateLine(it) ?: allowanceSummary(it) else allowanceSummary(it)
                     Text(
-                        stringResource(R.string.status_today, today.toUtcIsoDate()),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        line,
+                        Modifier.fillMaxWidth(),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = ringColor(it, LocalEffectiveDarkTheme.current),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-                it.projection?.let { p ->
-                    Text(
-                        "On ${p.on.toUtcIsoDate()} · ${p.remainingDays} of ${p.totalDays} days",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    alternate ?: allowanceSummary(it),
-                    Modifier.fillMaxWidth(),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = ringColor(it, LocalEffectiveDarkTheme.current),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
         }
         Spacer(Modifier.height(16.dp))

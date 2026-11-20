@@ -40,8 +40,10 @@ internal fun allowanceSummary(a: AllowanceSnapshot): String = when {
 internal fun allowanceAlternateLine(a: AllowanceSnapshot): String? {
     if (a.noValidDoc || a.overstayDays > 0) return null
     return when (a.kind) {
-        AllowanceKind.ROLLING -> a.takeIf { it.currentTripId == null }?.recovery
-            ?.let { "regenerates from ${it.firstSliceBackOn} to ${it.wholeAgainOn}" }
+        AllowanceKind.ROLLING -> a.takeIf { it.currentTripId == null }?.recovery?.let {
+            if (it.inProgress) "Regenerating for ${it.daysBack} days"
+            else "Regenerating from ${it.firstSliceBackOn} (${it.daysBack} days)"
+        }
         AllowanceKind.PER_ENTRY -> a.takeIf { it.currentTripId != null }?.let {
             when {
                 it.entryRemaining == 0 -> null
@@ -56,14 +58,19 @@ internal fun allowanceAlternateLine(a: AllowanceSnapshot): String? {
     }
 }
 
-internal fun allowanceFaceRotates(a: AllowanceSnapshot): Boolean = allowanceAlternateLine(a) != null
+internal fun allowanceFaceRotates(a: AllowanceSnapshot): Boolean =
+    allowanceAlternateLine(a) != null && a.recovery?.inProgress != true
 
 /** One static accessibility string carrying both halves, with recovery dates in spoken form. */
 internal fun allowanceSpokenDescription(a: AllowanceSnapshot): String = buildString {
     append("Allowance: ").append(allowanceSummary(a))
     val recovery = a.recovery
     if (a.kind == AllowanceKind.ROLLING && recovery != null && allowanceAlternateLine(a) != null) {
-        append("; recovering from ").append(recovery.firstSliceBackOn.spoken())
-        append(", whole again ").append(recovery.wholeAgainOn.spoken())
+        if (recovery.inProgress) {
+            append("; regenerating for ").append(recovery.daysBack).append(" days")
+        } else {
+            append("; regenerating from ").append(recovery.firstSliceBackOn.spoken())
+            append(" (").append(recovery.daysBack).append(" days)")
+        }
     }
 }

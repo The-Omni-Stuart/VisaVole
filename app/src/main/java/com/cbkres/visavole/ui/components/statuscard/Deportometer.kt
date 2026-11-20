@@ -3,6 +3,7 @@ package com.cbkres.visavole.ui.components.statuscard
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
@@ -17,8 +18,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -61,8 +60,23 @@ internal fun Deportometer(
     faceFlip: Boolean = false,
 ) {
     val color = ringColor(a, LocalEffectiveDarkTheme.current)
-    val fraction = allowanceFraction(a)
     val reducedMotion = LocalReducedMotion.current
+    val showBand = faceFlip && a.kind == AllowanceKind.ROLLING && a.recovery != null
+    val bandPulseActive = showBand && a.recovery?.inProgress == true
+    val bandLevel = remember(a.key) { Animatable(0.2f) }
+    LaunchedEffect(bandPulseActive, reducedMotion, a.key) {
+        bandLevel.snapTo(0.2f)
+        if (!bandPulseActive || reducedMotion) return@LaunchedEffect
+        while (true) {
+            bandLevel.animateTo(0.5f, tween(1200, easing = LinearEasing))
+            bandLevel.animateTo(0.2f, tween(1200, easing = LinearEasing))
+        }
+    }
+    val bandVisibility = remember(a.key) { Animatable(0f) }
+    LaunchedEffect(showBand, a.key) {
+        bandVisibility.animateTo(if (showBand) 1f else 0f, tween(300))
+    }
+    val fraction = allowanceFraction(a)
     val docKind = a.kind == AllowanceKind.ENTRY_COUNT || a.kind == AllowanceKind.DOCUMENT_VALIDITY
     // An overstayed allowance shows a negative count + "OVERSTAY!" so it reads as unmistakably bad.
     val overstay = a.overstayDays > 0
@@ -76,7 +90,7 @@ internal fun Deportometer(
     // (in-use expired doc, or a stop with no document) can't be mistaken for a healthy — or merely
     // empty — ring.
     val pulsing = overstay || expiredInUse || noValidDoc
-    val pulse = remember { Animatable(1f) }
+    val pulse = remember(a.key) { Animatable(1f) }
     LaunchedEffect(pulsing, reducedMotion) {
         // With motion reduced, hold the ring solid: the colours and text still carry the warning.
         if (!pulsing || reducedMotion) {
@@ -131,20 +145,14 @@ internal fun Deportometer(
                 useCenter = false,
                 style = Stroke(stroke),
             )
-            val recoverable = if (a.kind == AllowanceKind.ROLLING && a.currentTripId == null)
-                a.recovery?.let { it.daysBack.toFloat() / it.totalDays } ?: 0f
-            else 0f
-            if (recoverable > 0f) {
-                val inset = stroke * 2.2f
-                val side = size.toPx() - inset * 2
+            val recoveryBand = if (a.kind == AllowanceKind.ROLLING) a.recovery else null
+            if (recoveryBand != null && recoveryBand.sliceDays > 0 && bandVisibility.value > 0.01f) {
                 drawArc(
-                    color = color.copy(alpha = 0.45f),
-                    startAngle = -90f,
-                    sweepAngle = 360f * recoverable,
+                    color = color.copy(alpha = bandLevel.value * bandVisibility.value),
+                    startAngle = -90f + 360f * fraction,
+                    sweepAngle = 360f * recoveryBand.sliceDays / recoveryBand.totalDays,
                     useCenter = false,
-                    topLeft = Offset(inset, inset),
-                    size = Size(side, side),
-                    style = Stroke(stroke * 0.5f),
+                    style = Stroke(stroke),
                 )
             }
         }
