@@ -1,6 +1,7 @@
 package com.cbkres.visavole.ui.theme
 
 import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -10,6 +11,8 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalContext
+import com.cbkres.visavole.ui.LocalReducedMotion
+import com.cbkres.visavole.ui.reducedMotionFromScale
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 
 private val DarkColorScheme = darkColorScheme(
@@ -41,10 +44,15 @@ internal fun Visa_VoleTheme(
         else -> LightColorScheme
     }
 
+    // Read the OS animation scale once at the theme root; 0 means the user asked for no motion.
+    val context = LocalContext.current
+    val reducedMotion = reducedMotionFromScale(
+        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f),
+    )
     // Expose the *effective* theme (which may be forced light/dark via the Settings override) so
     // every `isSystemInDarkTheme()` call below the theme reflects what the user is actually seeing
     // — not just the OS setting. The per-theme status colours key off this.
-    CompositionLocalProvider(LocalEffectiveDarkTheme provides darkTheme) {
+    CompositionLocalProvider(LocalEffectiveDarkTheme provides darkTheme, LocalReducedMotion provides reducedMotion) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

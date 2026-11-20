@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.AllowanceKind
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.AllowanceStatus
+import com.cbkres.visavole.ui.LocalReducedMotion
 import com.cbkres.visavole.ui.allowanceFraction
 import com.cbkres.visavole.ui.entriesRemainingPhrase
 import com.cbkres.visavole.ui.ringColor
@@ -55,9 +56,10 @@ internal fun Deportometer(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Mod
     val rotatable = a.kind == AllowanceKind.ENTRY_COUNT &&
             a.status != AllowanceStatus.DANGER &&
             a.remainingDays != null && a.remainingDays in 1..RING_ROTATE_MAX_DAYS
+    val reducedMotion = LocalReducedMotion.current
     var daysFace by remember(a.key, rotatable) { mutableStateOf(false) }
-    LaunchedEffect(rotatable) {
-        if (!rotatable) {
+    LaunchedEffect(rotatable, reducedMotion) {
+        if (!rotatable || reducedMotion) {
             daysFace = false
             return@LaunchedEffect
         }
@@ -80,8 +82,9 @@ internal fun Deportometer(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Mod
     // empty — ring.
     val pulsing = overstay || expiredInUse || noValidDoc
     val pulse = remember { Animatable(1f) }
-    LaunchedEffect(pulsing) {
-        if (!pulsing) {
+    LaunchedEffect(pulsing, reducedMotion) {
+        // With motion reduced, hold the ring solid: the colours and text still carry the warning.
+        if (!pulsing || reducedMotion) {
             pulse.snapTo(1f)
             return@LaunchedEffect
         }
