@@ -101,7 +101,18 @@ internal fun StatusCard(
                         Text(it.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
-                it.subtitle?.let { s -> Text(s, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    it.subtitle?.let { s -> Text(s, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    // The date sits here so the recovery line below gets the whole row width.
+                    Text(
+                        stringResource(R.string.status_today, today.toUtcIsoDate()),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 it.projection?.let { p ->
                     Text(
                         "On ${p.on.toUtcIsoDate()} · ${p.remainingDays} of ${p.totalDays} days",
@@ -109,22 +120,14 @@ internal fun StatusCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        alternate ?: allowanceSummary(it),
-                        Modifier.weight(1f),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = ringColor(it, LocalEffectiveDarkTheme.current),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    // Honest date for the day-dependent numbers the summary just printed.
-                    Text(
-                        stringResource(R.string.status_today, today.toUtcIsoDate()),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Text(
+                    alternate ?: allowanceSummary(it),
+                    Modifier.fillMaxWidth(),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = ringColor(it, LocalEffectiveDarkTheme.current),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
         Spacer(Modifier.height(16.dp))

@@ -38,16 +38,19 @@ internal fun allowanceSummary(a: AllowanceSnapshot): String = when {
 
 /** The rotating half of the summary slot: recovery dates or reset wording, null to stay silent. */
 internal fun allowanceAlternateLine(a: AllowanceSnapshot): String? {
-    if (a.noValidDoc || a.overstayDays > 0 || a.currentTripId != null) return null
+    if (a.noValidDoc || a.overstayDays > 0) return null
     return when (a.kind) {
-        AllowanceKind.ROLLING -> a.recovery?.let { "regenerates from ${it.firstSliceBackOn} to ${it.wholeAgainOn}" }
-        AllowanceKind.PER_ENTRY -> when {
-            a.entryRemaining == 0 -> null
-            a.resetMode == ResetMode.AT_NEW_DOCUMENT && a.entryTotal == 1 -> "this entry only"
-            a.resetMode == ResetMode.AT_NEW_DOCUMENT && a.entryRemaining == 1 -> "final entry"
-            a.resetMode == ResetMode.AT_NEW_DOCUMENT -> "resets on your next entry"
-            a.resetMode == ResetMode.AT_BORDER -> "resets on re-entry"
-            else -> null
+        AllowanceKind.ROLLING -> a.takeIf { it.currentTripId == null }?.recovery
+            ?.let { "regenerates from ${it.firstSliceBackOn} to ${it.wholeAgainOn}" }
+        AllowanceKind.PER_ENTRY -> a.takeIf { it.currentTripId != null }?.let {
+            when {
+                it.entryRemaining == 0 -> null
+                it.resetMode == ResetMode.AT_NEW_DOCUMENT && it.entryTotal == 1 -> "this entry only"
+                it.resetMode == ResetMode.AT_NEW_DOCUMENT && it.entryRemaining == 1 -> "final entry"
+                it.resetMode == ResetMode.AT_NEW_DOCUMENT -> "resets on your next entry"
+                it.resetMode == ResetMode.AT_BORDER -> "resets on re-entry"
+                else -> null
+            }
         }
         else -> null
     }

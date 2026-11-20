@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -64,7 +65,7 @@ internal fun TripsScreen(
     // ring-tap flash counters, one holder pair per screen (the same pair the Documents tab uses).
     val focus = remember { AllowanceFocus() }
     val flashes = remember { FlashTrigger() }
-    var listViewportPx by remember { mutableStateOf(0) }
+    var listViewportPx by remember { mutableIntStateOf(0) }
     var showAdd by rememberSaveable { mutableStateOf(false) }
     var editingTrip by rememberSaveable { mutableStateOf<Trip?>(null) }
     var deletingTrip by remember { mutableStateOf<Trip?>(null) }

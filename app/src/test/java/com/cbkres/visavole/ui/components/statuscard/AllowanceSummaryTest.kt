@@ -132,8 +132,12 @@ class AllowanceSummaryTest {
 
     @Test
     fun perEntryLineTellsABorderResetFromASpentSingleEntryVisa() {
-        val border = snapshot(kind = AllowanceKind.PER_ENTRY).copy(resetMode = ResetMode.AT_BORDER)
+        val border = snapshot(kind = AllowanceKind.PER_ENTRY).copy(
+            resetMode = ResetMode.AT_BORDER,
+            currentTripId = "trip",
+        )
         assertEquals("resets on re-entry", allowanceAlternateLine(border))
+        assertEquals(null, allowanceAlternateLine(border.copy(currentTripId = null)))
 
         val single = border.copy(resetMode = ResetMode.AT_NEW_DOCUMENT, entryTotal = 1, entryRemaining = 1)
         assertEquals("this entry only", allowanceAlternateLine(single))

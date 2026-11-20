@@ -20,6 +20,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -127,8 +128,8 @@ internal fun AddDocumentDialog(
     // a validity period is both-or-neither. When a save is attempted with exactly one date
     // set, show a fix dialog and re-open the requested picker in the field.
     var showValidityPairDialog by remember { mutableStateOf(false) }
-    var validityReopenToken by remember { mutableStateOf(0) }
-    var validityReopenPicker by remember { mutableStateOf(1) } // 1=valid-from, 2=expiry
+    var validityReopenToken by remember { mutableIntStateOf(0) }
+    var validityReopenPicker by remember { mutableIntStateOf(1) } // 1=valid-from, 2=expiry
     // Guard-driven dialog state: [blocked] is the blocking finding shown to the user,
     // [blockedDuplicate] the existing document an "Edit existing" button can jump to,
     // [pendingMutationDoc]/[pendingMutationWarn] the pending action + its accompanying mutation

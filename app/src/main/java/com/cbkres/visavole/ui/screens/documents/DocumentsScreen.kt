@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
@@ -78,7 +79,7 @@ internal fun DocumentsScreen(
     val focus = remember { AllowanceFocus() }
     val flashes = remember { FlashTrigger() }
     // The document list's viewport height, in px — lets a tapped ring centre its card on screen.
-    var listViewportPx by remember { mutableStateOf(0) }
+    var listViewportPx by remember { mutableIntStateOf(0) }
     val today = ready.today
     // One shared guard context for the whole screen; every add/remove/star decision below goes
     // through the same GuardEngine the ViewModel backstops with.

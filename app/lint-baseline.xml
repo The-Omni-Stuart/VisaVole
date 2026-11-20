@@ -233,50 +233,6 @@
     </issue>
 
     <issue
-        id="AutoboxingStateCreation"
-        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`"
-        errorLine1="    var validityReopenToken by remember { mutableStateOf(0) }"
-        errorLine2="                                          ~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/com/cbkres/visavole/ui/screens/documents/AddDocumentDialog.kt"
-            line="130"
-            column="43"/>
-    </issue>
-
-    <issue
-        id="AutoboxingStateCreation"
-        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`"
-        errorLine1="    var validityReopenPicker by remember { mutableStateOf(1) } // 1=valid-from, 2=expiry"
-        errorLine2="                                           ~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/com/cbkres/visavole/ui/screens/documents/AddDocumentDialog.kt"
-            line="131"
-            column="44"/>
-    </issue>
-
-    <issue
-        id="AutoboxingStateCreation"
-        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`"
-        errorLine1="    var listViewportPx by remember { mutableStateOf(0) }"
-        errorLine2="                                     ~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/com/cbkres/visavole/ui/screens/documents/DocumentsScreen.kt"
-            line="80"
-            column="38"/>
-    </issue>
-
-    <issue
-        id="AutoboxingStateCreation"
-        message="Prefer `mutableIntStateOf` instead of `mutableStateOf`"
-        errorLine1="    var listViewportPx by remember { mutableStateOf(0) }"
-        errorLine2="                                     ~~~~~~~~~~~~~~">
-        <location
-            file="src/main/java/com/cbkres/visavole/ui/screens/trips/TripsScreen.kt"
-            line="66"
-            column="38"/>
-    </issue>
-
-    <issue
         id="UseOfNonLambdaOffsetOverload"
         message="State backed values should use the lambda overload of Modifier.offset"
         errorLine1="                    .offset(y = searchBarH)"
