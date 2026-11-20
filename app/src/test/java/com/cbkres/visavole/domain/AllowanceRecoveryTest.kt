@@ -136,4 +136,19 @@ class AllowanceRecoveryTest {
             docs = emptyList(), trips = emptyList(), statuses = emptyMap(),
         )!!.recovery)
     }
+
+    @Test
+    fun projectionIsEvaluatedAtAFutureOpenStopsArrival() {
+        // An open future stop has a known arrival but no departure: the figure is for that date.
+        val arrival = LocalDate.of(2027, 4, 1)
+        val trip = Trip("t", listOf(TripStop("s", "DE", arrival, null)))
+        val snapshot = zoneSnapshot(
+            "stay:test", usageOf(rolling, segments), world(), today,
+            docs = emptyList(), trips = listOf(trip), statuses = emptyMap(),
+        )!!
+        assertEquals(arrival, snapshot.projection?.on)
+        assertEquals("the old stays are outside the window by then, the new stop costs one day",
+            29, snapshot.projection?.remainingDays)
+        assertEquals(30, snapshot.projection?.totalDays)
+    }
 }

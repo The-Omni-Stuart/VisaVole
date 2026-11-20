@@ -102,6 +102,13 @@ internal fun StatusCard(
                     }
                 }
                 it.subtitle?.let { s -> Text(s, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                it.projection?.let { p ->
+                    Text(
+                        "On ${p.on.toUtcIsoDate()} · ${p.remainingDays} of ${p.totalDays} days",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         alternate ?: allowanceSummary(it),

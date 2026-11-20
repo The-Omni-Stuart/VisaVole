@@ -95,6 +95,13 @@ data class Recovery(
     val totalDays: Int,
 )
 
+/** What a planned stop's arrival date would look like, evaluated with the same allowance arithmetic. */
+data class AllowanceProjection(
+    val on: LocalDate,
+    val remainingDays: Int,
+    val totalDays: Int,
+)
+
 data class AllowanceSnapshot(
     val key: String,
     val title: String,
@@ -127,6 +134,8 @@ data class AllowanceSnapshot(
     val resetMode: ResetMode = ResetMode.UNKNOWN,
     /** When used days come back, or null where they do not — the rotating recovery line. */
     val recovery: Recovery? = null,
+    /** The next planned stop in this zone, at its own arrival date. */
+    val projection: AllowanceProjection? = null,
 )
 
 /** Whether an allowance comes back, and how — derived from the rule's window and its gate document. */
