@@ -176,6 +176,9 @@ internal fun AddTripDialog(
             return
         }
         if (trip.stops.any { it.departure == null } && initial?.isOpen != true) {
+            // The confirm can't change the trip, so reuse this verdict instead of re-running the engine.
+            pendingResult = result
+            pendingMutations = result.mutations
             showOngoingConfirm = true
             return
         }
@@ -184,7 +187,7 @@ internal fun AddTripDialog(
 
     fun confirmOngoing() {
         showOngoingConfirm = false
-        continueValidation(candidate())
+        continueValidation(candidate(), pendingResult ?: evaluate(candidate()))
     }
 
     fun addDepartureFromOngoing() {

@@ -116,29 +116,34 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
      * error screen's retry button) reruns exactly the same path as the first launch.
      */
     private fun launchLoad() {
+        // One gate for both load paths: a superseded launch must not overwrite a newer world.
+        val gen = reloadGate.next()
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) {
+                val loaded = withContext(Dispatchers.IO) {
                     // read the persisted state off the main thread, once, before deriving the
                     // home countries from the loaded docs. retryLoad skips it — by then the in-memory
                     // state (and the async writes it triggered) is already authoritative.
                     if (!stateRead) {
-                        stateStore.load()?.let { loaded ->
-                            primaryDocId = loaded.state.primaryDocId
-                            docs = loaded.state.docs.toMutableList()
-                            trips = loaded.state.trips.toMutableList()
-                            if (loaded.droppedRecords > 0) snackUnreadableRecords(loaded.droppedRecords)
+                        stateStore.load()?.let { read ->
+                            primaryDocId = read.state.primaryDocId
+                            docs = read.state.docs.toMutableList()
+                            trips = read.state.trips.toMutableList()
+                            if (read.droppedRecords > 0) snackUnreadableRecords(read.droppedRecords)
                         }
                         stateRead = true
                     }
                     val initialHomes = AccessModel.homeCountries(docs)
-                    world = repository.loadWorld(initialHomes)
+                    val w = repository.loadWorld(initialHomes)
                     // pre-build the map shapes + per-country focus here (IO thread) rather than
                     // on the main thread at first composition — the one-time ~121k-point Path
                     // construction would otherwise add to first-frame latency on top of the load.
-                    shapes = buildShapes(geometry)
-                    focus = buildFocus(geometry)
+                    Triple(w, buildShapes(geometry), buildFocus(geometry))
                 }
+                if (!reloadGate.isCurrent(gen)) return@launch
+                world = loaded.first
+                shapes = loaded.second
+                focus = loaded.third
                 // ensurePrimaryPassport/normalizeResidenceClasses mutate docs + persist; they run
                 // here on the main thread, keeping every state mutation single-threaded.
                 ensurePrimaryPassport()
@@ -151,7 +156,9 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
                 // A corrupted/missing bundled DB (or any load failure) must not crash the process:
                 // surface it as a state the UI can show with a retry.
                 Log.e(TAG, "Failed to load world data", e)
-                _state.value = AppState.Failed("Could not load the bundled visa data. ${e.message ?: e.javaClass.simpleName}")
+                if (reloadGate.isCurrent(gen)) {
+                    _state.value = AppState.Failed("Could not load the bundled visa data. ${e.message ?: e.javaClass.simpleName}")
+                }
             }
         }
     }
@@ -225,7 +232,9 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         val oldHomes = AccessModel.homeCountries(docs)
         docs = nextDocs.toMutableList()
         persist()
-        if (AccessModel.homeCountries(docs) != oldHomes) reloadWorldAndPublish() else publish()
+        // Publish in-memory first: a new passport stays visible even if its corridor reload fails.
+        publish()
+        if (AccessModel.homeCountries(docs) != oldHomes) reloadWorldAndPublish()
     }
 
     private fun reloadWorldAndPublish() {
