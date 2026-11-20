@@ -118,4 +118,22 @@ class AllowanceRecoveryTest {
         assertEquals(30, snapshot.totalDays)
         assertEquals(30 - usedToday, snapshot.remainingDays)
     }
+
+    @Test
+    fun publishedSnapshotCarriesTheRecoveryItsDatesProduce() {
+        val snapshot = zoneSnapshot(
+            "stay:test",
+            usageOf(rolling, segments),
+            world(),
+            today,
+            docs = emptyList(),
+            trips = emptyList(),
+            statuses = emptyMap(),
+        )!!
+        assertEquals(rollingRecovery(rolling, segments, today), snapshot.recovery)
+        assertNull(zoneSnapshot(
+            "stay:test", usageOf(perEntry, segments), world(), today,
+            docs = emptyList(), trips = emptyList(), statuses = emptyMap(),
+        )!!.recovery)
+    }
 }

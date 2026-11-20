@@ -72,6 +72,7 @@ import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 
 // --- Date helpers ---
@@ -81,6 +82,10 @@ internal fun LocalDate.toUtcIsoDate(): String = toString()
 
 internal fun Long.toUtcIsoDate(): String =
     Instant.ofEpochMilli(this).atOffset(ZoneOffset.UTC).toLocalDate().toUtcIsoDate()
+
+/** Spoken form for announcements, so an ISO date is not read out as digits. */
+internal fun LocalDate.spoken(): String =
+    "$dayOfMonth ${month.getDisplayName(java.time.format.TextStyle.FULL, Locale.ENGLISH)}"
 
 internal fun LocalDate.toUtcMillis(): Long = atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
 

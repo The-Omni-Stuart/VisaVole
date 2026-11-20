@@ -3,6 +3,8 @@ package com.cbkres.visavole.ui.components.statuscard
 import com.cbkres.visavole.domain.AllowanceKind
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.AllowanceStatus
+import com.cbkres.visavole.domain.Recovery
+import com.cbkres.visavole.domain.ResetMode
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.LocalDate
@@ -107,5 +109,45 @@ class AllowanceSummaryTest {
         assertEquals("90 in 180 (rolling)", allowanceSummary(unlimited))
 
         assertEquals("No limit", allowanceSummary(snapshot(kind = AllowanceKind.UNLIMITED, status = AllowanceStatus.UNLIMITED)))
+    }
+
+    private fun recovering() = snapshot().copy(
+        remainingDays = 84,
+        totalDays = 90,
+        recovery = Recovery(
+            firstSliceBackOn = LocalDate.of(2027, 4, 1),
+            wholeAgainOn = LocalDate.of(2027, 4, 18),
+            daysBack = 6,
+            totalDays = 90,
+        ),
+    )
+
+    @Test
+    fun recoveryLinePrintsBothDatesAtHomeAndGoesQuietInsideTheZone() {
+        val atHome = recovering()
+        assertEquals("regenerates from 2027-04-01 to 2027-04-18", allowanceAlternateLine(atHome))
+        assertEquals(null, allowanceAlternateLine(atHome.copy(currentTripId = "trip")))
+        assertEquals(null, allowanceAlternateLine(atHome.copy(overstayDays = 1)))
+    }
+
+    @Test
+    fun perEntryLineTellsABorderResetFromASpentSingleEntryVisa() {
+        val border = snapshot(kind = AllowanceKind.PER_ENTRY).copy(resetMode = ResetMode.AT_BORDER)
+        assertEquals("resets on re-entry", allowanceAlternateLine(border))
+
+        val single = border.copy(resetMode = ResetMode.AT_NEW_DOCUMENT, entryTotal = 1, entryRemaining = 1)
+        assertEquals("this entry only", allowanceAlternateLine(single))
+        assertEquals(null, allowanceAlternateLine(single.copy(entryRemaining = 0)))
+
+        val double = border.copy(resetMode = ResetMode.AT_NEW_DOCUMENT, entryTotal = 2, entryRemaining = 1)
+        assertEquals("final entry", allowanceAlternateLine(double))
+        assertEquals("resets on your next entry", allowanceAlternateLine(double.copy(entryRemaining = 2)))
+    }
+
+    @Test
+    fun theSpokenDescriptionCarriesBothHalvesInOneStaticString() {
+        val text = allowanceSpokenDescription(recovering())
+        assertEquals("Allowance: 84 of 90 days left; recovering from 1 April, whole again 18 April", text)
+        assertEquals(false, text.contains("2027-04-01"))
     }
 }

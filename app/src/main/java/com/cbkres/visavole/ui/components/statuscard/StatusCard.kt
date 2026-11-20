@@ -19,6 +19,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,10 +33,12 @@ import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.R
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.ui.HazeBox
+import com.cbkres.visavole.ui.LocalReducedMotion
 import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.ringColor
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import com.cbkres.visavole.ui.toUtcIsoDate
+import kotlinx.coroutines.delay
 import java.time.LocalDate
 
 /**
@@ -58,14 +65,28 @@ internal fun StatusCard(
         Text("No allowances to track yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
+    val rotates = primary?.let { allowanceFaceRotates(it) || ringDaysFaceRotates(it) } ?: false
+    val reducedMotion = LocalReducedMotion.current
+    var faceFlip by remember(primary?.key) { mutableStateOf(false) }
+    LaunchedEffect(rotates, reducedMotion, primary?.key) {
+        if (!rotates || reducedMotion) {
+            faceFlip = false
+            return@LaunchedEffect
+        }
+        while (true) {
+            delay(5_000)
+            faceFlip = !faceFlip
+        }
+    }
     primary?.let {
+        val alternate = if (faceFlip) allowanceAlternateLine(it) else null
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
                     .clip(CircleShape) // clip the ripple to the donut
                     .clickable(onClick = { onRingClick(it) }),
             ) {
-                Deportometer(it)
+                Deportometer(it, faceFlip = faceFlip)
             }
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -82,7 +103,14 @@ internal fun StatusCard(
                 }
                 it.subtitle?.let { s -> Text(s, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(allowanceSummary(it), Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = ringColor(it, LocalEffectiveDarkTheme.current))
+                    Text(
+                        alternate ?: allowanceSummary(it),
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = ringColor(it, LocalEffectiveDarkTheme.current),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                     // Honest date for the day-dependent numbers the summary just printed.
                     Text(
                         stringResource(R.string.status_today, today.toUtcIsoDate()),

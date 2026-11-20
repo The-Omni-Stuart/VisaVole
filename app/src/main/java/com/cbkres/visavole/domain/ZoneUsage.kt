@@ -130,6 +130,7 @@ internal fun zoneSnapshot(
     // The earliest-capping document owns reset semantics; ties go to the first status.
     val gate = gateStatuses.minByOrNull { gateCapDate(it) ?: LocalDate.MAX }
     val (resetMode, entryTotal, entryUsed, entryRemaining) = resetFactsFor(rule, gate)
+    val recovery = rollingRecovery(rule, usage.segments, asOf, cap)
     val capped = when {
         rawRemaining == null || cap == null -> rawRemaining
         else -> minOf(rawRemaining, ChronoUnit.DAYS.between(asOf, cap).toInt())
@@ -184,6 +185,7 @@ internal fun zoneSnapshot(
         relevantTripIds = usage.tripIds.toList(),
         noValidDoc = noValidDoc,
         resetMode = resetMode,
+        recovery = recovery,
         entryTotal = entryTotal,
         entryUsed = entryUsed,
         entryRemaining = entryRemaining,

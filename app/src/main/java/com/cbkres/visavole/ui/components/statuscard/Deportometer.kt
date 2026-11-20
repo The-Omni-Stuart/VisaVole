@@ -14,12 +14,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -49,25 +48,21 @@ private const val RING_ROTATE_MAX_DAYS = 90     // TODO: Probably shouldn't hard
  * [RING_ROTATE_MAX_DAYS] days) alternate every 5 s with a days-to-expiry face — the arc and the
  * colour stay put, only the centre text crossfades.
  */
+internal fun ringDaysFaceRotates(a: AllowanceSnapshot): Boolean =
+    a.kind == AllowanceKind.ENTRY_COUNT &&
+        a.status != AllowanceStatus.DANGER &&
+        a.remainingDays != null && a.remainingDays in 1..RING_ROTATE_MAX_DAYS
+
 @Composable
-internal fun Deportometer(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Modifier = Modifier) {
+internal fun Deportometer(
+    a: AllowanceSnapshot,
+    size: Dp = 112.dp,
+    modifier: Modifier = Modifier,
+    faceFlip: Boolean = false,
+) {
     val color = ringColor(a, LocalEffectiveDarkTheme.current)
     val fraction = allowanceFraction(a)
-    val rotatable = a.kind == AllowanceKind.ENTRY_COUNT &&
-            a.status != AllowanceStatus.DANGER &&
-            a.remainingDays != null && a.remainingDays in 1..RING_ROTATE_MAX_DAYS
     val reducedMotion = LocalReducedMotion.current
-    var daysFace by remember(a.key, rotatable) { mutableStateOf(false) }
-    LaunchedEffect(rotatable, reducedMotion) {
-        if (!rotatable || reducedMotion) {
-            daysFace = false
-            return@LaunchedEffect
-        }
-        while (true) {
-            delay(5_000)
-            daysFace = !daysFace
-        }
-    }
     val docKind = a.kind == AllowanceKind.ENTRY_COUNT || a.kind == AllowanceKind.DOCUMENT_VALIDITY
     // An overstayed allowance shows a negative count + "OVERSTAY!" so it reads as unmistakably bad.
     val overstay = a.overstayDays > 0
@@ -106,7 +101,7 @@ internal fun Deportometer(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Mod
         else -> (a.remainingDays ?: 0).toString() to "days left"
     }
     val daysCenter = a.remainingDays?.let { it.toString() to "days to expiry" }
-    val showDaysFace = rotatable && daysFace
+    val showDaysFace = ringDaysFaceRotates(a) && faceFlip
     // The centre box is a *minimum* height, not a fixed one: at normal text sizes both faces sit in
     // an identical 58dp box (so the crossfade's own size never changes and the text stays parked on
     // the ring's centre line), but at large accessibility font scales the box grows to fit the
@@ -115,7 +110,7 @@ internal fun Deportometer(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Mod
     // the donut is a Canvas plus two Text nodes; merge them into a single accessible node
     // so TalkBack announces the allowance's state in one stop instead of the number and label as
     // separate, meaningless fragments.
-    val ringDescription = "Allowance: ${allowanceSummary(a)}"
+    val ringDescription = allowanceSpokenDescription(a)
     Box(
         modifier = modifier
             .size(size)
@@ -136,6 +131,22 @@ internal fun Deportometer(a: AllowanceSnapshot, size: Dp = 112.dp, modifier: Mod
                 useCenter = false,
                 style = Stroke(stroke),
             )
+            val recoverable = if (a.kind == AllowanceKind.ROLLING && a.currentTripId == null)
+                a.recovery?.let { it.daysBack.toFloat() / it.totalDays } ?: 0f
+            else 0f
+            if (recoverable > 0f) {
+                val inset = stroke * 2.2f
+                val side = size.toPx() - inset * 2
+                drawArc(
+                    color = color.copy(alpha = 0.45f),
+                    startAngle = -90f,
+                    sweepAngle = 360f * recoverable,
+                    useCenter = false,
+                    topLeft = Offset(inset, inset),
+                    size = Size(side, side),
+                    style = Stroke(stroke * 0.5f),
+                )
+            }
         }
         Crossfade(targetState = showDaysFace, animationSpec = tween(300)) { face ->
             val (c, l) = if (face) daysCenter ?: (center to centerLabel) else center to centerLabel

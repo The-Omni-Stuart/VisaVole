@@ -125,6 +125,8 @@ data class AllowanceSnapshot(
     val noValidDoc: Boolean = false,
     /** How the traveller earns this allowance back, from the gate document rather than [kind]. */
     val resetMode: ResetMode = ResetMode.UNKNOWN,
+    /** When used days come back, or null where they do not — the rotating recovery line. */
+    val recovery: Recovery? = null,
 )
 
 /** Whether an allowance comes back, and how — derived from the rule's window and its gate document. */
