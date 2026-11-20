@@ -123,7 +123,21 @@ data class AllowanceSnapshot(
     /** True when an active stop in this zone has no document assigned — the stay-window "days left"
      *  would mislead, so every surface flashes "no valid doc" instead of a remaining count. */
     val noValidDoc: Boolean = false,
+    /** How the traveller earns this allowance back, from the gate document rather than [kind]. */
+    val resetMode: ResetMode = ResetMode.UNKNOWN,
 )
+
+/** Whether an allowance comes back, and how — derived from the rule's window and its gate document. */
+enum class ResetMode {
+    /** Crossing a border restores the full allowance (visa-free passport, multiple-entry visa). */
+    AT_BORDER,
+    /** No further entry on this document; the allowance needs a new one (finite-entry visa used up). */
+    AT_NEW_DOCUMENT,
+    /** One grant that never comes back (a lifetime pool). */
+    NEVER,
+    /** This build cannot tell — stay silent rather than promise a reset that may not happen. */
+    UNKNOWN,
+}
 
 enum class EntryState {
     AVAILABLE,

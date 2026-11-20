@@ -125,7 +125,11 @@ internal fun zoneSnapshot(
     val (used, overstay) = usageOn(rule, usage.segments, asOf)
     val windowDays = rule.windowDays
     val rawRemaining = windowDays?.let { it - used }
-    val cap = expiryCapFor(rule, docs, world, asOf, trips, statuses, candidateMaps)
+    val gateStatuses = gateStatusesFor(rule, docs, world, asOf, trips, statuses, candidateMaps)
+    val cap = gateStatuses.mapNotNull(::gateCapDate).minOrNull()
+    // The earliest-capping document owns reset semantics; ties go to the first status.
+    val gate = gateStatuses.minByOrNull { gateCapDate(it) ?: LocalDate.MAX }
+    val (resetMode, entryTotal, entryUsed, entryRemaining) = resetFactsFor(rule, gate)
     val capped = when {
         rawRemaining == null || cap == null -> rawRemaining
         else -> minOf(rawRemaining, ChronoUnit.DAYS.between(asOf, cap).toInt())
@@ -179,8 +183,38 @@ internal fun zoneSnapshot(
         currentTripId = usage.activeTripIds.maxByOrNull { usage.activeTripDays[it] ?: 0 },
         relevantTripIds = usage.tripIds.toList(),
         noValidDoc = noValidDoc,
+        resetMode = resetMode,
+        entryTotal = entryTotal,
+        entryUsed = entryUsed,
+        entryRemaining = entryRemaining,
     )
 }
+
+/** Reset mode and entry counts from the rule's window and gate: finite entries rule out a border reset. */
+internal fun resetFactsFor(rule: StayRule, gate: DocStatus?): ResetFacts {
+    val entries = gate?.entries
+    val finite = entries?.total
+    val mode = when {
+        rule.windowType == "lifetime" -> ResetMode.NEVER
+        // A rolling pool recovers with time; F1 prints its recovery date, not a reset line.
+        rule.windowType != "per-entry" -> ResetMode.UNKNOWN
+        finite != null -> ResetMode.AT_NEW_DOCUMENT
+        else -> ResetMode.AT_BORDER
+    }
+    return ResetFacts(
+        resetMode = mode,
+        entryTotal = finite,
+        entryUsed = entries?.used,
+        entryRemaining = entries?.remaining,
+    )
+}
+
+internal data class ResetFacts(
+    val resetMode: ResetMode,
+    val entryTotal: Int?,
+    val entryUsed: Int?,
+    val entryRemaining: Int?,
+)
 
 /**
  * The earliest date on which the document gating entry to any country of [rule] stops
@@ -202,13 +236,27 @@ internal fun expiryCapFor(
     trips: List<Trip>,
     statuses: Map<String, DocStatus>,
     candidateMaps: Map<String, Map<String, Access>>? = null,
-): LocalDate? {
+): LocalDate? =
+    gateStatusesFor(rule, docs, world, asOf, trips, statuses, candidateMaps)
+        .mapNotNull(::gateCapDate)
+        .minOrNull()
+
+/** The statuses gating a stay in [rule]'s zone; one source so the cap and reset mode cannot disagree. */
+internal fun gateStatusesFor(
+    rule: StayRule,
+    docs: List<Document>,
+    world: WorldData,
+    asOf: LocalDate,
+    trips: List<Trip>,
+    statuses: Map<String, DocStatus>,
+    candidateMaps: Map<String, Map<String, Access>>? = null,
+): List<DocStatus> {
     val docById = docs.associateBy { it.id }
     val stopsAtAsOf = trips
         .flatMap { it.stops }
         .filter { !it.arrival.isAfter(asOf) && (it.departure == null || !it.departure.isBefore(asOf)) }
     return rule.countries
-        .mapNotNull { country ->
+        .flatMap { country ->
             val declared = stopsAtAsOf
                 .filter { it.countryIso2 == country }
                 .mapNotNull { it.documentId }
@@ -221,14 +269,8 @@ internal fun expiryCapFor(
                 AccessModel.bestDocumentId(country, docs, world, asOf, trips = trips, statuses = statuses, candidateMaps = candidateMaps)
                     ?: AccessModel.gateDocumentId(country, docs, world, asOf, trips = trips, statuses = statuses, candidateMaps = candidateMaps),
             )
-            gateIds
-                .mapNotNull { id ->
-                    val status = statuses[id] ?: return@mapNotNull null
-                    gateCapDate(status)
-                }
-                .minOrNull()
+            gateIds.mapNotNull { statuses[it] }
         }
-        .minOrNull()
 }
 
 /**
@@ -324,8 +366,13 @@ internal fun usageOn(rule: StayRule, segments: List<ZoneSegment>, on: LocalDate)
 internal fun remainingOn(rule: StayRule, segments: List<ZoneSegment>, on: LocalDate): Int? =
     rule.windowDays?.let { it - usageOn(rule, segments, on).first }
 
-/** Days return as they leave the window: slice `n` is whole again on `day(n) + period`, in closed form. */
-internal fun rollingRecovery(rule: StayRule, segments: List<ZoneSegment>, today: LocalDate): Recovery? {
+/** Days return as they leave the window; [cap] suppresses a slice the traveller can no longer spend. */
+internal fun rollingRecovery(
+    rule: StayRule,
+    segments: List<ZoneSegment>,
+    today: LocalDate,
+    cap: LocalDate? = null,
+): Recovery? {
     if (rule.windowType != "rolling") return null
     val period = rule.windowPeriodDays ?: return null
     val total = rule.windowDays ?: return null
@@ -337,9 +384,12 @@ internal fun rollingRecovery(rule: StayRule, segments: List<ZoneSegment>, today:
         if (start.isAfter(hi)) null else start to hi
     }
     if (used.isEmpty()) return null
+    val firstSlice = used.minOf { it.first }.plusDays(period.toLong())
+    val wholeAgain = used.maxOf { it.second }.plusDays(period.toLong())
+    if (cap != null && firstSlice.isAfter(cap)) return null
     return Recovery(
-        firstSliceBackOn = used.minOf { it.first }.plusDays(period.toLong()),
-        wholeAgainOn = used.maxOf { it.second }.plusDays(period.toLong()),
+        firstSliceBackOn = firstSlice,
+        wholeAgainOn = if (cap != null && wholeAgain.isAfter(cap)) cap else wholeAgain,
         daysBack = daysBack.coerceAtMost(total),
         totalDays = total,
     )
