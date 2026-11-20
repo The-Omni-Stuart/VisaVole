@@ -82,9 +82,10 @@ internal fun buildShapes(geometry: WorldMapData): List<IsoShape> =
  * them; those bits stay highlighted on the map, they just don't drive the zoom.
  */
 internal fun buildFocus(geometry: WorldMapData): Map<String, Focus> =
-    geometry.countries.mapValues { (iso, shape) ->
+    geometry.countries.mapNotNull { (iso, shape) ->
+        // A 0-ring feature cannot be focused; dropping it beats throwing on .first() at load time.
+        val core = shape.rings.maxByOrNull { ring -> polygonArea(ring) } ?: return@mapNotNull null
         val margin = (FOCUS_MARGIN_OVERRIDE[iso] ?: 0.07f) * geometry.width
-        val core = shape.rings.maxByOrNull { ring -> polygonArea(ring) } ?: shape.rings.first()
         val cb = bboxOf(listOf(core))
         val exMinX = cb.minX - margin
         val exMinY = cb.minY - margin
@@ -95,8 +96,8 @@ internal fun buildFocus(geometry: WorldMapData): Map<String, Focus> =
             rb.minX <= exMaxX && rb.maxX >= exMinX && rb.minY <= exMaxY && rb.maxY >= exMinY
         }
         val fb = bboxOf(included)
-        Focus(Offset(fb.cx, fb.cy), fb)
-    }
+        iso to Focus(Offset(fb.cx, fb.cy), fb)
+    }.toMap()
 
 internal fun defaultCenter(geometry: WorldMapData): Offset =
     Offset(geometry.width * DEFAULT_CENTER_X_FRACTION, geometry.height / 2f)

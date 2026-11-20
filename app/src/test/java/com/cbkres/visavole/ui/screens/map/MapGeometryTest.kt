@@ -111,6 +111,13 @@ class MapGeometryTest {
         assertEquals(Offset(145f, 130f), focus.point)
     }
 
+    @Test fun buildFocusSkipsAZeroRingFeatureInsteadOfThrowing() {
+        // WorldGeometry permits ringCount == 0; buildFocus runs at load and must not throw on it.
+        val focus = buildFocus(world("AQ" to emptyList(), "FR" to listOf(square)))
+        assertNull("a ringless feature cannot be focused", focus["AQ"])
+        assertEquals(BBox(0f, 0f, 10f, 10f), focus.getValue("FR").bbox)
+    }
+
     @Test fun buildFocusTightensTheGbMarginForItsTapZoom() {
         val core = floatArrayOf(100f, 100f, 200f, 100f, 200f, 200f, 100f, 200f)
         // A territory 4% of the world width south of the mainland: inside FR's 7% margin, outside
