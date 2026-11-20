@@ -102,15 +102,6 @@ internal fun TripsScreen(
         }
 
         val tripsListState = scrollState
-        val expandTrip: (Trip) -> Unit = { trip ->
-            val opening = trip.id !in expandedTrips
-            toggleExpanded(trip.id)
-            if (opening) {
-                tripIndex[trip.id]?.let { target ->
-                    scope.launch { tripsListState.animateScrollToItem(target) }
-                }
-            }
-        }
 
         Box(Modifier.weight(1f)) {
             HazeBox(
@@ -184,7 +175,7 @@ internal fun TripsScreen(
                         ) { trip ->
                             // Callback identities pinned per trip so cards whose trip did not
                             // change can skip recomposition when the screen republishes.
-                            val onExpand = remember(trip) { { expandTrip(trip) } }
+                            val onExpand = remember(trip) { { if (trip.stops.size > 1) toggleExpanded(trip.id) } }
                             val onEdit = remember(trip) { { editingTrip = trip } }
                             val onDelete = remember(trip) { { deletingTrip = trip } }
                             TripCard(
@@ -215,7 +206,7 @@ internal fun TripsScreen(
                             items = sections.current,
                             key = { it.id }
                         ) { trip ->
-                            val onExpand = remember(trip) { { expandTrip(trip) } }
+                            val onExpand = remember(trip) { { if (trip.stops.size > 1) toggleExpanded(trip.id) } }
                             val onEdit = remember(trip) { { editingTrip = trip } }
                             val onEnd = remember(trip) { { endingTrip = trip } }
                             val onDelete = remember(trip) { { deletingTrip = trip } }
@@ -247,7 +238,7 @@ internal fun TripsScreen(
                             items = sections.previous,
                             key = { it.id }
                         ) { trip ->
-                            val onExpand = remember(trip) { { expandTrip(trip) } }
+                            val onExpand = remember(trip) { { if (trip.stops.size > 1) toggleExpanded(trip.id) } }
                             val onEdit = remember(trip) { { editingTrip = trip } }
                             val onDelete = remember(trip) { { deletingTrip = trip } }
                             TripCard(

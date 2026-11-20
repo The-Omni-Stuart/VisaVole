@@ -61,10 +61,7 @@ internal fun ValidityPeriodField(
             showValidToPicker = reopenPicker != 1
         }
     }
-    // Bound the pickers to a coherent validity period: the start may not come after the end, and
-    // a fresh expiry may not land in the past — but a stored expiry already in the past stays
-    // selectable so it can be corrected or extended instead of only cleared.
-    val today = todayMillis.toUtcIsoDate().let(LocalDate::parse)
+    // The two dates must leave at least one usable day; the expiry may be in the past.
     val validFrom = validFromDate?.toUtcIsoDate()?.let(LocalDate::parse)
     val expiry = expiryDate?.toUtcIsoDate()?.let(LocalDate::parse)
     OutlinedButton(
@@ -92,12 +89,11 @@ internal fun ValidityPeriodField(
                 showValidFromPicker = false
                 showValidToPicker = true
             },
-            // The validity start may not come after the (already set) end.
-            maxDate = expiry,
+            maxDate = expiry?.minusDays(1),
         )
     }
     if (showValidToPicker) {
-        val fallbackTo = maxOf(validFromDate ?: todayMillis, todayMillis)
+        val fallbackTo = validFrom?.plusDays(1)?.toUtcMillis() ?: todayMillis
         VisaDatePickerDialog(
             initialMillis = expiryDate ?: fallbackTo,
             confirmLabel = "Done",
@@ -111,13 +107,7 @@ internal fun ValidityPeriodField(
                 onExpiry(null)
                 showValidToPicker = false
             },
-            // The expiry may not precede the start; a stored expiry already in the past is floored
-            // at itself so it can be corrected rather than only cleared.
-            minDate = when {
-                expiry != null && expiry.isBefore(today) -> expiry
-                validFrom != null && validFrom.isAfter(today) -> validFrom
-                else -> today
-            },
+            minDate = validFrom?.plusDays(1),
         )
     }
 }

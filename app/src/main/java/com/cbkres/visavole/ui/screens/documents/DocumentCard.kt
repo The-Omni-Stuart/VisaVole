@@ -229,7 +229,9 @@ private fun ExpiryStatusPill(
         entry?.total != null && entry.remaining != null && entry.remaining > 0 ->
             Triple("${entry.remaining} ${if (entry.remaining == 1) "entry" else "entries"} left", if (entry.remaining == 1) Severity.WARN else Severity.OK, false)
         days == null -> Triple("No expiry", Severity.OK, false)
-        days <= 7 -> Triple("Expiring soon ($days ${if (days == 1L) "day" else "days"})", Severity.WARN, false)
+        days <= 0 -> Triple("Expires today", Severity.WARN, false)
+        days == 1L -> Triple("Expires in 1 day", Severity.WARN, false)
+        days <= 7 -> Triple("Expires in $days days", Severity.WARN, false)
         else -> Triple("Valid for $days ${if (days == 1L) "day" else "days"}", Severity.OK, false)
     }
     // Long pills (e.g. "Replaced by <label>") must wrap instead of squeezing the card's weighted

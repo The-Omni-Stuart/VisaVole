@@ -139,6 +139,10 @@ internal fun docTitle(doc: Document, world: WorldData): String {
  * header passes a larger [style]/[contentPadding]/[fontWeight]. [maxWidth] lets long labels wrap
  * instead of squeezing a weighted sibling; [bold] raises weight for terminal states (e.g. expired).
  */
+/** Keeps number+unit pairs together so a narrow pill never orphans the unit. */
+internal fun tidyPillText(text: String): String =
+    text.replace(Regex("(?<=\\d) (?=[A-Za-z])"), "\u00a0")
+
 @Composable
 internal fun StatusPill(
     text: String,
@@ -157,7 +161,7 @@ internal fun StatusPill(
         modifier = modifier.then(maxWidth?.let { Modifier.widthIn(max = it) } ?: Modifier),
     ) {
         Text(
-            text,
+            tidyPillText(text),
             color = color,
             fontWeight = weight,
             style = style,

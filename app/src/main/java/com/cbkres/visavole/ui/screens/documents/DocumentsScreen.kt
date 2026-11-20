@@ -95,7 +95,7 @@ internal fun DocumentsScreen(
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
         ScreenHeader(
             "Documents",
-            "Add the passport and papers you hold — the map updates to match."
+            "Manage your passports and permits, unlocking your map."
         )
         Box(Modifier.weight(1f)) {
         if (ready.docs.isEmpty()) {
