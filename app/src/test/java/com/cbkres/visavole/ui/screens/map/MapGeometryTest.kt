@@ -21,6 +21,14 @@ class MapGeometryTest {
     private fun world(vararg countries: Pair<String, List<FloatArray>>): WorldMapData =
         WorldMapData(1000, 500, countries.associate { (iso, rings) -> iso to CountryShape(iso, rings) })
 
+    @Test fun sameWoundEnclaveIsReversedButOppositeWoundIsLeftAlone() {
+        val outer = floatArrayOf(0f, 0f, 100f, 0f, 100f, 100f, 0f, 100f)
+        val same = floatArrayOf(20f, 20f, 40f, 20f, 40f, 40f, 20f, 40f)
+        val opposite = floatArrayOf(20f, 20f, 20f, 40f, 40f, 40f, 40f, 20f)
+        assertEquals(setOf(1), ringsToReverse(listOf(outer, same)))
+        assertEquals(emptySet<Int>(), ringsToReverse(listOf(outer, opposite)))
+    }
+
     @Test fun pointInRingClassifiesSquareInteriorAndExterior() {
         assertTrue(pointInRing(square, 5f, 5f))
         assertFalse(pointInRing(square, 15f, 5f))

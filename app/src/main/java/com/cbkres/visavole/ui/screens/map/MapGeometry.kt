@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import com.cbkres.visavole.data.WorldMapData
+import kotlin.math.sign
 import kotlin.math.abs
 import kotlin.math.hypot
 
@@ -63,17 +64,49 @@ internal fun buildShapes(geometry: WorldMapData): List<IsoShape> =
     geometry.countries.map { (iso, shape) ->
         val path = Path()
         var area = 0f
-        for (ring in shape.rings) {
-            for (i in ring.indices step 2) {
+        val reverse = ringsToReverse(shape.rings)
+        for ((index, ring) in shape.rings.withIndex()) {
+            val backwards = index in reverse
+            var i = if (backwards) ring.size - 2 else 0
+            val step = if (backwards) -2 else 2
+            var first = true
+            while (i >= 0 && i < ring.size) {
                 val x = ring[i]
                 val y = ring[i + 1]
-                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                if (first) path.moveTo(x, y) else path.lineTo(x, y)
+                first = false
+                i += step
             }
             path.close()
             area += polygonArea(ring)
         }
         IsoShape(iso, shape.rings, path, area, bboxOf(shape.rings))
     }
+
+/** Indices of enclave rings whose winding matches the surrounding ring, so they must be reversed. */
+internal fun ringsToReverse(rings: List<FloatArray>): Set<Int> {
+    val signed = rings.map(::signedArea)
+    return rings.indices.filterTo(HashSet()) { i ->
+        rings.indices.any { j -> j != i && ringInsideRing(rings[i], rings[j]) && signed[i] * signed[j] > 0f }
+    }
+}
+
+private fun ringInsideRing(inner: FloatArray, outer: FloatArray): Boolean {
+    val a = bboxOf(listOf(inner))
+    val b = bboxOf(listOf(outer))
+    return a.minX >= b.minX && a.maxX <= b.maxX && a.minY >= b.minY && a.maxY <= b.maxY &&
+        pointInRing(outer, inner[0], inner[1])
+}
+
+private fun signedArea(ring: FloatArray): Float {
+    var a = 0f
+    var j = ring.size - 2
+    for (i in ring.indices step 2) {
+        a += (ring[j] + ring[i]) * (ring[j + 1] - ring[i + 1])
+        j = i
+    }
+    return sign(a)
+}
 
 /**
  * Focus = the country's main body: its largest landmass ring plus any rings that sit close to it
