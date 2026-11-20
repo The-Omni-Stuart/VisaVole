@@ -92,6 +92,10 @@ data class Recovery(
     val wholeAgainOn: LocalDate,
     /** Days consumed today. Never more than [totalDays]. */
     val daysBack: Int,
+    /** Days that return on [firstSliceBackOn] — the slice currently in progress. */
+    val sliceDays: Int,
+    /** True once the first used day has started returning and the pool is not whole yet. */
+    val inProgress: Boolean,
     val totalDays: Int,
 )
 

@@ -392,19 +392,29 @@ internal fun rollingRecovery(
     val total = rule.windowDays ?: return null
     val daysBack = usageOn(rule, segments, today).first
     if (daysBack <= 0) return null
-    // Only days already spent can come back: a stay still ahead of today has consumed nothing.
+    // Only days still inside the window can come back — an older stay has already been returned.
+    val windowStart = today.minusDays(period - 1L)
     val used = mergedSegments(segments).mapNotNull { (start, end) ->
+        val lo = if (start.isBefore(windowStart)) windowStart else start
         val hi = if (end.isBefore(today)) end else today
-        if (start.isAfter(hi)) null else start to hi
+        if (lo.isAfter(hi)) null else lo to hi
     }
     if (used.isEmpty()) return null
     val firstSlice = used.minOf { it.first }.plusDays(period.toLong())
+    val sliceDays = used.sumOf { (start, end) ->
+        if (start.plusDays(period.toLong()) == firstSlice) ChronoUnit.DAYS.between(start, end).toInt() + 1 else 0
+    }
     val wholeAgain = used.maxOf { it.second }.plusDays(period.toLong())
+    val rawFirst = mergedSegments(segments).filter { !it.first.isAfter(today) }.minOfOrNull { it.first }
+    val startedOn = rawFirst?.plusDays(period.toLong()) ?: firstSlice
+    val inProgress = !today.isBefore(startedOn) && !wholeAgain.isBefore(today)
     if (cap != null && firstSlice.isAfter(cap)) return null
     return Recovery(
         firstSliceBackOn = firstSlice,
         wholeAgainOn = if (cap != null && wholeAgain.isAfter(cap)) cap else wholeAgain,
         daysBack = daysBack.coerceAtMost(total),
+        sliceDays = sliceDays,
+        inProgress = inProgress,
         totalDays = total,
     )
 }

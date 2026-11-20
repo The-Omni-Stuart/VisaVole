@@ -138,6 +138,28 @@ class AllowanceRecoveryTest {
     }
 
     @Test
+    fun firstSliceComesFromTheWindowNotFromAnAlreadyReturnedStay() {
+        val alreadyReturned = ZoneSegment(today.minusDays(190), today.minusDays(180))
+        val inside = ZoneSegment(today.minusDays(10), today.minusDays(1))
+        val recovery = rollingRecovery(rolling, listOf(alreadyReturned, inside), today)!!
+        assertEquals(today.plusDays(80), recovery.firstSliceBackOn)
+        assertEquals(today.minusDays(1).plusDays(90), recovery.wholeAgainOn)
+        assertEquals(10, recovery.sliceDays)
+        assertEquals(true, recovery.inProgress)
+        assertEquals(false, rollingRecovery(rolling, listOf(inside), today)!!.inProgress)
+    }
+
+    @Test
+    fun currentSliceCountsOnlyTheDaysReturningOnThatDate() {
+        val first = ZoneSegment(today.minusDays(80), today.minusDays(70))
+        val second = ZoneSegment(today.minusDays(10), today.minusDays(1))
+        val recovery = rollingRecovery(rolling, listOf(first, second), today)!!
+        assertEquals(today.plusDays(10), recovery.firstSliceBackOn)
+        assertEquals(11, recovery.sliceDays)
+        assertEquals(21, recovery.daysBack)
+    }
+
+    @Test
     fun projectionIsEvaluatedAtAFutureOpenStopsArrival() {
         // An open future stop has a known arrival but no departure: the figure is for that date.
         val arrival = LocalDate.of(2027, 4, 1)

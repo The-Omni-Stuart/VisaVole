@@ -118,6 +118,7 @@ class AllowanceSummaryTest {
             firstSliceBackOn = LocalDate.of(2027, 4, 1),
             wholeAgainOn = LocalDate.of(2027, 4, 18),
             daysBack = 6,
+            sliceDays = 6,
             totalDays = 90,
         ),
     )
