@@ -115,6 +115,13 @@ class GuardTest {
         assertTrue(r.blocks.any { it.code == "doc.validity.inverted" })
     }
 
+    @Test fun validFromEqualToExpiryIsBlocked() {
+        val v = visa("v1", setOf("CA"), "multiple", expiry = "2026-11-01", validFrom = "2026-11-01")
+        val r = add(v)
+        assertFalse(r.canProceed)
+        assertTrue(r.blocks.any { it.code == "doc.validity.inverted" })
+    }
+
     @Test fun validFromBeforeExpiryIsAllowed() {
         val v = visa("v1", setOf("CA"), "multiple", expiry = "2026-11-01", validFrom = "2026-10-01")
         val r = add(v)

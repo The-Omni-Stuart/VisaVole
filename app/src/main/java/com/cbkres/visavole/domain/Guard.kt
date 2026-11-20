@@ -234,15 +234,15 @@ object GuardEngine {
         ))
     }
 
-    /** `doc.validity.inverted` — a valid-from date after the expiry date is not a usable window. */
+    /** `doc.validity.inverted` — a valid-from date on or after the expiry leaves no usable day. */
     private fun validityInvertedRule(candidate: Document, ctx: GuardContext): GuardResult? {
         val from = candidate.validFrom.toDateOrNull() ?: return null
         val to = candidate.expiry.toDateOrNull() ?: return null
-        if (!from.isAfter(to)) return null
+        if (from.isBefore(to)) return null
         return GuardResult(listOf(
             GuardFinding(
                 "doc.validity.inverted", GuardSeverity.BLOCK, "Invalid validity window",
-                "The valid-from date ($from) is after the expiry date ($to). Check the dates.",
+                "The valid-from date ($from) is on or after the expiry date ($to). Check the dates.",
             ),
         ))
     }
