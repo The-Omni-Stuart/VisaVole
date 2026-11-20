@@ -96,12 +96,13 @@ class BundledStayRuleFactsTest {
     }
 
     @Test
-    fun microstatesShareThePoolWithoutClaimingMembership() {
+    fun microstatesAndGibraltarShareThePoolWithoutClaimingMembership() {
         val pool = world.stayRules.filter { it.zoneId == "schengen" }
-        val microstates = listOf("MC", "SM", "VA", "AD")
-        assertEquals("the four must be the only rows beyond the member list",
-                     microstates.toSet(), pool.filter { it.id != "schengen" }.flatMap { it.countries }.toSet())
-        for (dest in microstates) {
+        val extensions = listOf("MC", "SM", "VA", "AD", "GI")
+        assertEquals("Gibraltar joins the four microstates as a pool-only row",
+                     extensions.toSet(), pool.filter { it.id != "schengen" }.flatMap { it.countries }.toSet())
+        assertEquals("2026-07-15", pool.first { it.id == "gi" }.validFrom)
+        for (dest in extensions) {
             val rule = ruleFor(dest, "US")
             assertEquals("$dest must be metered inside the Schengen pool", "stay:schengen", rule?.let(world::zoneKeyFor))
             assertEquals("$dest must not redefine the pool's window", "rolling", rule?.windowType)

@@ -64,6 +64,7 @@ GB	United Kingdom
 GD	Grenada
 GE	Georgia
 GH	Ghana
+GI	Gibraltar
 GM	Gambia
 GN	Guinea
 GQ	Equatorial Guinea
