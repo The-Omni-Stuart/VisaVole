@@ -25,6 +25,13 @@ class RingTargetTest {
     )
 
     @Test
+    fun aRingTapOnlyExpandsMultiStopTrips() {
+        assertEquals(false, shouldExpandOnRing(old, emptyList()))
+        assertEquals(true, shouldExpandOnRing(recent.copy(stops = old.stops + recent.stops), emptyList()))
+        assertEquals(false, shouldExpandOnRing(recent.copy(stops = old.stops + recent.stops), listOf(recent.id)))
+    }
+
+    @Test
     fun ringCentresOnTheMostRecentSettledTripContributingToIt() {
         assertEquals(
             "recent",

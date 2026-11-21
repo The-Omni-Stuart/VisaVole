@@ -133,7 +133,7 @@ internal fun TripsScreen(
                                 val trip = ringTargetTrip(snap, sections.current, sections.previous)
 
                                 if (trip != null) {
-                                    if (trip.id !in expandedTrips) {
+                                    if (shouldExpandOnRing(trip, expandedTrips)) {
                                         onToggleExpanded(trip.id)
                                     }
 

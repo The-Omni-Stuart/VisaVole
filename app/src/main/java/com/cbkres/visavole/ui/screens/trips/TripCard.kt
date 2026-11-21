@@ -136,7 +136,7 @@ internal fun TripCard(
         )
     } ?: MaterialTheme.colorScheme.onSurfaceVariant
     VisaListCard(
-        onClick = onExpand,
+        onClick = if (trip.stops.size > 1) onExpand else null,
         flashTrigger = flashTrigger,
         actions = {
             IconButton(onClick = onEdit) {
