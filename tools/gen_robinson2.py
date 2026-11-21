@@ -389,6 +389,18 @@ for iso in sorted(countries):
     if rings:
         out["countries"][iso] = {"name": countries[iso]["name"], "rings": rings}
 
+# Vatican's real outline is ~0.05 world units wide and quantises to a sliver; scale it, not replace it.
+VATICAN_MIN_PX = 0.1
+va = out["countries"].get("VA")
+if va and va["rings"]:
+    ring = [to_px(x, y) for x, y in max(all_rings["VA"], key=len)]
+    if ring and ring[0] == ring[-1]:
+        ring = ring[:-1]
+    xs = [p[0] for p in ring]; ys = [p[1] for p in ring]
+    cx = (min(xs) + max(xs)) / 2.0; cy = (min(ys) + max(ys)) / 2.0
+    k = max(VATICAN_MIN_PX / (max(xs) - min(xs)), VATICAN_MIN_PX / (max(ys) - min(ys)), 1.0)
+    va["rings"] = [[[round(cx + (x-cx)*k, 2), round(cy + (y-cy)*k, 2)] for x, y in ring]]
+
 def path_from_to(ring, start, end):
     n = len(ring)
     start %= n
