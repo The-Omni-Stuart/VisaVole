@@ -107,10 +107,10 @@ class MapGestureMathTest {
     }
 
     @Test fun zoomAroundClampsIntoMaxAndStillShiftsTheCentre() {
-        val (nz, nc) = zoomAround(Offset(500f, 250f), 70f, 1f, Offset(600f, 400f), 2f, geometry, 800f, 600f)
+        val (nz, nc) = zoomAround(Offset(500f, 250f), 250f, 1f, Offset(600f, 400f), 2f, geometry, 800f, 600f)
         assertEquals(MAX_ZOOM, nz, 0f)
-        assertEquals(500.35715f, nc.x, 1e-3f)
-        assertEquals(250.17857f, nc.y, 1e-4f)
+        assertEquals(500.3f, nc.x, 1e-3f)
+        assertEquals(250.15f, nc.y, 1e-4f)
     }
 
     @Test fun rubberBandNeverMovesOnNonPositiveInput() {

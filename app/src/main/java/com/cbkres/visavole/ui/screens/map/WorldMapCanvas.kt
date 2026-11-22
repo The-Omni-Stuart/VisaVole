@@ -34,11 +34,14 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.PointerId
@@ -47,8 +50,12 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.cbkres.visavole.ui.tapSink
 import com.cbkres.visavole.data.WorldMapData
 import com.cbkres.visavole.domain.Access
@@ -137,6 +144,7 @@ internal fun WorldMapCanvas(
                 s.path,
                 s.bbox,
                 mapFill(lvl, s.iso in homeCountries, s.iso in ownVisaCountries),
+                s.labelAnchor,
             )
         }
     }
@@ -204,7 +212,13 @@ internal fun WorldMapCanvas(
     val surf = MaterialTheme.colorScheme.surface
     val isDarkSurf = (0.299f * surf.red + 0.587f * surf.green + 0.114f * surf.blue) < 0.5f
     val ocean = if (isDarkSurf) OCEAN else OCEAN_LIGHT
-    val mapDraw: DrawScope.() -> Unit = remember(geometry, drawShapes, selected, canvasSize, zoom, centerWorld, ocean) {
+    val textMeasurer = rememberTextMeasurer()
+    val labelColor = Color.White.copy(alpha = 0.92f)
+    val labelBacking = Color.Black.copy(alpha = 0.45f)
+    val labelStyle = remember { TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium) }
+    val labelLayouts = remember { mutableMapOf<String, androidx.compose.ui.text.TextLayoutResult>() }
+    fun layoutFor(text: String) = labelLayouts.getOrPut(text) { textMeasurer.measure(text, labelStyle) }
+    val mapDraw: DrawScope.() -> Unit = remember(geometry, drawShapes, selected, canvasSize, zoom, centerWorld, ocean, textMeasurer, labelStyle) {
         {
             drawRect(ocean)
             val ds = if (canvasSize.width > 0f) canvasSize else size
@@ -240,6 +254,52 @@ internal fun WorldMapCanvas(
                             }
                         }
                     }
+                }
+            }
+            val labels = mutableListOf<PlacedMapLabel>()
+            fun rectOf(text: String, x: Float, y: Float): Rect {
+                val measured = layoutFor(text)
+                return Rect(x - measured.size.width / 2f - 4f, y - measured.size.height / 2f - 2f,
+                    x + measured.size.width / 2f + 4f, y + measured.size.height / 2f + 2f)
+            }
+            for (s in drawShapes.sortedByDescending { it.bbox.w }) {
+                val anchor = s.labelAnchor ?: continue
+                val preferred = mapLabel(s.iso, geometry.countries[s.iso]?.name ?: s.iso, s.bbox.w * sc, zoom) ?: continue
+                val x = tx + anchor.x * sc
+                val y = ty + anchor.y * sc
+                fun place(text: String, rect: Rect): Boolean {
+                    if (labels.none { rectsOverlap(rect, it.rect) }) {
+                        labels.add(PlacedMapLabel(s.iso, text, x, y, rect, s.bbox))
+                        return true
+                    }
+                    // Downgrade colliding full names to codes — two small labels beat one big one.
+                    val blockers = labels.filter { rectsOverlap(rect, it.rect) && canDowngradeFor(it, x, y, s.bbox.w) }
+                    if (blockers.isEmpty()) return false
+                    val rest = labels - blockers.toSet()
+                    val short = blockers.map { it.copy(text = it.iso, rect = rectOf(it.iso, it.x, it.y)) }
+                    if (short.any { rectsOverlap(rect, it.rect) || rest.any { r -> rectsOverlap(it.rect, r.rect) } }) return false
+                    if (rest.any { rectsOverlap(rect, it.rect) }) return false
+                    labels.removeAll(blockers)
+                    labels.addAll(short)
+                    labels.add(PlacedMapLabel(s.iso, text, x, y, rect, s.bbox))
+                    return true
+                }
+                if (place(preferred, rectOf(preferred, x, y))) continue
+                if (s.iso != preferred) place(s.iso, rectOf(s.iso, x, y))
+            }
+            for (label in labels) {
+                val measured = layoutFor(label.text)
+                drawRoundRect(
+                    color = labelBacking,
+                    topLeft = Offset(label.rect.left, label.rect.top),
+                    size = Size(label.rect.width, label.rect.height),
+                    cornerRadius = CornerRadius(4.dp.toPx()),
+                )
+                drawIntoCanvas { canvas ->
+                    canvas.save()
+                    canvas.translate(label.x - measured.size.width / 2f, label.y - measured.size.height / 2f)
+                    measured.multiParagraph.paint(canvas, labelColor)
+                    canvas.restore()
                 }
             }
         }

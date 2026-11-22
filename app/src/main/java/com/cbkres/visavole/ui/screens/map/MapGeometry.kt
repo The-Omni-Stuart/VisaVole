@@ -1,6 +1,7 @@
 package com.cbkres.visavole.ui.screens.map
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import com.cbkres.visavole.data.WorldMapData
@@ -28,6 +29,7 @@ data class IsoShape(
     val path: Path,
     val area: Float,
     val bbox: BBox,
+    val labelAnchor: Offset? = null,
 )
 
 internal data class DrawShape(
@@ -35,6 +37,7 @@ internal data class DrawShape(
     val path: Path,
     val bbox: BBox,
     val fill: Color,
+    val labelAnchor: Offset? = null,
 )
 
 // Public (see IsoShape) — carried by IsoShape/Focus on the public AppState.Ready.
@@ -80,8 +83,59 @@ internal fun buildShapes(geometry: WorldMapData): List<IsoShape> =
             path.close()
             area += polygonArea(ring)
         }
-        IsoShape(iso, shape.rings, path, area, bboxOf(shape.rings))
+        IsoShape(iso, shape.rings, path, area, bboxOf(shape.rings), interiorLabelPoint(shape.rings))
     }
+
+/** True when a label rectangle clears every label already drawn. */
+internal fun labelFits(placed: List<Rect>, candidate: Rect): Boolean =
+    placed.none {
+        candidate.left < it.right && candidate.right > it.left &&
+            candidate.top < it.bottom && candidate.bottom > it.top
+    }
+
+/** An interior point of the largest landmass, furthest from its outline — a centroid can land in a neighbour. */
+internal fun interiorLabelPoint(rings: List<FloatArray>, steps: Int = 21): Offset? {
+    val ring = rings.maxByOrNull(::polygonArea) ?: return null
+    val b = bboxOf(listOf(ring))
+    var best: Offset? = null
+    var bestScore = -1f
+    for (i in 1 until steps) {
+        for (j in 1 until steps) {
+            val x = b.minX + (b.maxX - b.minX) * i / steps
+            val y = b.minY + (b.maxY - b.minY) * j / steps
+            if (!pointInRing(ring, x, y)) continue
+            var nearest = Float.MAX_VALUE
+            for (k in ring.indices step 2) {
+                val dx = ring[k] - x
+                val dy = ring[k + 1] - y
+                val d = dx * dx + dy * dy
+                if (d < nearest) nearest = d
+            }
+            if (nearest > bestScore) {
+                bestScore = nearest
+                best = Offset(x, y)
+            }
+        }
+    }
+    return best
+}
+
+internal data class PlacedMapLabel(val iso: String, val text: String, val x: Float, val y: Float, val rect: Rect, val bbox: BBox)
+
+internal fun rectsOverlap(a: Rect, b: Rect): Boolean =
+    a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+
+/** A clearly larger host keeps its full name; only near-equal neighbours may trade down. */
+internal fun canDowngradeFor(host: PlacedMapLabel, x: Float, y: Float, candidateWidth: Float): Boolean =
+    host.text != host.iso && !host.bbox.contains(x, y) && host.bbox.w <= candidateWidth * 1.5f
+
+/** Nothing before 1.5x, ISO codes after, full names only once zoomed further and they fit. */
+internal fun mapLabel(iso: String, name: String, widthPx: Float, zoom: Float): String? = when {
+    zoom < 1.5f -> null
+    zoom >= 2.5f && widthPx >= 160f -> name
+    widthPx >= 48f -> iso
+    else -> null
+}
 
 /** Indices of enclave rings whose winding matches the surrounding ring, so they must be reversed. */
 internal fun ringsToReverse(rings: List<FloatArray>): Set<Int> {

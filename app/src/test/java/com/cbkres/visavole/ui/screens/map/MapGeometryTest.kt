@@ -1,6 +1,7 @@
 package com.cbkres.visavole.ui.screens.map
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import com.cbkres.visavole.data.CountryShape
 import com.cbkres.visavole.data.WorldMapData
 import org.junit.Assert.assertEquals
@@ -20,6 +21,33 @@ class MapGeometryTest {
 
     private fun world(vararg countries: Pair<String, List<FloatArray>>): WorldMapData =
         WorldMapData(1000, 500, countries.associate { (iso, rings) -> iso to CountryShape(iso, rings) })
+
+    @Test fun aHostDoesNotShrinkForAnEnclave() {
+        val host = PlacedMapLabel("ZA", "South Africa", 0f, 0f, Rect(0f, 0f, 20f, 10f), BBox(0f, 0f, 100f, 100f))
+        assertEquals(false, canDowngradeFor(host, 50f, 50f, 40f))
+        assertEquals(true, canDowngradeFor(host.copy(bbox = BBox(200f, 200f, 240f, 240f)), 50f, 50f, 40f))
+        assertEquals(false, canDowngradeFor(host.copy(bbox = BBox(200f, 200f, 300f, 300f)), 50f, 50f, 20f))
+        assertEquals(false, canDowngradeFor(host.copy(text = "ZA"), 150f, 150f, 40f))
+    }
+
+    @Test fun labelRectsDetectRealOverlapsOnly() {
+        val a = Rect(0f, 0f, 20f, 10f)
+        assertEquals(true, rectsOverlap(a, Rect(15f, 5f, 30f, 12f)))
+        assertEquals(false, rectsOverlap(a, Rect(25f, 0f, 40f, 10f)))
+    }
+
+    @Test fun labelsWaitForZoomAndClearEachOther() {
+        assertEquals(null, mapLabel("AT", "Austria", 200f, 1f))
+        assertEquals("AT", mapLabel("AT", "Austria", 200f, 1.5f))
+        assertEquals("AT", mapLabel("AT", "Austria", 200f, 2.4f))
+        assertEquals("Austria", mapLabel("AT", "Austria", 200f, 2.5f))
+        val lShape = floatArrayOf(0f, 0f, 20f, 0f, 20f, 10f, 10f, 10f, 10f, 20f, 0f, 20f)
+        val anchor = interiorLabelPoint(listOf(lShape))!!
+        assertEquals(true, pointInRing(lShape, anchor.x, anchor.y))
+        assertEquals(true, anchor.x < 10f && anchor.y < 10f)
+        assertEquals(false, labelFits(listOf(Rect(0f, 0f, 20f, 10f)), Rect(15f, 5f, 30f, 12f)))
+        assertEquals(true, labelFits(listOf(Rect(0f, 0f, 20f, 10f)), Rect(25f, 0f, 40f, 10f)))
+    }
 
     @Test fun sameWoundEnclaveIsReversedButOppositeWoundIsLeftAlone() {
         val outer = floatArrayOf(0f, 0f, 100f, 0f, 100f, 100f, 0f, 100f)

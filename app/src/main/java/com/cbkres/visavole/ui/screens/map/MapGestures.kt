@@ -6,10 +6,8 @@ import kotlin.math.abs
 import kotlin.math.exp
 
 internal const val MIN_ZOOM = 1f
-// High enough for tiny island states (MT, CY, LU, MC…) to become genuinely inspectable without
-// entering a regime where the simplified coastline looks obviously faceted or the screen is mostly
-// empty ocean.
-internal const val MAX_ZOOM = 80f
+// High enough for sub-city states (VA, GI, MC…) to fill a useful part of the screen.
+internal const val MAX_ZOOM = 400f
 // The minimum zoom is an exact world fit so edge islands remain visible in the default view.
 private const val MIN_ZOOM_BUFFER = 1f
 // Pan bounds: fully zoomed out the map is locked to the default centre; as you zoom in the
