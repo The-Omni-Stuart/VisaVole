@@ -405,9 +405,7 @@ internal fun rollingRecovery(
         if (start.plusDays(period.toLong()) == firstSlice) ChronoUnit.DAYS.between(start, end).toInt() + 1 else 0
     }
     val wholeAgain = used.maxOf { it.second }.plusDays(period.toLong())
-    val rawFirst = mergedSegments(segments).filter { !it.first.isAfter(today) }.minOfOrNull { it.first }
-    val startedOn = rawFirst?.plusDays(period.toLong()) ?: firstSlice
-    val inProgress = !today.isBefore(startedOn) && !wholeAgain.isBefore(today)
+    val inProgress = !today.isBefore(firstSlice) && !wholeAgain.isBefore(today)
     if (cap != null && firstSlice.isAfter(cap)) return null
     return Recovery(
         firstSliceBackOn = firstSlice,

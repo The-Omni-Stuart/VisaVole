@@ -145,8 +145,16 @@ class AllowanceRecoveryTest {
         assertEquals(today.plusDays(80), recovery.firstSliceBackOn)
         assertEquals(today.minusDays(1).plusDays(90), recovery.wholeAgainOn)
         assertEquals(10, recovery.sliceDays)
-        assertEquals(true, recovery.inProgress)
+        assertEquals(false, recovery.inProgress)
         assertEquals(false, rollingRecovery(rolling, listOf(inside), today)!!.inProgress)
+    }
+
+    @Test fun anOldReturnedStayDoesNotMakeTheNewSliceInProgress() {
+        val old = ZoneSegment(today.minusDays(400), today.minusDays(390))
+        val recent = ZoneSegment(today.minusDays(40), today.minusDays(32))
+        val recovery = rollingRecovery(rolling, listOf(old, recent), today)!!
+        assertEquals(today.plusDays(50), recovery.firstSliceBackOn)
+        assertEquals(false, recovery.inProgress)
     }
 
     @Test

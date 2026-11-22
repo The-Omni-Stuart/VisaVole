@@ -41,8 +41,8 @@ internal fun allowanceAlternateLine(a: AllowanceSnapshot): String? {
     if (a.noValidDoc || a.overstayDays > 0) return null
     return when (a.kind) {
         AllowanceKind.ROLLING -> a.takeIf { it.currentTripId == null }?.recovery?.let {
-            if (it.inProgress) "Regenerating for ${it.daysBack} days"
-            else "Regenerating from ${it.firstSliceBackOn} (${it.daysBack} days)"
+            if (it.inProgress) "Regenerating for ${it.sliceDays} days"
+            else "Regenerating from ${it.firstSliceBackOn} (${it.sliceDays} days)"
         }
         AllowanceKind.PER_ENTRY -> a.takeIf { it.currentTripId != null }?.let {
             when {
@@ -67,10 +67,10 @@ internal fun allowanceSpokenDescription(a: AllowanceSnapshot): String = buildStr
     val recovery = a.recovery
     if (a.kind == AllowanceKind.ROLLING && recovery != null && allowanceAlternateLine(a) != null) {
         if (recovery.inProgress) {
-            append("; regenerating for ").append(recovery.daysBack).append(" days")
+            append("; regenerating for ").append(recovery.sliceDays).append(" days")
         } else {
             append("; regenerating from ").append(recovery.firstSliceBackOn.spoken())
-            append(" (").append(recovery.daysBack).append(" days)")
+            append(" (").append(recovery.sliceDays).append(" days)")
         }
     }
 }

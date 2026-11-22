@@ -118,7 +118,7 @@ class AllowanceSummaryTest {
             firstSliceBackOn = LocalDate.of(2027, 4, 1),
             wholeAgainOn = LocalDate.of(2027, 4, 18),
             daysBack = 6,
-            sliceDays = 6,
+            sliceDays = 2,
             inProgress = false,
             totalDays = 90,
         ),
@@ -127,7 +127,7 @@ class AllowanceSummaryTest {
     @Test
     fun recoveryLinePrintsBothDatesAtHomeAndGoesQuietInsideTheZone() {
         val atHome = recovering()
-        assertEquals("Regenerating from 2027-04-01 (6 days)", allowanceAlternateLine(atHome))
+        assertEquals("Regenerating from 2027-04-01 (2 days)", allowanceAlternateLine(atHome))
         assertEquals(null, allowanceAlternateLine(atHome.copy(currentTripId = "trip")))
         assertEquals(null, allowanceAlternateLine(atHome.copy(overstayDays = 1)))
     }
@@ -135,11 +135,11 @@ class AllowanceSummaryTest {
     @Test
     fun aRunningRecoveryLocksTheFaceToPresentTenseAndStaysSilentInsideTheZone() {
         val running = recovering().copy(recovery = recovering().recovery!!.copy(inProgress = true))
-        assertEquals("Regenerating for 6 days", allowanceAlternateLine(running))
+        assertEquals("Regenerating for 2 days", allowanceAlternateLine(running))
         assertEquals(false, allowanceFaceRotates(running))
         assertEquals(null, allowanceAlternateLine(running.copy(currentTripId = "trip")))
         assertEquals(
-            "Allowance: 84 of 90 days left; regenerating for 6 days",
+            "Allowance: 84 of 90 days left; regenerating for 2 days",
             allowanceSpokenDescription(running),
         )
     }
@@ -165,7 +165,7 @@ class AllowanceSummaryTest {
     @Test
     fun theSpokenDescriptionCarriesBothHalvesInOneStaticString() {
         val text = allowanceSpokenDescription(recovering())
-        assertEquals("Allowance: 84 of 90 days left; regenerating from 1 April (6 days)", text)
+        assertEquals("Allowance: 84 of 90 days left; regenerating from 1 April (2 days)", text)
         assertEquals(false, text.contains("2027-04-01"))
     }
 }
