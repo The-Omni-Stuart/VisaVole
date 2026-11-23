@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.AccessModel
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripStatus
+import com.cbkres.visavole.domain.label
 import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.ui.AccessViewModel
@@ -151,7 +152,7 @@ internal fun TripsScreen(
 
                     if (sections.upcoming.isNotEmpty()) {
                         item(key = "header-upcoming") {
-                            SectionLabel("Upcoming")
+                            SectionLabel(TripStatus.UPCOMING.label)
                         }
 
                         items(
@@ -184,7 +185,7 @@ internal fun TripsScreen(
 
                     if (sections.current.isNotEmpty()) {
                         item(key = "header-current") {
-                            SectionLabel("Current")
+                            SectionLabel(TripStatus.ONGOING.label)
                         }
 
                         items(
@@ -216,7 +217,7 @@ internal fun TripsScreen(
 
                     if (sections.previous.isNotEmpty()) {
                         item(key = "header-previous") {
-                            SectionLabel("Previous")
+                            SectionLabel(TripStatus.PREVIOUS.label)
                         }
 
                         items(

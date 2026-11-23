@@ -33,10 +33,14 @@ import com.cbkres.visavole.domain.StayRule
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.TripStatus
+import com.cbkres.visavole.domain.label
 import com.cbkres.visavole.domain.TripStop
 import com.cbkres.visavole.domain.WorldData
 import com.cbkres.visavole.ui.PILL_MAX_WIDTH
+import com.cbkres.visavole.ui.NO_VALID_DOC
+import com.cbkres.visavole.ui.NO_VALID_DOC_PILL
 import com.cbkres.visavole.ui.StatusPill
+import com.cbkres.visavole.ui.entriesRemainingPhrase
 import com.cbkres.visavole.ui.VisaListCard
 import com.cbkres.visavole.ui.ringColor
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
@@ -105,7 +109,7 @@ internal fun TripCard(
             StopRow(
                 countryName = countryName,
                 zoneLabel = zoneLabel,
-                docLabel = stop.documentId?.let { id -> docs.firstOrNull { it.id == id }?.displayLabel(passportCounts, passportNumbers) ?: id },
+                docLabel = stop.documentId?.let { id -> docs.firstOrNull { it.id == id }?.displayLabel(passportCounts, passportNumbers) },
                 zoneAllowance = zoneByTitle[zoneLabel],
             )
         }
@@ -204,7 +208,7 @@ internal fun TripCard(
                 row.zoneAllowances.size <= 1 -> {
                     val noDoc = row.zoneAllowances.firstOrNull()?.noValidDoc == true
                     if (noDoc) StatusPill(
-                        "no valid doc",
+                        "$NO_VALID_DOC_PILL",
                         severityColor(
                             Severity.BAD,
                             LocalEffectiveDarkTheme.current
@@ -259,7 +263,7 @@ internal fun TripCard(
                                 sr.zoneAllowance?.let { a ->
                                     if (sr.docLabel == null) {
                                         StatusPill(
-                                            "no valid doc",
+                                            "$NO_VALID_DOC_PILL",
                                             severityColor(
                                                 Severity.BAD,
                                                 LocalEffectiveDarkTheme.current
@@ -280,7 +284,7 @@ internal fun TripCard(
                             }
                         }
                         Text(
-                            "${stop.arrival} → ${stop.departure ?: "open"}${sr.docLabel?.let { " · $it" } ?: " · No document"}",
+                            "${stop.arrival} → ${stop.departure ?: "open"}${sr.docLabel?.let { " · $it" } ?: " · $NO_VALID_DOC"}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -322,13 +326,6 @@ internal fun TripCard(
 internal fun zoneHint(a: AllowanceSnapshot): String? = when {
     a.overstayDays > 0 -> "-${a.overstayDays} Days OVERSTAYING!"
     a.remainingDays != null -> if (a.remainingDays == 1) "1 day left" else "${a.remainingDays} days left"
-    a.entryRemaining != null -> "${a.entryRemaining} ${if (a.entryRemaining == 1) "entry" else "entries"} left"
+    a.entryRemaining != null -> entriesRemainingPhrase(a.entryRemaining)
     else -> null
 }
-
-private val TripStatus.label: String
-    get() = when (this) {
-        TripStatus.UPCOMING -> "Upcoming"
-        TripStatus.ONGOING -> "Ongoing"
-        TripStatus.PREVIOUS -> "Completed"
-    }

@@ -15,6 +15,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.ui.PILL_MAX_WIDTH
+import com.cbkres.visavole.ui.NO_VALID_DOC_PILL
 import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.ringColor
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
@@ -61,7 +62,7 @@ internal fun CyclingZonePill(zones: List<AllowanceSnapshot>) {
         }
     }
     fun faceText(a: AllowanceSnapshot) =
-        if (a.noValidDoc) "${a.shortTitle ?: a.title}: no valid doc" else labeledZoneHint(a)
+        if (a.noValidDoc) "${a.shortTitle ?: a.title}: $NO_VALID_DOC_PILL" else labeledZoneHint(a)
     fun faceColor(a: AllowanceSnapshot) =
         if (a.noValidDoc) error else ringColor(
             a,

@@ -5,6 +5,7 @@ import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.AllowanceStatus
 import com.cbkres.visavole.domain.ResetMode
 import com.cbkres.visavole.domain.isExpiredDoc
+import com.cbkres.visavole.ui.NO_VALID_DOC
 import com.cbkres.visavole.ui.entriesRemainingPhrase
 import com.cbkres.visavole.ui.spoken
 
@@ -14,7 +15,7 @@ import com.cbkres.visavole.ui.spoken
  * visa gets the same coloured treatment as a residence's "Valid for N days".
  */
 internal fun allowanceSummary(a: AllowanceSnapshot): String = when {
-    a.noValidDoc -> "No valid document"
+    a.noValidDoc -> NO_VALID_DOC
     a.overstayDays > 0 -> "-${a.overstayDays} Days OVERSTAYING!"
     a.isExpiredDoc -> "Expired on ${a.effectiveExpiry ?: "unknown"}"
     a.kind == AllowanceKind.ENTRY_COUNT -> buildList {

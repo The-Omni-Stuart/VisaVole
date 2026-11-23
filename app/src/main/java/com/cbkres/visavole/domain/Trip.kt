@@ -9,6 +9,14 @@ enum class TripStatus {
     PREVIOUS,
 }
 
+/** The one user-facing word per status: section headers and card pills agree. */
+internal val TripStatus.label: String
+    get() = when (this) {
+        TripStatus.UPCOMING -> "Upcoming"
+        TripStatus.ONGOING -> "Ongoing"
+        TripStatus.PREVIOUS -> "Completed"
+    }
+
 data class TripStop(
     val id: String,
     val countryIso2: String,

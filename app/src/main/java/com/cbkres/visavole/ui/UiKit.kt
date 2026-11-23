@@ -421,6 +421,12 @@ internal fun ringColor(a: AllowanceSnapshot, isDark: Boolean): Color {
     return severityColor(severity, isDark)
 }
 
+/** The one full wording for "this stay has no usable document". */
+internal const val NO_VALID_DOC = "No valid document"
+
+/** Pill-scale [NO_VALID_DOC]; the full case does not fit a pill's line. */
+internal const val NO_VALID_DOC_PILL = "no valid doc"
+
 /** "no entries left" / "1 entry remaining" / "n entries remaining" — the ring's in-use sub-line. */
 internal fun entriesRemainingPhrase(remaining: Int?): String = when (remaining) {
     null -> "no entries remaining"
