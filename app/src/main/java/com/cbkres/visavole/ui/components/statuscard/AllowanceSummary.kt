@@ -4,7 +4,7 @@ import com.cbkres.visavole.domain.AllowanceKind
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.AllowanceStatus
 import com.cbkres.visavole.domain.ResetMode
-import com.cbkres.visavole.domain.isWindow
+import com.cbkres.visavole.domain.isExpiredDoc
 import com.cbkres.visavole.ui.entriesRemainingPhrase
 import com.cbkres.visavole.ui.spoken
 
@@ -16,8 +16,7 @@ import com.cbkres.visavole.ui.spoken
 internal fun allowanceSummary(a: AllowanceSnapshot): String = when {
     a.noValidDoc -> "No valid document"
     a.overstayDays > 0 -> "-${a.overstayDays} Days OVERSTAYING!"
-    a.status == AllowanceStatus.DANGER && !a.kind.isWindow ->
-        "Expired on ${a.effectiveExpiry ?: "unknown"}"
+    a.isExpiredDoc -> "Expired on ${a.effectiveExpiry ?: "unknown"}"
     a.kind == AllowanceKind.ENTRY_COUNT -> buildList {
         a.remainingDays?.let {
             add(when {

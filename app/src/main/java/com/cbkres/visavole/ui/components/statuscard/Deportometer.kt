@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.AllowanceKind
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.AllowanceStatus
+import com.cbkres.visavole.domain.isExpiredDoc
 import com.cbkres.visavole.ui.LocalReducedMotion
 import com.cbkres.visavole.ui.allowanceFraction
 import com.cbkres.visavole.ui.entriesRemainingPhrase
@@ -75,7 +76,6 @@ internal fun Deportometer(
         bandVisibility.animateTo(if (showBand) 1f else 0f, tween(300))
     }
     val fraction = allowanceFraction(a)
-    val docKind = a.kind == AllowanceKind.ENTRY_COUNT || a.kind == AllowanceKind.DOCUMENT_VALIDITY
     // An overstayed allowance shows a negative count + "OVERSTAY!" so it reads as unmistakably bad.
     val overstay = a.overstayDays > 0
     // An expired document still driving an in-progress trip flashes too: you're staying on a lapsed
@@ -106,7 +106,7 @@ internal fun Deportometer(
         // A window-less (UNKNOWN) allowance has no remaining count — show "no data", not a bogus
         // "0 days left".
         a.status == AllowanceStatus.UNKNOWN -> "—" to "no data"
-        docKind && a.status == AllowanceStatus.DANGER -> "Expired" to "on ${a.effectiveExpiry ?: "unknown"}"
+        a.isExpiredDoc -> "Expired" to "on ${a.effectiveExpiry ?: "unknown"}"
         a.kind == AllowanceKind.ENTRY_COUNT && a.currentTripId != null -> "In use" to entriesRemainingPhrase(a.entryRemaining)
         a.kind == AllowanceKind.ENTRY_COUNT -> (a.entryRemaining ?: 0).toString() to "entries left"
         a.kind == AllowanceKind.DOCUMENT_VALIDITY -> (a.remainingDays ?: 0).toString() to "days to expiry"

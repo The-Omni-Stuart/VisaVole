@@ -71,6 +71,10 @@ enum class AllowanceKind {
 internal val AllowanceKind.isWindow: Boolean
     get() = this == AllowanceKind.ROLLING || this == AllowanceKind.PER_ENTRY || this == AllowanceKind.LIFETIME
 
+/** True when the DANGER status means a document lapsed, not a stay window running out of days. */
+internal val AllowanceSnapshot.isExpiredDoc: Boolean
+    get() = status == AllowanceStatus.DANGER && !kind.isWindow
+
 enum class AllowanceStatus {
     OK,
     WARNING,
