@@ -1,10 +1,6 @@
 package com.cbkres.visavole.ui.screens.documents
 
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -19,13 +15,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.Country
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.GuardFinding
+import com.cbkres.visavole.ui.DateFieldButton
 import com.cbkres.visavole.ui.VisaDatePickerDialog
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import com.cbkres.visavole.ui.screens.map.Severity
@@ -64,15 +60,7 @@ internal fun ValidityPeriodField(
     // The two dates must leave at least one usable day; the expiry may be in the past.
     val validFrom = validFromDate?.toUtcLocalDate()
     val expiry = expiryDate?.toUtcLocalDate()
-    OutlinedButton(
-        onClick = { showValidFromPicker = true },
-        shape = MaterialTheme.shapes.large,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Icon(Icons.Filled.DateRange, contentDescription = null)
-        Spacer(Modifier.width(8.dp))
-        Text(validityLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
+    DateFieldButton(validityLabel) { showValidFromPicker = true }
     if (showValidFromPicker) {
         VisaDatePickerDialog(
             initialMillis = validFromDate ?: todayMillis,

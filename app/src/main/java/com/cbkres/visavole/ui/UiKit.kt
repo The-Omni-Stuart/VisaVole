@@ -13,13 +13,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.draw.alpha
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,6 +33,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -52,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -273,6 +278,20 @@ internal fun VisaListCard(
     }
 }
 
+/** Outlined field that opens a date picker: calendar icon + one-line label. */
+@Composable
+internal fun DateFieldButton(text: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        shape = MaterialTheme.shapes.large,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Icon(Icons.Filled.DateRange, contentDescription = null)
+        Spacer(Modifier.width(8.dp))
+        Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
 /** M3 date picker with the app's button vocabulary; [onConfirm] receives the chosen date (or
  *  null) and the caller is responsible for closing. [secondaryLabel] replaces "Cancel" (e.g. "Clear").
  *  [minDate]/[maxDate] bound the selectable range (dates outside are dimmed and cannot be chosen);
@@ -282,7 +301,7 @@ internal fun VisaListCard(
 @Composable
 internal fun VisaDatePickerDialog(
     initialMillis: Long,
-    confirmLabel: String,
+    confirmLabel: String, // "Next" advances a date sequence, "Done" closes; a command dialog names its command.
     onConfirm: (LocalDate?) -> Unit,
     onDismiss: () -> Unit,
     secondaryLabel: String? = null,

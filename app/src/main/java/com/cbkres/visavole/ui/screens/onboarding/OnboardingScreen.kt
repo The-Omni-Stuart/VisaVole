@@ -182,7 +182,7 @@ internal fun OnboardingScreen(
         VisaDatePickerDialog(
             // Open on the earliest legal expiry — an out-of-range initial would start Confirm disabled.
             initialMillis = minExpiry.toUtcMillis(),
-            confirmLabel = "Save",
+            confirmLabel = "Done",
             minDate = minExpiry,
             onConfirm = { date ->
                 val iso = pendingIso

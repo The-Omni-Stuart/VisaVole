@@ -25,7 +25,7 @@ class OnboardingFlowSmokeTest {
 
     /** Catches: onboarding's country picker → chained date pickers → scaffold handoff breaking,
      *  and the new passport not reaching the documents list. Anchored on the real labels:
-     *  "Choose dates"/"Skip" (validity dialog), "Next"/"Save" (the two VisaDatePickerDialog
+     *  "Choose dates"/"Skip" (validity dialog), "Next"/"Done" (the two VisaDatePickerDialog
      *  confirm labels), "Documents" (nav), "Passport"/"Germany" (document card). */
     @Test
     fun onboardingWithDefaultDatesReachesDocuments() {
@@ -35,8 +35,8 @@ class OnboardingFlowSmokeTest {
         // legal date), so confirming without touching the calendar is deterministic.
         composeRule.waitUntilExactlyOneExists(hasText("Next"), STEP_TIMEOUT_MS)
         composeRule.onNode(hasText("Next")).performClick()
-        composeRule.waitUntilExactlyOneExists(hasText("Save"), STEP_TIMEOUT_MS)
-        composeRule.onNode(hasText("Save")).performClick()
+        composeRule.waitUntilExactlyOneExists(hasText("Done"), STEP_TIMEOUT_MS)
+        composeRule.onNode(hasText("Done")).performClick()
         // The passport triggers a home-country world reload; the scaffold's top bar lands after it.
         composeRule.waitForAnyText("Visa Vole", timeoutMillis = LOAD_TIMEOUT_MS)
 
