@@ -324,23 +324,23 @@ private fun DataBuildFooter(ready: AppState.Ready) {
         FreshnessLevel.RED -> severityColor(Severity.BAD, isDark)
         FreshnessLevel.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant
     }
+    // Counts guarded once so the compact pill and its spoken-out label can never disagree.
+    val lapsedRules = meta.lapsedRules.takeIf { it > 0 }
+    val lapsingSoon = meta.lapsingSoon.takeIf { it > 0 }
+    val grantsLapsed = meta.lapsedCorridors.takeIf { it > 0 }
+    val grantsLapsingSoon = meta.corridorsLapsingSoon.takeIf { it > 0 }
     val pills = dataBuildPills(
         meta = meta,
         unknownLabel = stringResource(R.string.settings_data_build_unknown),
         warningParts = listOfNotNull(
-            meta.lapsedRules.takeIf { it > 0 }
-                ?.let { pluralStringResource(R.plurals.settings_data_lapsed_pill, it, it) },
-            meta.lapsingSoon.takeIf { it > 0 }
-                ?.let { pluralStringResource(R.plurals.settings_data_lapsing_soon_pill, it, it) },
-            meta.lapsedCorridors.takeIf { it > 0 }
-                ?.let { pluralStringResource(R.plurals.settings_data_lapsed_pill, it, it) },
-            meta.corridorsLapsingSoon.takeIf { it > 0 }
-                ?.let { pluralStringResource(R.plurals.settings_data_lapsing_soon_pill, it, it) },
+            lapsedRules?.let { pluralStringResource(R.plurals.settings_data_lapsed_pill, it, it) },
+            lapsingSoon?.let { pluralStringResource(R.plurals.settings_data_lapsing_soon_pill, it, it) },
+            grantsLapsed?.let { pluralStringResource(R.plurals.settings_data_lapsed_pill, it, it) },
+            grantsLapsingSoon?.let { pluralStringResource(R.plurals.settings_data_lapsing_soon_pill, it, it) },
         ),
         separator = stringResource(R.string.settings_data_warn_separator),
     )
-    val complete = meta.generated.isNotBlank() && meta.rulesVerifiedAt.isNotBlank() && meta.nextReview.isNotBlank()
-    val details = if (complete) {
+    val details = if (pills.complete) {
         stringResource(R.string.settings_data_build_details, meta.generated, meta.rulesVerifiedAt, meta.nextReview)
     } else {
         stringResource(R.string.settings_data_build_no_details)
@@ -394,14 +394,10 @@ private fun DataBuildFooter(ready: AppState.Ready) {
                         )
                     },
                     a11yLabel = listOfNotNull(
-                        meta.lapsedRules.takeIf { it > 0 }
-                            ?.let { pluralStringResource(R.plurals.settings_data_lapsed, it, it) },
-                        meta.lapsingSoon.takeIf { it > 0 }
-                            ?.let { pluralStringResource(R.plurals.settings_data_lapsing_soon, it, it) },
-                        meta.lapsedCorridors.takeIf { it > 0 }
-                            ?.let { pluralStringResource(R.plurals.settings_data_grants_lapsed, it, it) },
-                        meta.corridorsLapsingSoon.takeIf { it > 0 }
-                            ?.let { pluralStringResource(R.plurals.settings_data_grants_lapsing_soon, it, it) },
+                        lapsedRules?.let { pluralStringResource(R.plurals.settings_data_lapsed, it, it) },
+                        lapsingSoon?.let { pluralStringResource(R.plurals.settings_data_lapsing_soon, it, it) },
+                        grantsLapsed?.let { pluralStringResource(R.plurals.settings_data_grants_lapsed, it, it) },
+                        grantsLapsingSoon?.let { pluralStringResource(R.plurals.settings_data_grants_lapsing_soon, it, it) },
                     ).joinToString(stringResource(R.string.settings_data_warn_separator)),
                 )
             }

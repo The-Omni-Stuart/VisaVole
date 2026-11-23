@@ -70,7 +70,7 @@ internal fun buildDocument(draft: DocDraft, initial: Document?, world: WorldData
     }
 }
 
-/** The tab an edit of a stored custom kind opens on — mirrors the dialog's tab initialisation. */
+/** The tab a stored custom kind opens on; the dialog's tab initialisation and saving share it. */
 internal fun initialTabFor(kind: String): DocType = when (kind) {
     "visa", "permit" -> DocType.VISA
     "passport" -> DocType.PASSPORT

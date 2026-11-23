@@ -2,7 +2,9 @@ package com.cbkres.visavole.ui.screens.settings
 
 import com.cbkres.visavole.domain.VisaDbMeta
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -34,6 +36,13 @@ class DataBuildPillsTest {
         assertEquals("Build date unknown", pills(generated = "").buildLabel)
         assertEquals("Build date unknown", pills(rulesVerifiedAt = "").buildLabel)
         assertEquals("Build date unknown", pills(nextReview = "garbage").buildLabel)
+    }
+
+    @Test
+    fun completeFlagFollowsAuditParseability() {
+        assertTrue(pills().complete)
+        assertFalse(pills(generated = "").complete)
+        assertFalse(pills(nextReview = "garbage").complete)
     }
 
     @Test

@@ -32,6 +32,7 @@ import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.VisaDatePickerDialog
 import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.toUtcIsoDate
+import com.cbkres.visavole.ui.toUtcLocalDate
 import com.cbkres.visavole.ui.toUtcMillis
 import com.cbkres.visavole.ui.VoleAlertDialog
 import java.time.LocalDate
@@ -176,7 +177,7 @@ internal fun OnboardingScreen(
     }
 
     if (showExpiryPicker) {
-        val minExpiry = (validFromMillis?.toUtcIsoDate()?.let(LocalDate::parse) ?: today)
+        val minExpiry = (validFromMillis?.toUtcLocalDate() ?: today)
             .takeIf { it.isAfter(today) } ?: today
         VisaDatePickerDialog(
             // Open on the earliest legal expiry — an out-of-range initial would start Confirm disabled.

@@ -31,9 +31,9 @@ import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import com.cbkres.visavole.ui.screens.map.Severity
 import com.cbkres.visavole.ui.screens.map.severityColor
 import com.cbkres.visavole.ui.toUtcIsoDate
+import com.cbkres.visavole.ui.toUtcLocalDate
 import com.cbkres.visavole.ui.toUtcMillis
 import com.cbkres.visavole.ui.VoleAlertDialog
-import java.time.LocalDate
 
 /** The validity-period button and its two chained pickers (valid-from → expiry). */
 @Composable
@@ -62,8 +62,8 @@ internal fun ValidityPeriodField(
         }
     }
     // The two dates must leave at least one usable day; the expiry may be in the past.
-    val validFrom = validFromDate?.toUtcIsoDate()?.let(LocalDate::parse)
-    val expiry = expiryDate?.toUtcIsoDate()?.let(LocalDate::parse)
+    val validFrom = validFromDate?.toUtcLocalDate()
+    val expiry = expiryDate?.toUtcLocalDate()
     OutlinedButton(
         onClick = { showValidFromPicker = true },
         shape = MaterialTheme.shapes.large,

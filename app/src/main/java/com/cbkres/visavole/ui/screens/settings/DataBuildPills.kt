@@ -1,6 +1,7 @@
 package com.cbkres.visavole.ui.screens.settings
 
 import com.cbkres.visavole.domain.VisaDbMeta
+import com.cbkres.visavole.domain.toDateOrNull
 
 /** Labels for the Settings data-build pills, kept composable-free so the branching is JVM-testable. */
 internal data class DataBuildPills(
@@ -8,6 +9,8 @@ internal data class DataBuildPills(
     val buildLabel: String,
     /** Compact counts summary; null when nothing has lapsed or is lapsing. */
     val warningLabel: String?,
+    /** True when all three audit dates are real ISO dates, so the full trail can be shown. */
+    val complete: Boolean,
 )
 
 /**
@@ -23,10 +26,11 @@ internal fun dataBuildPills(
     separator: String,
 ): DataBuildPills {
     val complete = listOf(meta.generated, meta.rulesVerifiedAt, meta.nextReview).all {
-        runCatching { java.time.LocalDate.parse(it) }. isSuccess
+        it.toDateOrNull() != null
     }
     return DataBuildPills(
         buildLabel = if (complete) meta.generated else unknownLabel,
         warningLabel = warningParts.joinToString(separator).ifBlank { null },
+        complete = complete,
     )
 }

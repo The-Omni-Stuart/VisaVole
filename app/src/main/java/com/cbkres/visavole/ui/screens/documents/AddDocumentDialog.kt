@@ -52,7 +52,6 @@ import com.cbkres.visavole.ui.toUtcIsoDate
 import com.cbkres.visavole.ui.toUtcMillis
 import com.cbkres.visavole.ui.GuardFindingsDialog
 import com.cbkres.visavole.ui.VoleAlertDialog
-import java.time.ZoneOffset
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,12 +70,9 @@ internal fun AddDocumentDialog(
     val initHolding = initial?.kind as? DocKind.Holding
     var docType by remember {
         mutableStateOf(
-            when {
-                initPassport != null -> DocType.PASSPORT
-                initCustom?.kind == "visa" || initCustom?.kind == "permit" -> DocType.VISA
-                initCustom?.kind == "passport" -> DocType.PASSPORT
-                else -> DocType.RESIDENCE
-            },
+            initPassport?.let { DocType.PASSPORT }
+                ?: initCustom?.kind?.let(::initialTabFor)
+                ?: DocType.RESIDENCE,
         )
     }
     var customIso by remember {
@@ -380,9 +376,7 @@ internal fun AddDocumentDialog(
                 }
 
                 Spacer(Modifier.height(16.dp))
-                val todayMillis = remember {
-                    guard.today.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-                }
+                val todayMillis = remember(guard.today) { guard.today.toUtcMillis() }
                 ValidityPeriodField(
                     validFromDate = validFromDate,
                     expiryDate = expiryDate,

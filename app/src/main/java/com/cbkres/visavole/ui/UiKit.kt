@@ -79,8 +79,10 @@ import kotlin.time.Duration.Companion.milliseconds
 /** The app's one ISO date text; everything that shows or persists a date as text goes through it. */
 internal fun LocalDate.toUtcIsoDate(): String = toString()
 
-internal fun Long.toUtcIsoDate(): String =
-    Instant.ofEpochMilli(this).atOffset(ZoneOffset.UTC).toLocalDate().toUtcIsoDate()
+internal fun Long.toUtcLocalDate(): LocalDate =
+    Instant.ofEpochMilli(this).atOffset(ZoneOffset.UTC).toLocalDate()
+
+internal fun Long.toUtcIsoDate(): String = toUtcLocalDate().toUtcIsoDate()
 
 /** Spoken form for announcements, so an ISO date is not read out as digits. */
 internal fun LocalDate.spoken(): String =
@@ -279,7 +281,7 @@ internal fun VisaDatePickerDialog(
         } else {
             object : SelectableDates {
                 override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-                    val d = utcTimeMillis.toUtcIsoDate().let(LocalDate::parse)
+                    val d = utcTimeMillis.toUtcLocalDate()
                     if (minDate != null && d.isBefore(minDate)) return false
                     if (maxDate != null && d.isAfter(maxDate)) return false
                     return true
@@ -293,7 +295,7 @@ internal fun VisaDatePickerDialog(
     )
     // The state keeps an initial date outside the bounds as the current selection until the user
     // taps another day, so gate Confirm on the selection rather than trusting it blindly.
-    val selected = state.selectedDateMillis?.toUtcIsoDate()?.let(LocalDate::parse)
+    val selected = state.selectedDateMillis?.toUtcLocalDate()
     val inBounds = selected == null ||
         (minDate == null || !selected.isBefore(minDate)) &&
         (maxDate == null || !selected.isAfter(maxDate))
