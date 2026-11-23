@@ -40,7 +40,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -412,16 +411,12 @@ internal fun entriesRemainingPhrase(remaining: Int?): String = when (remaining) 
 }
 
 /**
- * Scrolls [index] to the middle of the viewport: the first hop brings the item into view (which
- * also forces it to lay out), then a single *relative* scroll nudges it to the vertical middle.
- * A relative scroll clamps at the content ends, so the first/last item settles at the nearest
- * reachable position (it can no longer be pinned to an edge ~160 px off-centre).
+ * Scrolls [index] to roughly the middle of the viewport in a single animated hop. The average
+ * visible item stands in for the target's height, so the hop aims mid-screen without a second
+ * nudge once the real height is known — a second animation read as the list centring twice.
  */
 internal suspend fun LazyListState.animateItemToCenter(index: Int, viewportHeightPx: Int) {
-    animateScrollToItem(index)
-    withFrameNanos { }
-    val item = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return
-    val targetTop = (viewportHeightPx - item.size) / 2f
-    val delta = targetTop - item.offset
-    if (delta != 0f) scroll(MutatePriority.UserInput) { scrollBy(delta) }
+    val visible = layoutInfo.visibleItemsInfo
+    val estimate = if (visible.isEmpty()) 0 else visible.sumOf { it.size } / visible.size
+    animateScrollToItem(index, scrollOffset = -(viewportHeightPx - estimate) / 2)
 }

@@ -131,28 +131,16 @@ internal fun TripsScreen(
                             onFocus = focus::toggle,
                             onRingClick = { snap ->
                                 val trip = ringTargetTrip(snap, sections.current, sections.previous)
+                                val target = trip?.let { tripIndex[it.id] }
 
-                                if (trip != null) {
-                                    if (shouldExpandOnRing(trip, expandedTrips)) {
-                                        onToggleExpanded(trip.id)
-                                    }
+                                if (trip != null && target != null) {
+                                    scope.launch {
+                                        tripsListState.animateItemToCenter(target, listViewportPx)
 
-                                    val target = tripIndex[trip.id]
-
-                                    if (target != null) {
-                                        scope.launch {
-                                            tripsListState.animateItemToCenter(
-                                                target,
-                                                listViewportPx
-                                            )
-
-                                            // Flash once the centring scroll has settled; clear the
-                                            // trigger once the ripple has played, but only if no
-                                            // newer tap took over (FlashTrigger.expire's rule).
-                                            val n = flashes.trigger(trip.id)
-                                            delay(900.milliseconds)
-                                            flashes.expire(trip.id, n)
-                                        }
+                                        // Flash after centring; expire only if no newer tap took over.
+                                        val n = flashes.trigger(trip.id)
+                                        delay(900.milliseconds)
+                                        flashes.expire(trip.id, n)
                                     }
                                 }
                             },

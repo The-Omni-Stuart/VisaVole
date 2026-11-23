@@ -96,7 +96,8 @@ internal fun TripCard(
 ) {
     val row = remember(trip, world, docs, allowances, today) {
         val sortedStops = TripModel.sortedStops(trip.stops)
-        val zoneAllowances = TripModel.zoneAllowancesFor(trip, allowances)
+        val contributing = allowances.filter { TripModel.tripCountsToward(trip, it, today) }
+        val zoneAllowances = TripModel.zoneAllowancesFor(trip, contributing)
         val zoneByTitle = zoneAllowances.associateBy { it.title }
         val stops = sortedStops.map { stop ->
             val countryName = world.countries[stop.countryIso2]?.name ?: stop.countryIso2
@@ -108,10 +109,10 @@ internal fun TripCard(
                 zoneAllowance = zoneByTitle[zoneLabel],
             )
         }
-        val relatedAllowance = allowances.firstOrNull { it.currentTripId == trip.id && !it.key.startsWith("doc:") }
-            ?: allowances.firstOrNull { it.currentTripId == trip.id }
-            ?: allowances.firstOrNull { it.relevantTripIds.contains(trip.id) && !it.key.startsWith("doc:") }
-            ?: allowances.firstOrNull { it.relevantTripIds.contains(trip.id) }
+        val relatedAllowance = contributing.firstOrNull { it.currentTripId == trip.id && !it.key.startsWith("doc:") }
+            ?: contributing.firstOrNull { it.currentTripId == trip.id }
+            ?: contributing.firstOrNull { it.relevantTripIds.contains(trip.id) && !it.key.startsWith("doc:") }
+            ?: contributing.firstOrNull { it.relevantTripIds.contains(trip.id) }
         TripCardRow(
             sortedStops = sortedStops,
             stops = stops,
