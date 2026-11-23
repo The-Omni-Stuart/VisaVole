@@ -68,7 +68,7 @@ internal fun AddFab(label: String, modifier: Modifier = Modifier, onClick: () ->
         Surface(
             color = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
-            shape = MaterialTheme.shapes.medium,
+            shape = MaterialTheme.shapes.large,
             tonalElevation = 0.dp,
             modifier = Modifier.tapSink().clickable(onClick = onClick),
         ) {
