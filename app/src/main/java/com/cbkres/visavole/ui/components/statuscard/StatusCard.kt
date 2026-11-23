@@ -62,13 +62,17 @@ internal fun StatusCard(
         Text("No allowances to track yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
-    val lockedRecovery = primary?.let { it.recovery?.inProgress == true && allowanceAlternateLine(it) != null } ?: false
-    val rotates = !lockedRecovery && (primary?.let { allowanceFaceRotates(it) || ringDaysFaceRotates(it) } ?: false)
+    val faceMode = when {
+        primary == null -> FaceMode.STATIC
+        primary.recovery?.inProgress == true && allowanceAlternateLine(primary) != null -> FaceMode.HOLD
+        allowanceFaceRotates(primary) || ringDaysFaceRotates(primary) -> FaceMode.ROTATE
+        else -> FaceMode.STATIC
+    }
     val reducedMotion = LocalReducedMotion.current
     var faceFlip by remember(primary?.key) { mutableStateOf(false) }
-    val shownFlip = lockedRecovery || faceFlip
-    LaunchedEffect(rotates, reducedMotion, primary?.key) {
-        if (!rotates || reducedMotion) {
+    val shownFlip = faceMode == FaceMode.HOLD || faceFlip
+    LaunchedEffect(faceMode, reducedMotion, primary?.key) {
+        if (faceMode != FaceMode.ROTATE || reducedMotion) {
             faceFlip = false
             return@LaunchedEffect
         }
@@ -144,3 +148,5 @@ private fun AllowanceCard(a: AllowanceSnapshot, focused: Boolean, onClick: () ->
         }
     }
 }
+/** The status ring's face decision: flip between faces, hold the recovery face, or show one face. */
+private enum class FaceMode { ROTATE, HOLD, STATIC }
