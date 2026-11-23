@@ -16,6 +16,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
@@ -148,18 +149,23 @@ class PublishDerivationTest {
         val older = gate.next()
         val newer = gate.next()
 
-        fun publish(generation: Int, trips: List<Trip>, delayMillis: Long) {
+        fun publish(generation: Int, trips: List<Trip>, beforeCommit: () -> Unit) {
             val ready = deriveReady(inputs(trips))
-            Thread.sleep(delayMillis)
+            beforeCommit()
             if (gate.isCurrent(generation)) {
                 published.set(ready)
                 writes.incrementAndGet()
             }
         }
 
-        val slow = Thread { publish(older, listOf(trip("t1")), 250) }
+        // Latches stage the race: the older derivation parks until the newer one has committed.
+        val parked = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val slow = Thread { publish(older, listOf(trip("t1"))) { parked.countDown(); release.await() } }
         slow.start()
-        publish(newer, listOf(trip("t1"), trip("t2")), 0)
+        parked.await()
+        publish(newer, listOf(trip("t1"), trip("t2"))) {}
+        release.countDown()
         slow.join()
 
         assertEquals(1, writes.get())

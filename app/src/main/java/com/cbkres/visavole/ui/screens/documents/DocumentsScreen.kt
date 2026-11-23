@@ -119,11 +119,8 @@ internal fun DocumentsScreen(
             val docAllowances = remember(ready.allowances, ready.docs, ready.world) {
                 ready.allowances.filter { a ->
                     val doc = ready.docs.firstOrNull { it.id == a.key.removePrefix("doc:") } ?: return@filter false
-                    when {
-                        doc.kind is DocKind.Passport -> (a.remainingDays ?: Int.MAX_VALUE) < EXPIRY_WATCH_DAYS
-                        doc.docCategory(ready.world) == "visa" -> a.remainingDays != null
-                        else -> (a.remainingDays ?: Int.MAX_VALUE) < EXPIRY_WATCH_DAYS
-                    }
+                    if (doc.docCategory(ready.world) == "visa") a.remainingDays != null
+                    else (a.remainingDays ?: Int.MAX_VALUE) < EXPIRY_WATCH_DAYS
                 }
             }
             // Effective focus + primary display — the dead-key fallback and the urgency pick are
