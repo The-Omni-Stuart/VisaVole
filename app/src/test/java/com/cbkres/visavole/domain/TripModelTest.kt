@@ -134,6 +134,22 @@ class TripModelTest {
     }
 
     @Test
+    fun tripCountsTowardAZoneOnlyWhileItsDaysAreInTheWindow() {
+        val rolling = zone("stay:schengen", "Schengen Area", listOf("old", "recent")).copy(windowPeriodDays = 180)
+        val old = trip("old", stop("s1", "DE", today.minusDays(400), today.minusDays(390)))
+        val recent = trip("recent", stop("s2", "DE", today.minusDays(10), today.minusDays(2)))
+        val straddling = trip("straddling", stop("s3", "DE", today.minusDays(200), today.minusDays(170)))
+        val future = trip("future", stop("s4", "DE", today.plusDays(10), today.plusDays(20)))
+
+        assertFalse(TripModel.tripCountsToward(old, rolling, today))
+        assertFalse(TripModel.tripCountsToward(future, rolling, today))
+        assertTrue(TripModel.tripCountsToward(recent, rolling, today))
+        assertTrue(TripModel.tripCountsToward(straddling, rolling, today))
+        assertTrue(TripModel.tripCountsToward(old, rolling.copy(currentTripId = "old"), today))
+        assertTrue(TripModel.tripCountsToward(old, rolling.copy(kind = AllowanceKind.LIFETIME), today))
+    }
+
+    @Test
     fun currentTripIdPrefersTheMostInProgressActiveTrip() {
         // two concurrently-active trips in one zone → current is the one with the most
         // days, not the first inserted (tB is inserted first but is shallower).

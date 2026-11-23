@@ -158,6 +158,18 @@ object TripModel {
         })
     }
 
+    /** A rolling zone's live balance is misleading on a trip whose days have all aged out of its window. */
+    fun tripCountsToward(trip: Trip, allowance: AllowanceSnapshot, today: LocalDate): Boolean {
+        if (allowance.kind != AllowanceKind.ROLLING || allowance.windowPeriodDays == null) return true
+        if (allowance.currentTripId == trip.id) return true
+        val start = today.minusDays(allowance.windowPeriodDays.toLong() - 1)
+        return trip.stops.any { stop ->
+            val from = if (stop.arrival.isAfter(start)) stop.arrival else start
+            val to = if (stop.departure != null && stop.departure.isBefore(today)) stop.departure else today
+            !stop.arrival.isAfter(today) && !from.isAfter(to)
+        }
+    }
+
     private fun compareRemaining(a: AllowanceSnapshot, b: AllowanceSnapshot): Int {
         val ra = remainingOf(a)
         val rb = remainingOf(b)
