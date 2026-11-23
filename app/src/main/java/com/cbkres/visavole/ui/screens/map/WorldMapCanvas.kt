@@ -305,8 +305,8 @@ internal fun WorldMapCanvas(
         // semantics, so TalkBack skipped it entirely. Give it a description — and, when a country
         // is selected, announce it.
         val mapDescription = selected?.let { iso -> geometry.countries[iso]?.name }
-            ?.let { "World map. $it selected." }
-            ?: "World map, visa access by country."
+            ?.let { "World map. $it selected. Search to select a country." }
+            ?: "World map, visa access by country. Search to select a country."
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
