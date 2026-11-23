@@ -115,11 +115,11 @@ class GuardTest {
         assertTrue(r.blocks.any { it.code == "doc.validity.inverted" })
     }
 
-    @Test fun validFromEqualToExpiryIsBlocked() {
+    @Test fun validFromEqualToExpiryIsOneUsableDay() {
+        // Expiry is inclusive ("an expiry of today is still valid"), so equal dates leave one day.
         val v = visa("v1", setOf("CA"), "multiple", expiry = "2026-11-01", validFrom = "2026-11-01")
         val r = add(v)
-        assertFalse(r.canProceed)
-        assertTrue(r.blocks.any { it.code == "doc.validity.inverted" })
+        assertTrue(r.canProceed)
     }
 
     @Test fun validFromBeforeExpiryIsAllowed() {
