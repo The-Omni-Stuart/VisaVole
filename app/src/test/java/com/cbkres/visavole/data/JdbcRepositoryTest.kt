@@ -57,7 +57,6 @@ class JdbcRepositoryTest {
             assertEquals("Schengen", rule.zoneName)
             assertEquals("Schengen", rule.zoneId)
             assertEquals(setOf("AT", "DE"), rule.countries)
-            assertNull(rule.extensionDays)
             assertTrue(rule.multipleEntry)
             assertTrue(rule.nationalities.isEmpty())
         }

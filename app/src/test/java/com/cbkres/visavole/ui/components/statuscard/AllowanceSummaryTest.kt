@@ -104,11 +104,10 @@ class AllowanceSummaryTest {
 
     @Test
     fun anAllowanceWithNoDayDataFallsBackToSubtitleThenNoLimit() {
-        val unlimited = snapshot(kind = AllowanceKind.UNLIMITED, status = AllowanceStatus.UNLIMITED)
-            .copy(subtitle = "90 in 180 (rolling)")
-        assertEquals("90 in 180 (rolling)", allowanceSummary(unlimited))
+        val noDayData = snapshot().copy(subtitle = "90 in 180 (rolling)")
+        assertEquals("90 in 180 (rolling)", allowanceSummary(noDayData))
 
-        assertEquals("No limit", allowanceSummary(snapshot(kind = AllowanceKind.UNLIMITED, status = AllowanceStatus.UNLIMITED)))
+        assertEquals("No limit", allowanceSummary(snapshot()))
     }
 
     private fun recovering() = snapshot().copy(

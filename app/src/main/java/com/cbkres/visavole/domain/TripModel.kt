@@ -228,7 +228,7 @@ object TripModel {
         AllowanceStatus.EXHAUSTED -> 3
         AllowanceStatus.WARNING -> 2
         AllowanceStatus.OK -> 1
-        AllowanceStatus.UNLIMITED, AllowanceStatus.UNKNOWN -> 0
+        AllowanceStatus.UNKNOWN -> 0
     }
 
     private fun documentSnapshot(

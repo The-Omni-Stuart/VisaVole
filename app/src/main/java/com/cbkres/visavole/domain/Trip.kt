@@ -65,7 +65,6 @@ enum class AllowanceKind {
     LIFETIME,
     DOCUMENT_VALIDITY,
     ENTRY_COUNT,
-    UNLIMITED,
 }
 
 /** True when the allowance is a stay window (days in a zone), as opposed to a document's own life. */
@@ -77,7 +76,6 @@ enum class AllowanceStatus {
     WARNING,
     DANGER,
     EXHAUSTED,
-    UNLIMITED,
     UNKNOWN,
 }
 

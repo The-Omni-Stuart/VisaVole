@@ -198,7 +198,6 @@ object JdbcRepository {
                             note = str("note"),
                             id = str("id") ?: "",
                             zoneId = str("zone"),
-                            extensionDays = intv("extension"),
                             validFrom = str("valid_from"),
                             validTo = str("valid_to"),
                             source = str("source"),

@@ -229,32 +229,6 @@ internal data class ResetFacts(
     val entryUsed: Int?,
     val entryRemaining: Int?,
 )
-
-/**
- * The earliest date on which the document gating entry to any country of [rule] stops
- * authorising a stay — the day a stay in this zone stops being legal, regardless of the
- * window. A stay runs on the document its stop declares ([TripStop.documentId]): that
- * document gates the stay even after it lapses (capping the window into the past → DANGER)
- * and even where a passport could in principle cover the country — the declared document is
- * what the stay is on. Only stops that are actually in progress at [asOf] declare a gate: a
- * document used by a *past* stay must not cap today's zone (its exhaustion belongs to that
- * stay, not this one). Stops without a declared document fall back to the best document held
- * for the country, then its lapsed-gate counterpart. Null when no held document documents
- * the zone.
- */
-internal fun expiryCapFor(
-    rule: StayRule,
-    docs: List<Document>,
-    world: WorldData,
-    asOf: LocalDate,
-    trips: List<Trip>,
-    statuses: Map<String, DocStatus>,
-    candidateMaps: Map<String, Map<String, Access>>? = null,
-): LocalDate? =
-    gateStatusesFor(rule, docs, world, asOf, trips, statuses, candidateMaps)
-        .mapNotNull(::gateCapDate)
-        .minOrNull()
-
 /** The statuses gating a stay in [rule]'s zone; one source so the cap and reset mode cannot disagree. */
 internal fun gateStatusesFor(
     rule: StayRule,

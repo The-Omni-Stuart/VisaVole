@@ -56,7 +56,6 @@ data class StayRule(
     val note: String?,
     val id: String = "",
     val zoneId: String? = null,
-    val extensionDays: Int? = null,
     val validFrom: String? = null,
     val validTo: String? = null,
     val source: String? = null,

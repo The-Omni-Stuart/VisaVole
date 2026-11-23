@@ -327,8 +327,6 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         return emptyList()
     }
 
-    fun updateDocument(doc: Document) = addDocument(doc)
-
     fun removeDocument(id: String) {
         if (guardBlocked(GuardAction.RemoveDocument(id))) return
         var next = docs.filterNot { it.id == id }
@@ -401,7 +399,7 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
             val snapshot = snapshot()
             when (val outcome = withContext(Dispatchers.IO) { backup.exportTo(uri, snapshot) }) {
                 is BackupManager.Outcome.Exported -> snack("Backup saved.")
-                is BackupManager.Outcome.Imported -> snack("Backup ready to restore.")
+                is BackupManager.Outcome.Imported -> {}
                 is BackupManager.Outcome.Failed -> snack(outcome.message)
             }
         }

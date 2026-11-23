@@ -194,20 +194,6 @@ internal class VisaStateStore(
         }
     }
 
-    /** Flush a file's bytes (or a directory's entries) to durable storage. */
-    private fun fsync(f: File) {
-        try {
-            RandomAccessFile(f, "r").use { it.fd.sync() }
-        } catch (e: Exception) {
-            // ext4 refuses O_RDONLY directory fds; reopen for writing to get a syncable one.
-            try {
-                RandomAccessFile(f, "rw").use { it.fd.sync() }
-            } catch (e2: Exception) {
-                Log.w(TAG, "Could not fsync $f", e2)
-            }
-        }
-    }
-
     /** keep only the newest [keep] quarantine files so a run of decode failures doesn't fill
      *  the files dir. Names end in `.corrupt-<epoch-millis>`, so sorting by name is newest-first. */
     private fun pruneQuarantined(dir: File, keep: Int = 3) {

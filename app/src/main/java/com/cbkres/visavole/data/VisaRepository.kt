@@ -149,7 +149,6 @@ class VisaRepository(private val db: VisaDb) {
             val iWindowType = cur.getColumnIndex("window_type")
             val iWindowDays = cur.getColumnIndex("window_days")
             val iWindowPeriodDays = cur.getColumnIndex("window_period_days")
-            val iExtension = cur.getColumnIndex("extension")
             val iMultipleEntry = cur.getColumnIndex("multiple_entry")
             val iNationalities = cur.getColumnIndex("nationalities")
             val iValidFrom = cur.getColumnIndex("valid_from")
@@ -174,7 +173,6 @@ class VisaRepository(private val db: VisaDb) {
                         note = str(iNote),
                         id = str(iId) ?: "",
                         zoneId = str(iZone),
-                        extensionDays = intv(iExtension),
                         validFrom = str(iValidFrom),
                         validTo = str(iValidTo),
                         source = str(iSource),

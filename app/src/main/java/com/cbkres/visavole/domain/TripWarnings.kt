@@ -279,10 +279,4 @@ internal object TripWarnings {
         return out
     }
 
-    private fun overlapDays(aStart: LocalDate, aEnd: LocalDate, bStart: LocalDate, bEnd: LocalDate): Int {
-        val start = if (aStart.isAfter(bStart)) aStart else bStart
-        val end = if (aEnd.isBefore(bEnd)) aEnd else bEnd
-        if (end.isBefore(start)) return 0
-        return ChronoUnit.DAYS.between(start, end).toInt() + 1
-    }
 }

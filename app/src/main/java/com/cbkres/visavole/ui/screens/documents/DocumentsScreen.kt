@@ -19,9 +19,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
@@ -251,7 +251,6 @@ internal fun DocumentsScreen(
                                 today,
                                 statuses,
                                 removeBlockings,
-                                blockings,
                                 flashes,
                                 passportIsoTotal,
                                 passportNumber,
@@ -282,7 +281,6 @@ internal fun DocumentsScreen(
                                 today,
                                 statuses,
                                 removeBlockings,
-                                blockings,
                                 flashes,
                                 passportIsoTotal,
                                 passportNumber,
@@ -339,7 +337,7 @@ internal fun DocumentsScreen(
                 world = ready.world,
                 guard = guardCtx,
                 initial = editing,
-                onAdd = { vm.updateDocument(it) },
+                onAdd = { vm.addDocument(it) },
                 onDismiss = { editing = null },
                 onEditExisting = { editing = it },
             )
@@ -356,7 +354,6 @@ private fun DocumentListCard(
     today: LocalDate,
     statuses: Map<String, DocStatus>,
     removeBlockings: Map<String, GuardResult>,
-    blockings: Map<String, GuardResult>,
     flashes: FlashTrigger,
     passportIsoTotal: Map<String, Int>,
     passportNumber: Map<String, Int>,
