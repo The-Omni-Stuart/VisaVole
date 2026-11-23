@@ -1,5 +1,6 @@
 package com.cbkres.visavole.ui.theme
 
+import android.content.Context
 import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -10,7 +11,13 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.cbkres.visavole.ui.LocalReducedMotion
 import com.cbkres.visavole.ui.reducedMotionFromScale
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
@@ -44,11 +51,19 @@ internal fun Visa_VoleTheme(
         else -> LightColorScheme
     }
 
-    // Read the OS animation scale once at the theme root; 0 means the user asked for no motion.
+    // The OS animation scale, sampled at the theme root; 0 means the user asked for no motion.
+    // Re-read on every resume so toggling the setting lands without restarting the app.
     val context = LocalContext.current
-    val reducedMotion = reducedMotionFromScale(
-        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f),
-    )
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val animatorScale = remember { mutableFloatStateOf(context.animatorScale()) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) animatorScale.floatValue = context.animatorScale()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    val reducedMotion = reducedMotionFromScale(animatorScale.floatValue)
     // Expose the *effective* theme (which may be forced light/dark via the Settings override) so
     // every `isSystemInDarkTheme()` call below the theme reflects what the user is actually seeing
     // — not just the OS setting. The per-theme status colours key off this.
@@ -60,3 +75,6 @@ internal fun Visa_VoleTheme(
         )
     }
 }
+
+private fun Context.animatorScale(): Float =
+    Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
