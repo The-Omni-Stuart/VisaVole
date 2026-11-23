@@ -21,9 +21,17 @@ import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.GuardFinding
 import com.cbkres.visavole.domain.GuardSeverity
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
-import com.cbkres.visavole.ui.screens.map.SAVABLE_DANGER_CODES
 import com.cbkres.visavole.ui.screens.map.Severity
 import com.cbkres.visavole.ui.screens.map.severityColor
+
+/** Codes that were DANGERs before the unified guard (savable): kept WARN, rendered in the danger colour. */
+private val savableDangerCodes = setOf(
+    "trip.allowance.exceeded",
+    "trip.entries.over",
+    "trip.access.none",
+    "trip.access.blocked",
+    "trip.passport.expiringSoon3",
+)
 
 /**
  * The one confirm/alert dialog shape over [VisaDialog] chrome: an optional title, content, and a
@@ -142,7 +150,7 @@ internal fun GuardFindingsDialog(
                         "${f.title}: ${f.message}",
                         style = MaterialTheme.typography.bodySmall,
                         color = severityColor(
-                            if (f.severity == GuardSeverity.BLOCK || f.code in SAVABLE_DANGER_CODES) Severity.BAD else Severity.WARN,
+                            if (f.severity == GuardSeverity.BLOCK || f.code in savableDangerCodes) Severity.BAD else Severity.WARN,
                             LocalEffectiveDarkTheme.current,
                         ),
                         modifier = Modifier.padding(vertical = 3.dp),

@@ -131,14 +131,3 @@ internal fun severityColor(severity: Severity, isDark: Boolean): Color = if (isD
     }
 }
 
-/**
- * Finding codes that were DANGERs before the unified guard (savable, per Q1): they stay WARN in
- * the engine but are rendered in the danger colour so the visual weight is unchanged.
- */
-val SAVABLE_DANGER_CODES = setOf(
-    "trip.allowance.exceeded",
-    "trip.entries.over",
-    "trip.access.none",
-    "trip.access.blocked",
-    "trip.passport.expiringSoon3",
-)
