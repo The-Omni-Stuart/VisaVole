@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Icon
@@ -35,6 +35,7 @@ import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.TripStatus
 import com.cbkres.visavole.domain.TripStop
 import com.cbkres.visavole.domain.WorldData
+import com.cbkres.visavole.ui.PILL_MAX_WIDTH
 import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.VisaListCard
 import com.cbkres.visavole.ui.ringColor
@@ -143,7 +144,7 @@ internal fun TripCard(
                 }
             }
             IconButton(onClick = onDelete) {
-                Icon(Icons.Filled.Close, contentDescription = "Delete")
+                Icon(Icons.Filled.Delete, contentDescription = "Delete")
             }
         },
     ) {
@@ -207,12 +208,14 @@ internal fun TripCard(
                         severityColor(
                             Severity.BAD,
                             LocalEffectiveDarkTheme.current
-                        )
+                        ),
+                        maxWidth = PILL_MAX_WIDTH,
                     )
                     else row.allowanceHint?.let {
                         StatusPill(
                             it,
-                            allowanceHintColor
+                            allowanceHintColor,
+                            maxWidth = PILL_MAX_WIDTH,
                         )
                     }
                 }

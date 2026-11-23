@@ -100,7 +100,6 @@ const val STATUS_CHIP_ALPHA = 0.16f
 // The standard dimming for an inactive/disabled control — e.g. the delete button while a doc
 // is in use, or a non-primary passport star. One shared value so every "greyed out" element
 // reads with the same tone.
-const val DIM_ALPHA = 0.35f
 
 /**
  * The severity levels every status colour in the app collapses to: allowance rings, guard

@@ -14,6 +14,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.cbkres.visavole.domain.AllowanceSnapshot
+import com.cbkres.visavole.ui.PILL_MAX_WIDTH
 import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.ringColor
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
@@ -79,13 +80,15 @@ internal fun CyclingZonePill(zones: List<AllowanceSnapshot>) {
             StatusPill(
                 faceText(a),
                 faceColor(a),
-                modifier = Modifier.alpha(0f)
+                modifier = Modifier.alpha(0f),
+                maxWidth = PILL_MAX_WIDTH,
             )
         }
         Crossfade(targetState = currentFace, animationSpec = tween(300)) { a ->
             StatusPill(
                 faceText(a),
-                faceColor(a)
+                faceColor(a),
+                maxWidth = PILL_MAX_WIDTH,
             )
         }
     }

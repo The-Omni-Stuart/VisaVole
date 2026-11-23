@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.draw.alpha
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
@@ -147,6 +148,14 @@ internal fun docTitle(doc: Document, world: WorldData): String {
 /** Keeps number+unit pairs together so a narrow pill never orphans the unit. */
 internal fun tidyPillText(text: String): String =
     text.replace(Regex("(?<=\\d) (?=[A-Za-z])"), "\u00a0")
+
+internal const val DIM_ALPHA = 0.35f
+
+/** The one width cap for pills sharing a row with a label, so a long pill never squeezes it out. */
+internal val PILL_MAX_WIDTH = 120.dp
+
+/** The one faded treatment for a control present but not acting — tappable where the tap explains. */
+internal fun Modifier.faded(faded: Boolean): Modifier = alpha(if (faded) 1f else DIM_ALPHA)
 
 @Composable
 internal fun StatusPill(

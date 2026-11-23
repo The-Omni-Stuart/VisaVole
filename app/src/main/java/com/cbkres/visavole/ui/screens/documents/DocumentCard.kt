@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
@@ -14,7 +14,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -30,11 +29,12 @@ import com.cbkres.visavole.domain.ExpiryReason
 import com.cbkres.visavole.domain.WorldData
 import com.cbkres.visavole.domain.entryType
 import com.cbkres.visavole.domain.residenceClassFor
+import com.cbkres.visavole.ui.PILL_MAX_WIDTH
 import com.cbkres.visavole.ui.StatusPill
+import com.cbkres.visavole.ui.faded
 import com.cbkres.visavole.ui.VisaListCard
 import com.cbkres.visavole.ui.docTitle
 import com.cbkres.visavole.ui.docTypeBadge
-import com.cbkres.visavole.ui.screens.map.DIM_ALPHA
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import com.cbkres.visavole.ui.screens.map.Severity
 import com.cbkres.visavole.ui.screens.map.severityColor
@@ -73,8 +73,9 @@ internal fun DocumentCard(
                         Icons.Filled.Star,
                         contentDescription = if (isPrimary) "Primary passport" else "Set as primary",
                         // material-icons-core has no true Star outline (bug), so the non-primary
-                        // star is the same solid star in a faded grey to stay monochrome.
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (isPrimary) 1f else DIM_ALPHA),
+                        // star is the same solid star faded out to stay monochrome.
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.faded(!isPrimary),
                     )
                 }
             }
@@ -83,10 +84,10 @@ internal fun DocumentCard(
             }
             IconButton(
                 onClick = { if (canRemove) onRemove() else onRemoveBlocked() },
-                modifier = Modifier.alpha(if (canRemove) 1f else DIM_ALPHA),
+                modifier = Modifier.faded(!canRemove),
             ) {
                 Icon(
-                    Icons.Filled.Close,
+                    Icons.Filled.Delete,
                     contentDescription = if (canRemove) "Delete" else "In use by a trip",
                     tint = if (canRemove) surface else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -243,7 +244,7 @@ private fun ExpiryStatusPill(
             LocalEffectiveDarkTheme.current
         ),
         bold = bold,
-        maxWidth = 120.dp
+        maxWidth = PILL_MAX_WIDTH
     )
 }
 
