@@ -246,8 +246,11 @@ object TripModel {
         // Only the entry type and the expiry date here — the "N days left" / "N entries
         // remaining" halves live on the coloured summary line of the tab-top display.
         val subtitle = buildString {
-            entryTotalFor(doc.entryType())?.let {
-                append(if (it == 1) "Single entry" else "Double entry")
+            when (doc.entryType()) {
+                "single" -> append("Single entry")
+                "double" -> append("Double entry")
+                "multiple" -> append("Multiple entry")
+                else -> {}
             }
             expiry?.let {
                 if (isNotEmpty()) append(" · ")

@@ -863,14 +863,14 @@ class TripModelTest {
 
     @Test
     fun docSnapshotSubtitleFormat() {
-        // the subtitle is "<entry type> · Expires <date>"; the entry-type half is omitted
-        // for unlimited-entry docs and the date half when there is no expiry.
+        // the subtitle is "<entry type> · Expires <date>"; documents that carry no entry
+        // type (passports, permits without one) omit that half, as they omit the date half.
         val double = Document("v", "Visa", Custom(setOf("US"), null, "visa", null, "double"), "2030-01-01")
         val unlimited = Document("u", "Visa", Custom(setOf("US"), null, "visa", null, "multiple"), "2030-01-01")
         val noExpiry = Document("n", "Visa", Custom(setOf("US"), null, "visa", null, "single"))
         val calc = TripModel.calculate(emptyList(), listOf(double, unlimited, noExpiry), world(), today)
         assertEquals("Double entry · Expires 2030-01-01", calc.allowances.first { it.key == "doc:v" }.subtitle)
-        assertEquals("Expires 2030-01-01", calc.allowances.first { it.key == "doc:u" }.subtitle)
+        assertEquals("Multiple entry · Expires 2030-01-01", calc.allowances.first { it.key == "doc:u" }.subtitle)
         assertEquals("Single entry", calc.allowances.first { it.key == "doc:n" }.subtitle)
     }
 
