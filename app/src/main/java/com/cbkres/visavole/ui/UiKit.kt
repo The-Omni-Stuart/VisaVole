@@ -3,6 +3,7 @@ package com.cbkres.visavole.ui
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
@@ -17,6 +18,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
@@ -48,6 +52,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.AccessLevel
 import com.cbkres.visavole.domain.AllowanceKind
@@ -178,14 +183,19 @@ internal fun CountryRow(
     modifier: Modifier = Modifier,
     iso: String? = null,
     selected: Boolean = false,
+    selectionRole: Role? = null,
 ) {
+    // Rows that toggle carry their role so TalkBack says "checked", not "check mark"; plain
+    // navigate-and-act rows (map search, onboarding) stay clickable.
+    val stateModifier = if (selectionRole != null) Modifier.selectable(selected, role = selectionRole, onClick = onClick)
+    else Modifier.clickable(onClick = onClick)
     Row(
         // minHeight keeps every country/search row on a ≥48dp touch target regardless of text style.
-        modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = onClick).padding(vertical = 10.dp, horizontal = 10.dp),
+        modifier.fillMaxWidth().heightIn(min = 48.dp).then(stateModifier).padding(vertical = 10.dp, horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (selected) {
-            Text("✓ ", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
         }
         Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         iso?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }

@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.Country
@@ -77,6 +78,7 @@ internal fun CountryPicker(
                             onClick = { onToggle(entry.iso2) },
                             iso = entry.iso2,
                             selected = selected.contains(entry.iso2),
+                            selectionRole = Role.Checkbox,
                         )
                     }
                 }

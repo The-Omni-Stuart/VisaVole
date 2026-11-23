@@ -11,6 +11,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -155,7 +157,10 @@ internal fun SettingsScreen(
                     val selected = themeMode == mode
                     OutlinedButton(
                         onClick = { onThemeModeChanged(mode) },
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            // The tint alone does not announce selection; a RadioButton role carries it.
+                            .selectable(selected, role = Role.RadioButton) { onThemeModeChanged(mode) },
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = if (selected) {
                                 MaterialTheme.colorScheme.primary
@@ -177,8 +182,8 @@ internal fun SettingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        // Announced as the switch it toggles, and the row (not the label) is the touch target.
-                        .clickable(role = Role.Switch) { onDynamicColorChanged(!dynamicColor) }
+                        // One node carries the state and the touch target; the Switch inside is decoration.
+                        .toggleable(value = dynamicColor, role = Role.Switch, onValueChange = onDynamicColorChanged)
                         .heightIn(min = 48.dp)
                         .padding(horizontal = 4.dp),
                 ) {
@@ -187,7 +192,7 @@ internal fun SettingsScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f),
                     )
-                    Switch(checked = dynamicColor, onCheckedChange = onDynamicColorChanged)
+                    Switch(checked = dynamicColor, onCheckedChange = null)
                 }
             }
             Spacer(Modifier.height(48.dp))

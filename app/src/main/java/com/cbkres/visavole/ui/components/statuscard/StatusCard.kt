@@ -3,6 +3,7 @@ package com.cbkres.visavole.ui.components.statuscard
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.ui.HazeBox
@@ -136,11 +138,11 @@ private fun AllowanceCard(a: AllowanceSnapshot, focused: Boolean, onClick: () ->
     Surface(
         color = if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceContainerHigh,
         shape = RoundedCornerShape(16.dp),
-        // Clip the ripple to the card shape — a bare clickable on the Surface flashes a square.
+        // Clip the ripple to the card shape; selectable carries the focused state to TalkBack.
         modifier = Modifier
             .width(168.dp)
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick),
+            .selectable(selected = focused, role = Role.Tab, onClick = onClick),
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(a.title, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
