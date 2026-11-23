@@ -15,6 +15,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.ui.PILL_MAX_WIDTH
+import com.cbkres.visavole.ui.LocalReducedMotion
 import com.cbkres.visavole.ui.NO_VALID_DOC_PILL
 import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.ringColor
@@ -51,8 +52,9 @@ internal fun CyclingZonePill(zones: List<AllowanceSnapshot>) {
         isDark
     )
     var face by remember(zones) { mutableIntStateOf(0) }
-    LaunchedEffect(zones) {
-        if (zones.size < 2) {
+    val reducedMotion = LocalReducedMotion.current
+    LaunchedEffect(zones, reducedMotion) {
+        if (zones.size < 2 || reducedMotion) {
             face = 0
             return@LaunchedEffect
         }
