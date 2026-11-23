@@ -247,11 +247,7 @@ object TripModel {
         // remaining" halves live on the coloured summary line of the tab-top display.
         val subtitle = buildString {
             entryTotalFor(doc.entryType())?.let {
-                append(when (it) {
-                    1 -> "Single entry"
-                    2 -> "Double entry"
-                    else -> "Multiple entry"
-                })
+                append(if (it == 1) "Single entry" else "Double entry")
             }
             expiry?.let {
                 if (isNotEmpty()) append(" · ")

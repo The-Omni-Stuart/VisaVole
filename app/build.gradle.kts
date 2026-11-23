@@ -247,16 +247,8 @@ tasks.register("verifyVisaDb") {
         if (!shaFile.exists()) {
             error("visa_data.db.sha256 sidecar is missing — it is the DB refresh trigger (P3-32)")
         }
-        val digest = MessageDigest.getInstance("SHA-256")
-        assetFile.inputStream().use { input ->
-            val buffer = ByteArray(8192)
-            while (true) {
-                val read = input.read(buffer)
-                if (read < 0) break
-                digest.update(buffer, 0, read)
-            }
-        }
-        val actual = digest.digest().joinToString("") { "%02x".format(it) }
+        val actual = MessageDigest.getInstance("SHA-256").digest(assetFile.readBytes())
+            .joinToString("") { "%02x".format(it) }
         val expected = shaFile.readText().trim()
         if (actual != expected) {
             error("visa_data.db.sha256 sidecar ($expected) does not match the asset (actual $actual)")
