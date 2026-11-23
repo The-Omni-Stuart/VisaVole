@@ -1,5 +1,7 @@
 package com.cbkres.visavole.ui.screens.trips
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -278,7 +280,10 @@ internal fun AddTripDialog(
         width = 400.dp,
         dismissable = false,
     ) {
-        Column(Modifier.padding(20.dp)) {
+        // Large fonts and short windows push the save row below the fold; the stop list scrolls
+        // inside itself, the rest of the form scrolls here.
+        val formScroll = rememberScrollState()
+        Column(Modifier.padding(20.dp).verticalScroll(formScroll)) {
             Text(
                 if (isEditingExisting) "Edit trip" else "Add trip",
                 style = MaterialTheme.typography.titleLarge
@@ -436,10 +441,6 @@ internal fun AddTripDialog(
                     "There is a gap between $prevName and $nextName. You can keep both stops in this trip or end this trip and start a new trip after the gap.",
                 error = gapError,
                 canUndo = canUndo,
-                onKeepGap = {
-                    lastStopSnapshot = null
-                    gapIndex = null
-                },
                 onUndo = { cancelLastStopChange() },
                 onSplit = { splitGap() },
                 onDismiss = {
