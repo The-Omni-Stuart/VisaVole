@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -205,9 +206,7 @@ internal fun WorldMapCanvas(
     // here (zoom/centre/selection/geometry) change exactly when a redraw is needed.
     // the ocean follows the effective theme (it was a fixed dark navy, so it stayed a dark
     // island under a light app). The bright country fills and navy borders read on both.
-    val surf = MaterialTheme.colorScheme.surface
-    val isDarkSurf = (0.299f * surf.red + 0.587f * surf.green + 0.114f * surf.blue) < 0.5f
-    val ocean = if (isDarkSurf) OCEAN else OCEAN_LIGHT
+    val ocean = if (LocalEffectiveDarkTheme.current) OCEAN else OCEAN_LIGHT
     val textMeasurer = rememberTextMeasurer()
     val labelColor = Color.White.copy(alpha = 0.92f)
     val labelBacking = Color.Black.copy(alpha = 0.45f)
@@ -615,13 +614,7 @@ private fun BoxScope.MapZoomControls(
                 Icon(Icons.Filled.Add, contentDescription = "Zoom in")
             }
             IconButton(onClick = onZoomOut) {
-                // M3 IconButton has no contentDescription param; the label comes from child
-                // semantics, which the clickable button merges.
-                Text(
-                    "-",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.semantics { contentDescription = "Zoom out" },
-                )
+                Icon(Icons.Filled.Remove, contentDescription = "Zoom out")
             }
             IconButton(onClick = onReset) {
                 Icon(Icons.Filled.Home, contentDescription = "Reset view")
