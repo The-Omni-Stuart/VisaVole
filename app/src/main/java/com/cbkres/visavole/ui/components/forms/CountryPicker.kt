@@ -15,6 +15,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.Country
@@ -36,8 +37,10 @@ internal fun CountryPicker(
     val listState = rememberLazyListState()
     // Blank query shows the full alphabetical list; otherwise the shared ranked matching
     // (diacritic folding, word initials, typo tolerance) applies.
-    val list = if (query.isBlank()) countries.values.sortedBy { it.name }
-    else searchCountries(countries, query)
+    val list = remember(countries, query) {
+        if (query.isBlank()) countries.values.sortedBy { it.name }
+        else searchCountries(countries, query)
+    }
     LaunchedEffect(list, selected) {
         val selectedIndex = list.indexOfFirst { selected.contains(it.iso2) }
         if (selectedIndex < 0) return@LaunchedEffect

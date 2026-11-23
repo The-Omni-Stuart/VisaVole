@@ -36,6 +36,7 @@ import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.VisaDatePickerDialog
 import com.cbkres.visavole.ui.animateItemToCenter
+import com.cbkres.visavole.ui.sectionedIndices
 import com.cbkres.visavole.ui.app.AppState
 import com.cbkres.visavole.ui.components.statuscard.AllowanceFocus
 import com.cbkres.visavole.ui.components.statuscard.FlashTrigger
@@ -90,15 +91,13 @@ internal fun TripsScreen(
 
         val sections = ready.tripSections
         val tripIndex = remember(sections.upcoming, sections.current, sections.previous) {
-            val m = HashMap<String, Int>()
-            var i = 1
-            for (section in listOf(sections.upcoming, sections.current, sections.previous)) {
-                if (section.isEmpty()) continue
-                i += 1
-                section.forEachIndexed { n, t -> m[t.id] = i + n }
-                i += section.size
-            }
-            m
+            sectionedIndices(
+                listOf(
+                    sections.upcoming.map { it.id },
+                    sections.current.map { it.id },
+                    sections.previous.map { it.id },
+                ),
+            )
         }
 
         val tripsListState = scrollState

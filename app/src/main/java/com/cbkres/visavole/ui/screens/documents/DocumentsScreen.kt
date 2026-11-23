@@ -42,6 +42,7 @@ import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.animateItemToCenter
+import com.cbkres.visavole.ui.sectionedIndices
 import com.cbkres.visavole.ui.app.AppState
 import com.cbkres.visavole.ui.components.statuscard.AllowanceFocus
 import com.cbkres.visavole.ui.components.statuscard.FlashTrigger
@@ -108,18 +109,7 @@ internal fun DocumentsScreen(
             // sits at 0, then each non-empty section adds a header before its cards. A ring tap
             // centres its card from here instead of re-deriving the header offsets by hand.
             val docIndex = remember(active, archived) {
-                val m = HashMap<String, Int>()
-                var i = 1
-                if (active.isNotEmpty()) {
-                    i += 1
-                    active.forEachIndexed { n, d -> m[d.id] = i + n }
-                    i += active.size
-                }
-                if (archived.isNotEmpty()) {
-                    i += 1
-                    archived.forEachIndexed { n, d -> m[d.id] = i + n }
-                }
-                m
+                sectionedIndices(listOf(active.map { it.id }, archived.map { it.id }))
             }
             // The tab-top allowance display (the same one the Trips tab uses), fed from the
             // documents that actually have an expiry to watch: every visa, plus passports /

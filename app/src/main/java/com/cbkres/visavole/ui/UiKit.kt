@@ -420,3 +420,16 @@ internal suspend fun LazyListState.animateItemToCenter(index: Int, viewportHeigh
     val estimate = if (visible.isEmpty()) 0 else visible.sumOf { it.size } / visible.size
     animateScrollToItem(index, scrollOffset = -(viewportHeightPx - estimate) / 2)
 }
+
+/** LazyColumn row indices: item 0 is the allowances card, each non-empty section adds a header before its items. */
+internal fun sectionedIndices(sections: List<List<String>>): Map<String, Int> {
+    val m = LinkedHashMap<String, Int>()
+    var i = 1
+    for (section in sections) {
+        if (section.isEmpty()) continue
+        i += 1
+        section.forEachIndexed { n, id -> m[id] = i + n }
+        i += section.size
+    }
+    return m
+}
