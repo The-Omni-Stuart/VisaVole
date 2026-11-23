@@ -30,7 +30,6 @@ internal fun LoadingScreen() {
 }
 
 /** Shown when the bundled visa data could not be loaded; retry reruns the initial load. */
-// TODO: Should probably take out retry logic from the error page and move to caller.
 @Composable
 internal fun ErrorScreen(message: String, onRetry: () -> Unit) {
     Surface(color = MaterialTheme.colorScheme.background) {

@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalConfiguration
+import com.cbkres.visavole.ui.DIALOG_CHROME_RESERVE
 import com.cbkres.visavole.ui.LocalVisaDialogHeight
 import com.cbkres.visavole.domain.GuardAction
 import com.cbkres.visavole.domain.GuardContext
@@ -45,15 +46,13 @@ import com.cbkres.visavole.ui.GuardFindingsDialog
 import com.cbkres.visavole.ui.app.AppState
 import java.util.UUID
 
-// TODO: Refactor this too
-
 @OptIn(ExperimentalMaterial3Api::class)
 /** A form dialog's usable height: measured from the window, with the screen's as the fallback. */
 @Composable
 private fun dialogUsableHeight(): Dp {
     val measured = LocalVisaDialogHeight.current
     if (measured != null) return measured
-    return (LocalConfiguration.current.screenHeightDp - 96).dp
+    return LocalConfiguration.current.screenHeightDp.dp - DIALOG_CHROME_RESERVE
 }
 
 /** The stop list's share of that height, so a long trip scrolls inside the dialog instead of off it. */

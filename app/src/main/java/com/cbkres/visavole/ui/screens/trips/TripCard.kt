@@ -75,7 +75,6 @@ private data class TripCardRow(
     val zoneAllowances: List<AllowanceSnapshot>,
 )
 
-// TODO: This whole thing and the connection components should be cleaned
 
 @Composable
 internal fun TripCard(

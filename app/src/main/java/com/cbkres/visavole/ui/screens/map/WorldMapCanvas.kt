@@ -78,10 +78,6 @@ private const val FLING_STOP_VELOCITY = 0.08f
 private const val FLING_EDGE_SLIDE_DAMPING = 0.3f
 private const val ZOOM_FLING_DECAY_MS = 150f
 private const val ZOOM_FLING_MIN_VELOCITY = 0.00015f
-// Experimental performance switch: draw only country paths that intersect the visible canvas.
-// Set to false to restore the original full-world draw path.
-private const val ENABLE_VIEWPORT_CULLING = true
-
 /**
  * Content identity of the map's colours: the [access]/[homeCountries]/[ownVisaCountries] sets
  * arrive as fresh instances on every publish, so folding their content-based hashCodes (Map/Set
@@ -240,16 +236,16 @@ internal fun WorldMapCanvas(
                     // Pass 1: fills. Pass 2: borders on top of every fill so shared borders are
                     // crisp (not overdrawn by a neighbour's fill). Width is constant on screen.
                     for (s in drawShapes) {
-                        if (ENABLE_VIEWPORT_CULLING && !s.bbox.intersectsViewport(vxMin, vyMin, vxMax, vyMax)) continue
+                        if (!s.bbox.intersectsViewport(vxMin, vyMin, vxMax, vyMax)) continue
                         drawPath(s.path, s.fill)
                     }
                     for (s in drawShapes) {
-                        if (ENABLE_VIEWPORT_CULLING && !s.bbox.intersectsViewport(vxMin, vyMin, vxMax, vyMax)) continue
+                        if (!s.bbox.intersectsViewport(vxMin, vyMin, vxMax, vyMax)) continue
                         drawPath(s.path, LAND_STROKE, style = borderStroke)
                     }
                     selected?.let { sel ->
                         drawShapes.firstOrNull { it.iso == sel }?.let { s ->
-                            if (!ENABLE_VIEWPORT_CULLING || s.bbox.intersectsViewport(vxMin, vyMin, vxMax, vyMax)) {
+                            if (s.bbox.intersectsViewport(vxMin, vyMin, vxMax, vyMax)) {
                                 drawPath(s.path, Color.White, style = Stroke(width = 2.2f / sc))
                             }
                         }

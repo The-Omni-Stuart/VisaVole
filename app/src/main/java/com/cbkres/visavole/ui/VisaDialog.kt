@@ -29,7 +29,7 @@ import androidx.compose.ui.window.DialogProperties
 private val DIALOG_EDGE_GAP = 8.dp
 
 /** What the dialog leaves its window for chrome, matching the reserve the screen-relative sizing used. */
-private val DIALOG_CHROME_RESERVE = 96.dp
+internal val DIALOG_CHROME_RESERVE = 96.dp
 
 /** The dialog's usable height, measured from its window; unset outside [VisaDialog]'s content. */
 internal val LocalVisaDialogHeight = staticCompositionLocalOf<Dp?> { null }

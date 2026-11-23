@@ -149,8 +149,6 @@ internal fun TripsScreen(
                         Spacer(Modifier.height(4.dp))
                     }
 
-                    // TODO: Current layout: Upcoming, Current, Previous. Maybe change to tabs?
-                    // TODO: pull out to generic display comp
 
                     if (sections.upcoming.isNotEmpty()) {
                         item(key = "header-upcoming") {
@@ -294,7 +292,6 @@ internal fun TripsScreen(
     }
 }
 
-// TODO: Investigate this
 @Composable
 private fun EndTripDialog(today: LocalDate, onConfirm: (LocalDate) -> Unit, onDismiss: () -> Unit) {
     VisaDatePickerDialog(

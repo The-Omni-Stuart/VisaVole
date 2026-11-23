@@ -103,8 +103,6 @@ internal fun MainScaffold(
     // the map shapes + per-country focus are pre-built on the VM's IO thread at load time
     // (see AccessViewModel.launchLoad) and shipped on AppState.Ready, so the one-time ~121k-point
     // Path construction no longer runs on the main thread at first composition.
-    val mapShapes = s.shapes
-    val mapFocus = s.focus
     // map framing (zoom + centre) survives process death — plain `remember` reset it to
     // the default view on every cold start.
     val mapZoom = rememberSaveable(saver = MapZoomSaver) { mutableFloatStateOf(1f) }
@@ -186,8 +184,8 @@ internal fun MainScaffold(
                         { selected = it },
                         query = mapQuery,
                         onQuery = { mapQuery = it },
-                        shapes = mapShapes,
-                        focus = mapFocus,
+                        shapes = s.shapes,
+                        focus = s.focus,
                         zoomState = mapZoom,
                         centerState = mapCenter,
                         modifier = Modifier.fillMaxSize(),

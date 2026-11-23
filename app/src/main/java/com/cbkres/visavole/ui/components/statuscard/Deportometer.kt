@@ -35,9 +35,7 @@ import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import kotlinx.coroutines.delay
 
 /** Entry-count documents rotate to a days-to-expiry face this close to their expiry. */
-private const val RING_ROTATE_MAX_DAYS = 90     // TODO: Probably shouldn't hard code this.
-
-// TODO: Make this more generic since it's used for document expiry as well
+private const val RING_ROTATE_MAX_DAYS = 90
 
 /**
  * The allowance donut: the remaining window (or remaining entries) drawn in the status colour,
