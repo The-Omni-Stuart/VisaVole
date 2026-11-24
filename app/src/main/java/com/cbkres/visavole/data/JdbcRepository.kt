@@ -69,7 +69,7 @@ object JdbcRepository {
     private fun loadCountries(c: Connection): Map<String, Country> {
         val out = HashMap<String, Country>()
         c.createStatement().use { st ->
-            st.executeQuery("SELECT iso2, name FROM countries").use { rs ->
+            st.executeQuery(SQL_COUNTRIES).use { rs ->
                 while (rs.next()) out[rs.getString("iso2")] = Country(rs.getString("iso2"), rs.getString("name"))
             }
         }
@@ -81,11 +81,11 @@ object JdbcRepository {
         val out = HashMap<String, MutableList<Corridor>>()
         // Unfiltered reads the whole table; filtered runs the same chunked IN query as Android.
         val queries: List<Pair<String, List<String>>> = if (homePassports == null) {
-            listOf("SELECT passport, destination, type, days, valid_to FROM visa_rules" to emptyList())
+            listOf(SQL_BASELINE_ALL to emptyList())
         } else {
             homePassports.sorted().chunked(BASELINE_CHUNK).map { chunk ->
                 val placeholders = chunk.joinToString(",") { "?" }
-                "SELECT passport, destination, type, days, valid_to FROM visa_rules WHERE passport IN ($placeholders)" to chunk
+                sqlBaselineChunked(placeholders) to chunk
             }
         }
         for ((sql, args) in queries) {
@@ -110,7 +110,7 @@ object JdbcRepository {
     private fun loadRegimes(c: Connection): List<Regime> {
         val out = mutableListOf<Regime>()
         c.createStatement().use { st ->
-            st.executeQuery("SELECT id, name, level, members FROM mobility_regimes").use { rs ->
+            st.executeQuery(SQL_REGIMES).use { rs ->
                 while (rs.next()) {
                     out.add(Regime(rs.getString("id"), rs.getString("name"), rs.getString("level"), parseIso2Array(rs.getString("members"))))
                 }
@@ -122,7 +122,7 @@ object JdbcRepository {
     private fun loadHoldings(c: Connection): Map<String, Holding> {
         val out = HashMap<String, Holding>()
         c.createStatement().use { st ->
-            st.executeQuery("SELECT id, name, category, issuing_country FROM visa_holdings").use { rs ->
+            st.executeQuery(SQL_HOLDINGS).use { rs ->
                 while (rs.next()) out[rs.getString("id")] = Holding(rs.getString("id"), rs.getString("name"), rs.getString("category"), rs.getString("issuing_country"))
             }
         }
@@ -134,12 +134,7 @@ object JdbcRepository {
         val hasNationalities = hasColumn(c, "visa_benefits", "nationalities")
         val out = HashMap<String, MutableList<Benefit>>()
         c.createStatement().use { st ->
-            val sql = buildString {
-                append("SELECT holding, destination, type, days, entry_type")
-                if (hasResidenceMin) append(", residence_min")
-                if (hasNationalities) append(", nationalities")
-                append(" FROM visa_benefits")
-            }
+            val sql = sqlBenefits(hasResidenceMin, hasNationalities)
             st.executeQuery(sql).use { rs ->
                 while (rs.next()) {
                     val h = rs.getString("holding")
@@ -169,7 +164,7 @@ object JdbcRepository {
     private fun loadStayRules(c: Connection): List<StayRule> {
         val out = mutableListOf<StayRule>()
         c.createStatement().use { st ->
-            st.executeQuery("SELECT * FROM stay_rules").use { rs ->
+            st.executeQuery(SQL_STAY_RULES).use { rs ->
                 val meta = rs.metaData
                 val indices = HashMap<String, Int>()
                 for (i in 1..meta.columnCount) indices[meta.getColumnLabel(i).lowercase()] = i

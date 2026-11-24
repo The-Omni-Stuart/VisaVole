@@ -56,7 +56,7 @@ class VisaRepository(private val db: VisaDb) {
 
     private fun loadCountries(c: android.database.sqlite.SQLiteDatabase): Map<String, Country> {
         val out = HashMap<String, Country>()
-        c.rawQuery("SELECT iso2, name FROM countries", null).use { cur ->
+        c.rawQuery(SQL_COUNTRIES, null).use { cur ->
             while (cur.moveToNext()) out[cur.getString(0)] = Country(cur.getString(0), cur.getString(1))
         }
         return out
@@ -71,10 +71,7 @@ class VisaRepository(private val db: VisaDb) {
         val out = HashMap<String, MutableList<Corridor>>()
         homePassports.toList().chunked(BASELINE_CHUNK).forEach { chunk ->
             val placeholders = chunk.joinToString(",") { "?" }
-            c.rawQuery(
-                "SELECT passport, destination, type, days, valid_to FROM visa_rules WHERE passport IN ($placeholders)",
-                chunk.toTypedArray(),
-            ).use { cur ->
+            c.rawQuery(sqlBaselineChunked(placeholders), chunk.toTypedArray()).use { cur ->
                 while (cur.moveToNext()) {
                     val p = cur.getString(0)
                     val days = if (cur.isNull(3)) null else cur.getInt(3)
@@ -89,7 +86,7 @@ class VisaRepository(private val db: VisaDb) {
 
     private fun loadRegimes(c: android.database.sqlite.SQLiteDatabase): List<Regime> {
         val out = mutableListOf<Regime>()
-        c.rawQuery("SELECT id, name, level, members FROM mobility_regimes", null).use { cur ->
+        c.rawQuery(SQL_REGIMES, null).use { cur ->
             while (cur.moveToNext()) {
                 // shared lenient parser (see parseIso2Array) — identical to the JVM mirror,
                 // so a malformed members string degrades instead of crashing the startup load.
@@ -101,7 +98,7 @@ class VisaRepository(private val db: VisaDb) {
 
     private fun loadHoldings(c: android.database.sqlite.SQLiteDatabase): Map<String, Holding> {
         val out = HashMap<String, Holding>()
-        c.rawQuery("SELECT id, name, category, issuing_country FROM visa_holdings", null).use { cur ->
+        c.rawQuery(SQL_HOLDINGS, null).use { cur ->
             while (cur.moveToNext()) out[cur.getString(0)] = Holding(cur.getString(0), cur.getString(1), cur.getString(2), cur.getString(3))
         }
         return out
@@ -110,12 +107,7 @@ class VisaRepository(private val db: VisaDb) {
     private fun loadBenefits(c: android.database.sqlite.SQLiteDatabase): Map<String, List<Benefit>> {
         val hasResidenceMin = hasColumn(c, "visa_benefits", "residence_min")
         val hasNationalities = hasColumn(c, "visa_benefits", "nationalities")
-        val sql = buildString {
-            append("SELECT holding, destination, type, days, entry_type")
-            if (hasResidenceMin) append(", residence_min")
-            if (hasNationalities) append(", nationalities")
-            append(" FROM visa_benefits")
-        }
+        val sql = sqlBenefits(hasResidenceMin, hasNationalities)
         val out = HashMap<String, MutableList<Benefit>>()
         c.rawQuery(sql, null).use { cur ->
             val natIdx = if (hasNationalities) cur.getColumnIndex("nationalities") else -1
@@ -142,7 +134,7 @@ class VisaRepository(private val db: VisaDb) {
 
     private fun loadStayRules(c: android.database.sqlite.SQLiteDatabase): List<StayRule> {
         val out = mutableListOf<StayRule>()
-        c.rawQuery("SELECT * FROM stay_rules", null).use { cur ->
+        c.rawQuery(SQL_STAY_RULES, null).use { cur ->
             val iZoneName = cur.getColumnIndex("zone_name")
             val iZone = cur.getColumnIndex("zone")
             val iCountries = cur.getColumnIndex("countries")
