@@ -161,7 +161,7 @@ internal const val DIM_ALPHA = 0.35f
 internal val PILL_MAX_WIDTH = 120.dp
 
 /** The one faded treatment for a control present but not acting — tappable where the tap explains. */
-internal fun Modifier.faded(faded: Boolean): Modifier = alpha(if (faded) 1f else DIM_ALPHA)
+internal fun Modifier.faded(faded: Boolean): Modifier = alpha(if (faded) DIM_ALPHA else 1f)
 
 @Composable
 internal fun StatusPill(
