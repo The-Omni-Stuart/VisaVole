@@ -85,7 +85,9 @@ internal fun MainScaffold(
     // Settings is an overlay over the tabs (the app has no navigation graph); it survives
     // process death like the other screen state.
     var showSettings by rememberSaveable { mutableStateOf(false) }
-    val expandedTrips = rememberSaveable { mutableStateListOf<String>() }
+    // Plain remember: mutableStateListOf has no Saver, so a saveable restore hands back a
+    // dead ArrayList whose mutations stop recomposing. Expanded cards may reset on process death.
+    val expandedTrips = remember { mutableStateListOf<String>() }
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(vm) {
         // Feedback buffered while onboarding had the screen belongs to that phase; only
@@ -109,7 +111,7 @@ internal fun MainScaffold(
     val mapCenter = rememberSaveable(saver = MapCenterSaver) { mutableStateOf(defaultCenter(s.geometry)) }
     // rememberLazyListState() is rememberSaveable(saver = LazyListState.Saver) under the hood,
     // so the scroll position survives both the tab switch and process death — the same guarantee
-    // the Phase-C saveable pass gave tab/selected/query/expandedTrips.
+    // the Phase-C saveable pass gave tab/selected/query.
     val docsScroll = rememberLazyListState()
     val tripsScroll = rememberLazyListState()
     Scaffold(
