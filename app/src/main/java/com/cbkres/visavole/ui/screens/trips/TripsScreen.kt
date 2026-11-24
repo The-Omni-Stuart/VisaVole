@@ -150,48 +150,22 @@ internal fun TripsScreen(
                     }
 
 
-                    if (sections.upcoming.isNotEmpty()) {
-                        item(key = "header-upcoming") {
-                            SectionLabel(TripStatus.UPCOMING.label)
-                        }
-
+                    // One loop over the three sections; TripCard only renders the End icon
+                    // for ongoing trips, so a single onEnd handler is safe everywhere.
+                    listOf(
+                        "upcoming" to (TripStatus.UPCOMING to sections.upcoming),
+                        "current" to (TripStatus.ONGOING to sections.current),
+                        "previous" to (TripStatus.PREVIOUS to sections.previous),
+                    ).forEach { (headerKey, section) ->
+                        val (status, trips) = section
+                        if (trips.isEmpty()) return@forEach
+                        item(key = "header-$headerKey") { SectionLabel(status.label) }
                         items(
-                            items = sections.upcoming,
-                            key = { it.id }
+                            items = trips,
+                            key = { it.id },
                         ) { trip ->
                             // Callback identities pinned per trip so cards whose trip did not
                             // change can skip recomposition when the screen republishes.
-                            val onExpand = remember(trip) { { if (trip.stops.size > 1) toggleExpanded(trip.id) } }
-                            val onEdit = remember(trip) { { editingTrip = trip } }
-                            val onDelete = remember(trip) { { deletingTrip = trip } }
-                            TripCard(
-                                trip = trip,
-                                world = ready.world,
-                                docs = ready.docs,
-                                allowances = ready.allowances,
-                                passportCounts = passportCounts,
-                                passportNumbers = passportNumbers,
-                                validHomes = validHomes,
-                                today = today,
-                                expanded = trip.id in expandedTrips,
-                                onExpand = onExpand,
-                                onEdit = onEdit,
-                                onEnd = {},
-                                onDelete = onDelete,
-                                flashTrigger = flashes.countFor(trip.id),
-                            )
-                        }
-                    }
-
-                    if (sections.current.isNotEmpty()) {
-                        item(key = "header-current") {
-                            SectionLabel(TripStatus.ONGOING.label)
-                        }
-
-                        items(
-                            items = sections.current,
-                            key = { it.id }
-                        ) { trip ->
                             val onExpand = remember(trip) { { if (trip.stops.size > 1) toggleExpanded(trip.id) } }
                             val onEdit = remember(trip) { { editingTrip = trip } }
                             val onEnd = remember(trip) { { endingTrip = trip } }
@@ -215,36 +189,6 @@ internal fun TripsScreen(
                         }
                     }
 
-                    if (sections.previous.isNotEmpty()) {
-                        item(key = "header-previous") {
-                            SectionLabel(TripStatus.PREVIOUS.label)
-                        }
-
-                        items(
-                            items = sections.previous,
-                            key = { it.id }
-                        ) { trip ->
-                            val onExpand = remember(trip) { { if (trip.stops.size > 1) toggleExpanded(trip.id) } }
-                            val onEdit = remember(trip) { { editingTrip = trip } }
-                            val onDelete = remember(trip) { { deletingTrip = trip } }
-                            TripCard(
-                                trip = trip,
-                                world = ready.world,
-                                docs = ready.docs,
-                                allowances = ready.allowances,
-                                passportCounts = passportCounts,
-                                passportNumbers = passportNumbers,
-                                validHomes = validHomes,
-                                today = today,
-                                expanded = trip.id in expandedTrips,
-                                onExpand = onExpand,
-                                onEdit = onEdit,
-                                onEnd = {},
-                                onDelete = onDelete,
-                                flashTrigger = flashes.countFor(trip.id),
-                            )
-                        }
-                    }
                 } else {
                     item(key = "empty") {
                         EmptyState(
