@@ -145,6 +145,9 @@ internal fun WorldMapCanvas(
             )
         }
     }
+    // Label placement wants big-first, but the fill loop above must keep insertion order so an
+    // enclave (Lesotho) is painted after its surround — so the sort lives here, once.
+    val labelOrder = remember(drawShapes) { drawShapes.sortedByDescending { it.bbox.w } }
     val latestOnTap by rememberUpdatedState(onCountryTap)
     val latestInset by rememberUpdatedState(centeringInsetNow)
     val latestSelected by rememberUpdatedState(selected)
@@ -213,7 +216,7 @@ internal fun WorldMapCanvas(
     val labelStyle = remember { TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium) }
     val labelLayouts = remember { mutableMapOf<String, androidx.compose.ui.text.TextLayoutResult>() }
     fun layoutFor(text: String) = labelLayouts.getOrPut(text) { textMeasurer.measure(text, labelStyle) }
-    val mapDraw: DrawScope.() -> Unit = remember(geometry, drawShapes, selected, canvasSize, zoom, centerWorld, ocean, textMeasurer, labelStyle) {
+    val mapDraw: DrawScope.() -> Unit = remember(geometry, drawShapes, labelOrder, selected, canvasSize, zoom, centerWorld, ocean, textMeasurer, labelStyle) {
         {
             drawRect(ocean)
             val ds = if (canvasSize.width > 0f) canvasSize else size
@@ -257,7 +260,7 @@ internal fun WorldMapCanvas(
                 return Rect(x - measured.size.width / 2f - 4f, y - measured.size.height / 2f - 2f,
                     x + measured.size.width / 2f + 4f, y + measured.size.height / 2f + 2f)
             }
-            for (s in drawShapes.sortedByDescending { it.bbox.w }) {
+            for (s in labelOrder) {
                 val anchor = s.labelAnchor ?: continue
                 val preferred = mapLabel(s.iso, geometry.countries[s.iso]?.name ?: s.iso, s.bbox.w * sc, zoom) ?: continue
                 val x = tx + anchor.x * sc

@@ -25,10 +25,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.cbkres.visavole.domain.Access
 import com.cbkres.visavole.domain.AccessModel
 import com.cbkres.visavole.domain.DocStatus
 import com.cbkres.visavole.domain.Document
@@ -101,10 +105,15 @@ internal fun StopEditorDialog(
         AccessModel.validHomeCountries(docs, world, stop.arrival, statuses = statuses)
     }
     val rule = world.stayRuleFor(stop.countryIso2, validHomes, stop.arrival)
-    // One whole-world compute per date: picking another country indexes this map instead of
-    // re-running the access model.
-    val accessByCountry = remember(docs, world, stop.arrival, trips, statuses) {
-        AccessModel.compute(docs, world, stop.arrival, trips, statuses)
+    // One whole-world compute per date, off the UI thread: picking another country indexes this
+    // map instead of re-running the access model. Null briefly while a new date's compute runs.
+    val accessByCountry by produceState(
+        initialValue = emptyMap<String, Access>(),
+        docs, world, stop.arrival, trips, statuses,
+    ) {
+        value = withContext(Dispatchers.Default) {
+            AccessModel.compute(docs, world, stop.arrival, trips, statuses)
+        }
     }
     val stopAccess = accessByCountry[stop.countryIso2]
     val accessWarning = TripModel.accessWarningFor(
