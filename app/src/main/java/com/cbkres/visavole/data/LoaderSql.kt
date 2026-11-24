@@ -1,5 +1,8 @@
 package com.cbkres.visavole.data
 
+/** Chunk size for the passport-filtered baseline query; SQLite's variable limit is 999. */
+internal const val BASELINE_CHUNK = 500
+
 // The dataset-load SQL shared by both loaders ([VisaRepository], [JdbcRepository]) so the two
 // mirrors read exactly the same columns; the freshness probes live in [FreshnessSql.kt].
 

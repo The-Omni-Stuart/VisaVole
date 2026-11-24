@@ -5,7 +5,6 @@ import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripModel
 import com.cbkres.visavole.domain.WorldData
 
-/** Only multi-stop trips have a detail section for a ring tap to open. */
 /** The trip a zone ring should centre on: its active trip, else the most recent past/current one. */
 internal fun ringTargetTrip(
     zone: AllowanceSnapshot,

@@ -16,8 +16,6 @@ enum class ExpiryReason {
     /** A newer document of the same country/category superseded it ([Document.supersededBy]). */
     SUPERSEDED,
 
-    /** Its allowed time frame was used up. Design slot: needs the not-yet-built `maxDays` field. */
-    TIMEFRAME,
 }
 
 /**

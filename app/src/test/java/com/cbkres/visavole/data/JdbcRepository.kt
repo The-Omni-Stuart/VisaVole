@@ -15,9 +15,6 @@ import java.sql.DriverManager
 import java.time.LocalDate
 import java.time.ZoneOffset
 
-/** Chunk size for the passport-filtered baseline query; SQLite's variable limit is 999. */
-internal const val BASELINE_CHUNK = 500
-
 /**
  * JVM mirror of [VisaRepository]: loads the same [WorldData] from a SQLite file via JDBC
  * (xerial sqlite-jdbc), running the identical queries so unit tests validate the real schema.
