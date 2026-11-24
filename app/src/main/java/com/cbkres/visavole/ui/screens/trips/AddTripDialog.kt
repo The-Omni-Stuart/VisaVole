@@ -266,7 +266,7 @@ internal fun AddTripDialog(
         splitTrips = tripsAfterSplit(judgedTrips, leftTrip, replacedExisting = isEditingExisting)
         vm.snackMessage("First half saved — the rest continues as a new trip")
         stops = rightStops
-        note = rightNote ?: ""
+        note = "" // the first half keeps the note; the continuation starts fresh (audit L29)
         currentTripId = UUID.randomUUID().toString()
         isEditingExisting = false
         editingStopId = null
