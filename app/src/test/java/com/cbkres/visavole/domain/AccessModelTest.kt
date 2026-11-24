@@ -39,6 +39,14 @@ class AccessModelTest {
         stayRules: List<StayRule> = emptyList(),
     ) = WorldData(emptyMap(), baseline, regimes, holdings, benefits, stayRules)
 
+    @Test fun corridorThatLapsedSinceLoadIsNotOffered() {
+        // A warm app keeps the in-memory dataset across the expiry date, so the consumer must
+        // drop the lapsed grant even though the loader had kept it in.
+        val lapsed = Corridor("GB", "AU", "visa-free", 90, validTo = "2026-09-07")
+        val w = world(baseline = mapOf("GB" to listOf(lapsed)))
+        assertNull(AccessModel.compute(listOf(doc("p", Passport("GB"))), w, today = today)["AU"])
+    }
+
     @Test fun ownCountryIsFreedom() {
         val w = world(baseline = mapOf("CZ" to listOf(corridor("CZ", "DE", "visa-free", 90))))
         assertEquals(FREEDOM, AccessModel.compute(listOf(doc("p", Passport("CZ"))), w, today = today)["CZ"]!!.level)

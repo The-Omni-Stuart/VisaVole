@@ -127,12 +127,14 @@ object AccessModel {
     /**
      * Candidates from a passport: baseline corridors + bloc freedom/visa-free + own country.
      * An [expired] passport keeps its home country and freedom-of-movement bloc(s) but drops its
-     * baseline visa corridors and its visa-free blocs.
+     * baseline visa corridors and its visa-free blocs. Corridors are re-checked against [today]
+     * here, not just at load: the in-memory dataset otherwise outlives a grant's valid_to.
      */
-    private fun passportCandidates(home: String, world: WorldData, expired: Boolean): Map<String, Access> {
+    private fun passportCandidates(home: String, world: WorldData, expired: Boolean, today: LocalDate): Map<String, Access> {
         val map = LinkedHashMap<String, Access>()
         if (!expired) {
             for (c in world.baseline[home].orEmpty()) {
+                if (!grantValidOn(null, c.validTo, today)) continue
                 merge(map, c.destination, Access(AccessLevel.fromBaselineType(c.type), c.days, AccessReason.PassportBaseline))
             }
         }
@@ -153,8 +155,8 @@ object AccessModel {
      * country and any freedom-of-movement bloc it belongs to. Used by the `trip.passport.*` guard
      * rules to decide whether an expired passport can still support a trip.
      */
-    fun expiredPassportFreedomSet(home: String, world: WorldData): Set<String> =
-        passportCandidates(home, world, expired = true).keys
+    fun expiredPassportFreedomSet(home: String, world: WorldData, today: LocalDate): Set<String> =
+        passportCandidates(home, world, expired = true, today = today).keys
 
     /** Candidates from a held document (residence / visa / permit / custom). [homeNats] is the set
      *  of passport nationalities the traveller holds, used to gate nationality-restricted benefits. */
@@ -266,12 +268,13 @@ object AccessModel {
         docs: List<Document>,
         world: WorldData,
         statuses: Map<String, DocStatus>,
+        today: LocalDate,
     ): Map<String, Map<String, Access>> {
         // Nationality gates resolve over every passport — citizenship does not expire.
         val homeNats = homeCountries(docs)
         return docs.associate { doc ->
             val candidates = when (val k = doc.kind) {
-                is Passport -> passportCandidates(k.iso2, world, statuses[doc.id]?.expired == true)
+                is Passport -> passportCandidates(k.iso2, world, statuses[doc.id]?.expired == true, today)
                 else -> documentCandidates(doc, world, homeNats)
             }
             doc.id to candidates
@@ -319,7 +322,7 @@ object AccessModel {
             .filter { d -> d.kind is Passport || (!isExpired(d, docs, world, today, trips) && !notYetValid(d, today)) }
             .map { d ->
                 val candidates = when (val k = d.kind) {
-                    is Passport -> passportCandidates(k.iso2, world, isExpired(d, docs, world, today, trips))
+                    is Passport -> passportCandidates(k.iso2, world, isExpired(d, docs, world, today, trips), today)
                     else -> documentCandidates(d, world, homeCountries(docs))
                 }
                 val label = when (val k = d.kind) {
@@ -358,7 +361,7 @@ object AccessModel {
             val expired = isExpired(d, docs, world, today, trips)
             if (d.kind !is Passport && (expired || notYetValid(d, today))) return@filter false
             val candidates = when (val k = d.kind) {
-                is Passport -> passportCandidates(k.iso2, world, expired)
+                is Passport -> passportCandidates(k.iso2, world, expired, today)
                 else -> documentCandidates(d, world, homeCountries(docs))
             }
             (candidates[dest]?.level ?: UNKNOWN) != UNKNOWN
@@ -440,7 +443,7 @@ object AccessModel {
                 if (doc.kind !is Passport && !ignoreExpiry && unusableOf(doc, docs, world, today, trips, statuses)) return@mapNotNull null
                 val candidates = candidateMaps?.get(doc.id)
                     ?: when (val k = doc.kind) {
-                        is Passport -> passportCandidates(k.iso2, world, expired)
+                        is Passport -> passportCandidates(k.iso2, world, expired, today)
                         else -> documentCandidates(doc, world, homeNats)
                     }
                 candidates[dest]?.takeIf { it.level != UNKNOWN }?.let { doc to it }
@@ -525,7 +528,7 @@ object AccessModel {
             when (val k = doc.kind) {
                 is Passport -> {
                     // Pure best-of across passports; an expired one still grants home + freedom blocs.
-                    for ((dest, access) in passportCandidates(k.iso2, world, expiredOf(doc, docs, world, today, trips, statuses))) {
+                    for ((dest, access) in passportCandidates(k.iso2, world, expiredOf(doc, docs, world, today, trips, statuses), today)) {
                         merge(result, dest, access)
                     }
                 }

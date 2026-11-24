@@ -17,9 +17,14 @@ class VisaDbFreshnessTest {
 
     private fun bundledDb(): File = File("src/main/assets/visa_data.db")
 
+    // The upstream guarantee is relative to the asset's build date, not the run date: rows
+    // that were future at build time may lapse while the asset sits in the repo, and the app
+    // is built to display those. Probing against now() turns the suite red on that date.
+    private fun buildDate(): String = JdbcRepository.load(bundledDb()).visaDbMeta.generated
+
     @Test
     fun noBundledStayRuleCarriesALapsedExpiry() {
-        val today = LocalDate.now(ZoneOffset.UTC).toString()
+        val today = buildDate()
         DriverManager.getConnection("jdbc:sqlite:" + bundledDb().absolutePath).use { c ->
             c.prepareStatement("SELECT id, valid_to FROM stay_rules WHERE valid_to IS NOT NULL AND valid_to < ?").use { ps ->
                 ps.setString(1, today)
@@ -37,7 +42,7 @@ class VisaDbFreshnessTest {
     fun bundledDbReadsBackFreshnessMeta() {
         // The audit dates are stamped by the upstream build, so pin the shape and the ordering rather
         // than one build's calendar — literal dates fail the suite on every legitimate asset refresh.
-        val meta = JdbcRepository.load(bundledDb()).visaDbMeta
+        val meta = JdbcRepository.load(bundledDb(), today = LocalDate.parse(buildDate())).visaDbMeta
         val generated = LocalDate.parse(meta.generated)
         val verified = LocalDate.parse(meta.rulesVerifiedAt)
         val review = LocalDate.parse(meta.nextReview)

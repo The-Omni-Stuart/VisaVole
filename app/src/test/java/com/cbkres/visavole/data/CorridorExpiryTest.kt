@@ -71,7 +71,11 @@ class CorridorExpiryTest {
     @Test
     fun noBundledCorridorCarriesALapsedExpiry() {
         val asset = File("src/main/assets/visa_data.db")
-        val meta = JdbcRepository.load(asset).visaDbMeta
+        // The upstream guarantee is relative to the asset's build date: a corridor that was
+        // future at build time may lapse while the asset sits in the repo, and the app is
+        // built to display those. Probing against now() turns the suite red on that date.
+        val generated = LocalDate.parse(JdbcRepository.load(asset).visaDbMeta.generated)
+        val meta = JdbcRepository.load(asset, today = generated).visaDbMeta
         assertEquals("the upstream build refuses lapsed rows, so none may reach the asset", 0, meta.lapsedCorridors)
         java.sql.DriverManager.getConnection("jdbc:sqlite:" + asset.absolutePath).use { c ->
             c.createStatement().use { st ->

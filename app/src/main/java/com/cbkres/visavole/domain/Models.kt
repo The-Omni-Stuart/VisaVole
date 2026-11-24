@@ -239,7 +239,7 @@ data class WorldData(
             ?.takeIf { score(it.nationalities) > 0 }
         if (explicit != null) return explicit
         if (!allowSynthetic) return null
-        return baselineSyntheticStayRuleFor(dest, passports)
+        return baselineSyntheticStayRuleFor(dest, passports, today)
     }
 
     fun syntheticStayRuleFor(dest: String, days: Int): StayRule? {
@@ -258,10 +258,11 @@ data class WorldData(
         )
     }
 
-    private fun baselineSyntheticStayRuleFor(dest: String, passports: Set<String>): StayRule? {
+    private fun baselineSyntheticStayRuleFor(dest: String, passports: Set<String>, today: LocalDate): StayRule? {
         val days = passports
             .flatMap { baseline[it].orEmpty() }
-            .filter { it.destination == dest && (it.type == "visa-free" || it.type == "visa-on-arrival") }
+            .filter { it.destination == dest && (it.type == "visa-free" || it.type == "visa-on-arrival") &&
+                grantValidOn(null, it.validTo, today) }
             .maxOfOrNull { it.days ?: 0 }
             ?: return null
         return syntheticStayRuleFor(dest, days)

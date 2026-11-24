@@ -1,6 +1,7 @@
 package com.cbkres.visavole.domain
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import java.time.LocalDate
 
@@ -37,6 +38,17 @@ class StayRuleChoiceTest {
 
     private fun chosen(vararg rules: StayRule) =
         world(*rules).stayRuleFor("DE", setOf("US"), today, allowSynthetic = false)?.id
+
+    @Test
+    fun syntheticRuleIsNotMintedFromALapsedCorridor() {
+        val lapsed = Corridor("US", "DE", "visa-free", 90, validTo = "2026-11-18")
+        val w = WorldData(
+            mapOf("DE" to Country("DE", "Germany")),
+            mapOf("US" to listOf(lapsed)),
+            emptyList(), emptyMap(), emptyMap(), emptyList(),
+        )
+        assertNull(w.stayRuleFor("DE", setOf("US"), today))
+    }
 
     @Test
     fun aTieBetweenTwoWildcardRowsIsNotDecidedByRowOrder() {

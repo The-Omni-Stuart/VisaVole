@@ -721,7 +721,7 @@ object GuardEngine {
                 val k = p.kind
                 if (k !is DocKind.Passport) return false
                 val pe = expiryOf(p) ?: return true
-                return !pe.isBefore(start) || stop.countryIso2 in AccessModel.expiredPassportFreedomSet(k.iso2, ctx.world)
+                return !pe.isBefore(start) || stop.countryIso2 in AccessModel.expiredPassportFreedomSet(k.iso2, ctx.world, ctx.today)
             }
             val uncovered = candidate.stops.firstOrNull { s -> passports.none { supports(it, s) } }
             if (uncovered != null) {

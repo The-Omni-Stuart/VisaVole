@@ -506,7 +506,7 @@ internal fun deriveReady(input: PublishedInputs): AppState.Ready {
     val calc = if (homeCountries.isNotEmpty()) TripModel.calculate(
         trips, docs, world, today, statuses = statuses,
         access = access,
-        candidateMaps = AccessModel.candidateMaps(docs, world, statuses),
+        candidateMaps = AccessModel.candidateMaps(docs, world, statuses, today),
     )
     else TripCalculation(TripSections(emptyList(), emptyList(), emptyList()), emptyList(), emptyMap())
     // Removal verdicts, derived here so the documents screen never re-runs the guard per
