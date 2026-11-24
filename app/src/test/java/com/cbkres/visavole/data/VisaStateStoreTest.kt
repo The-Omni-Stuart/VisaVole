@@ -11,6 +11,7 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -57,7 +58,7 @@ class VisaStateStoreTest {
 
     @Test
     fun savedStateLoadsBackUnchanged() {
-        store.save(fullState)
+        assertTrue("an open store must accept the snapshot", store.save(fullState))
 
         assertTrue("the saved state never reached disk", awaitUntil { diskContains(fullState) })
         assertEquals(fullState, store.load()?.state)
@@ -160,7 +161,8 @@ class VisaStateStoreTest {
         assertTrue("an unreadable file must not be moved", stateFile.isDirectory)
         assertTrue("a read failure must not leave quarantine files behind",
                    dir.listFiles { f: File -> f.name.contains(".corrupt-") }.orEmpty().isEmpty())
-        store.save(PersistedState(primaryDocId = null, docs = emptyList(), trips = emptyList()))
+        assertFalse("a blocked store must report the refusal so the UI can say so",
+                    store.save(PersistedState(primaryDocId = null, docs = emptyList(), trips = emptyList())))
         assertTrue("persisting must stay blocked while the state path is unusable",
                    stateFile.isDirectory && stateFile.listFiles().orEmpty().isEmpty())
     }

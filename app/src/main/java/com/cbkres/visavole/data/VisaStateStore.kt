@@ -1,5 +1,7 @@
 package com.cbkres.visavole.data
 
+import android.system.Os
+import android.system.OsConstants
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -8,7 +10,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.RandomAccessFile
 
 /** [VisaStateStore.load]'s result: the file's [state] plus [droppedRecords] records it could not read. */
 data class LoadedState(val state: PersistedState, val droppedRecords: Int)
@@ -126,14 +127,15 @@ internal class VisaStateStore(
     /**
      * Queues [state] for writing. Both encoding and the disk write run on the ordered IO writer,
      * so the caller's thread does neither; [state] is an immutable snapshot, so encoding it later
-     * serializes exactly this moment's content.
+     * serializes exactly this moment's content. False when nothing was queued (persisting is
+     * disabled), so callers can tell the user their change is memory-only.
      */
-    fun save(state: PersistedState) {
+    fun save(state: PersistedState): Boolean {
         if (stateFileBlocked) {
             Log.e(TAG, "Refusing to persist: unreadable state file $file still present (overwriting it would lose the user's data)")
-            return
+            return false
         }
-        persistQueue.trySend(state)
+        return persistQueue.trySend(state).isSuccess
     }
 
     /** Ordered IO writer: encode one snapshot, then tmp-write + atomic rename it. */
@@ -207,14 +209,16 @@ internal class VisaStateStore(
         /** Flush a file's bytes (or a directory's entries) to durable storage. */
         private fun fsync(f: File) {
             try {
-                RandomAccessFile(f, "r").use { it.fd.sync() }
-            } catch (e: Exception) {
-                // ext4 refuses O_RDONLY directory fds; reopen for writing to get a syncable one.
+                // O_RDONLY is the only way to open a directory fd and fsync accepts it;
+                // RandomAccessFile refuses directories outright, so the old path never synced one.
+                val fd = Os.open(f.absolutePath, OsConstants.O_RDONLY, 0)
                 try {
-                    RandomAccessFile(f, "rw").use { it.fd.sync() }
-                } catch (e2: Exception) {
-                    Log.w(TAG, "Could not fsync $f", e2)
+                    Os.fsync(fd)
+                } finally {
+                    Os.close(fd)
                 }
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not fsync $f", e)
             }
         }
     }

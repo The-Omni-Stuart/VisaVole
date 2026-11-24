@@ -442,9 +442,12 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         trips = state.trips.toMutableList()
         primaryDocId = state.primaryDocId
         ensurePrimaryPassport()
-        persist()
+        val queued = persist()
         reloadWorldAndPublish()
-        snack("Backup restored.")
+        snack(
+            if (queued) "Backup restored."
+            else "Restored in memory only — saving is disabled (unreadable state file).",
+        )
         // decode already counted any unreadable records during importFrom (M6): the user must
         // know the restored set is smaller than the file appeared to hold before editing it.
         if (restoreDroppedRecords > 0) snackUnreadableRecords(restoreDroppedRecords)
@@ -463,9 +466,8 @@ class AccessViewModel(app: Application) : AndroidViewModel(app) {
         trips = trips.toList(),
     )
 
-    private fun persist() {
-        stateStore.save(snapshot())
-    }
+    /** False when the store refused the snapshot (persisting disabled) — memory-only edit. */
+    private fun persist(): Boolean = stateStore.save(snapshot())
 
     companion object {
         private const val TAG = "AccessViewModel"
