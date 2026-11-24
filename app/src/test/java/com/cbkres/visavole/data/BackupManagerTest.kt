@@ -1,5 +1,6 @@
 package com.cbkres.visavole.data
 
+import com.cbkres.visavole.data.BackupManager.Companion.MAX_IMPORT_BYTES
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.Document
 import kotlinx.coroutines.CoroutineScope
@@ -8,6 +9,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -17,12 +19,8 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
 
-/**
- * Tests for the backup export body at its JVM-testable seam — [writeBackupJson], the function
- * [BackupManager.exportTo] writes through. ContentResolver/Uri need a device, so these pin the
- * load-bearing contract: a backup is always the live state handed in, never whatever the state
- * file happens to hold.
- */
+/** Tests for the backup bodies at their JVM-testable seams — [writeBackupJson] and
+ *  [readBackupJson] — pinning that exports carry the live state and bad imports are refused. */
 class BackupManagerTest {
 
     private lateinit var dir: File
@@ -82,6 +80,39 @@ class BackupManagerTest {
             StateCodec.decode(backup).state,
         )
         assertEquals("the export must not have read (or rewritten) the state file", oldState, diskState())
+    }
+
+    @Test
+    fun importReadsBackWhatExportWrote() {
+        val backup = ByteArrayOutputStream().also { writeBackupJson(newState, it) }.toByteArray()
+
+        val (state, dropped) = readBackupJson(backup.inputStream())
+
+        assertEquals(newState, state)
+        assertEquals(0, dropped)
+    }
+
+    @Test
+    fun importToleratesAByteOrderMark() {
+        val backup = "\uFEFF" + StateCodec.encode(newState)
+
+        val (state, _) = readBackupJson(backup.byteInputStream())
+
+        assertEquals("a BOM from a desktop editor must not break the import", newState, state)
+    }
+
+    @Test
+    fun importRefusesAFilePastTheCap() {
+        // The picker can offer any file on the device; the cap must trip while streaming, not
+        // after buffering a whole video.
+        val huge = ByteArray(MAX_IMPORT_BYTES + 1)
+
+        assertThrows(BackupTooLargeException::class.java) { readBackupJson(huge.inputStream()) }
+    }
+
+    @Test
+    fun importRefusesGarbage() {
+        assertThrows(Exception::class.java) { readBackupJson("not json".byteInputStream()) }
     }
 
     /** Decodes the state file straight off disk (bypasses load(), which quarantines). */

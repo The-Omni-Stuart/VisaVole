@@ -5,6 +5,7 @@ import android.net.Uri
 import com.cbkres.visavole.data.BackupManager.Companion.MAX_IMPORT_BYTES
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
 import java.io.OutputStream
 
 /**
@@ -67,26 +68,13 @@ class BackupManager(context: Context) {
     fun importFrom(uri: Uri): Outcome = try {
         val stream = appContext.contentResolver.openInputStream(uri)
             ?: return Outcome.Failed("Could not open the backup file.")
-        val text = stream.use { input ->
-            val bytes = ByteArrayOutputStream()
-            val buffer = ByteArray(8192)
-            var total = 0
-            while (true) {
-                val read = input.read(buffer)
-                if (read < 0) break
-                total += read
-                if (total > MAX_IMPORT_BYTES) {
-                    return Outcome.Failed(
-                        "That file is larger than ${MAX_IMPORT_BYTES / (1024 * 1024)} MB, " +
-                            "so it can't be a Visa Vole backup.",
-                    )
-                }
-                bytes.write(buffer, 0, read)
-            }
-            bytes.toString(Charsets.UTF_8.name())
-        }
-        val decoded = StateCodec.decode(text.removePrefix("\uFEFF"))
-        Outcome.Imported(uri, decoded.state, decoded.droppedRecords)
+        val (state, dropped) = readBackupJson(stream)
+        Outcome.Imported(uri, state, dropped)
+    } catch (e: BackupTooLargeException) {
+        Outcome.Failed(
+            "That file is larger than ${MAX_IMPORT_BYTES / (1024 * 1024)} MB, " +
+                "so it can't be a Visa Vole backup.",
+        )
     } catch (e: Exception) {
         Outcome.Failed("That file does not look like a Visa Vole backup.")
     }
@@ -107,4 +95,24 @@ class BackupManager(context: Context) {
  */
 internal fun writeBackupJson(state: PersistedState, sink: OutputStream) {
     sink.use { it.write(StateCodec.encode(state).toByteArray()) }
+}
+
+/** Thrown by [readBackupJson] once the stream passes [BackupManager.MAX_IMPORT_BYTES]. */
+internal class BackupTooLargeException : Exception()
+
+/** Read + validate backup JSON from [input] — the body of [BackupManager.importFrom], split out
+ *  so the size cap, BOM tolerance and garbage path are testable without a ContentResolver. */
+internal fun readBackupJson(input: InputStream): Pair<PersistedState, Int> = input.use { stream ->
+    val bytes = ByteArrayOutputStream()
+    val buffer = ByteArray(8192)
+    var total = 0
+    while (true) {
+        val read = stream.read(buffer)
+        if (read < 0) break
+        total += read
+        if (total > MAX_IMPORT_BYTES) throw BackupTooLargeException()
+        bytes.write(buffer, 0, read)
+    }
+    val decoded = StateCodec.decode(bytes.toString(Charsets.UTF_8.name()).removePrefix("\uFEFF"))
+    decoded.state to decoded.droppedRecords
 }
