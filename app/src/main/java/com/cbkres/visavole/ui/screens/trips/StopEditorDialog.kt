@@ -72,6 +72,7 @@ internal fun StopEditorDialog(
     var stop by rememberSaveable { mutableStateOf(initial) }
     var countryQuery by rememberSaveable { mutableStateOf("") }
     var docTouched by rememberSaveable { mutableStateOf(initial.documentId != null) }
+    var droppedDocFor by rememberSaveable { mutableStateOf<String?>(null) }
     var showArrival by remember { mutableStateOf(false) }
     var showDeparture by remember { mutableStateOf(initiallyEditingDeparture) }
     var pendingAccessWarning by remember { mutableStateOf<TripWarning?>(null) }
@@ -83,7 +84,10 @@ internal fun StopEditorDialog(
         }
     }
     LaunchedEffect(stop, docs, carryDocumentId) {
-        if (docTouched) return@LaunchedEffect
+        val held = stop.documentId
+        // A touched document sticks only while it still covers the country; a country change
+        // re-points it (or drops it, with a word), so the gate can never be one that can't gate.
+        if (docTouched && (held == null || relevantDocs.any { it.id == held })) return@LaunchedEffect
         val preferred = AccessModel.autoSelectDocumentId(
             stop.countryIso2, docs, world, stop.arrival,
             carriedId = carryDocumentId, primaryId = primaryDocId, trips,
@@ -91,6 +95,7 @@ internal fun StopEditorDialog(
         if (preferred != stop.documentId) {
             stop = stop.copy(documentId = preferred)
         }
+        if (docTouched && held != null && preferred == null) droppedDocFor = stop.countryIso2
     }
     val validHomes = remember(docs, world, stop.arrival, statuses) {
         AccessModel.validHomeCountries(docs, world, stop.arrival, statuses = statuses)
@@ -242,6 +247,18 @@ internal fun StopEditorDialog(
                 stop = stop.copy(departure = null); showDeparture = false
             }) else null,
             minDate = stop.arrival,
+        )
+    }
+    droppedDocFor?.let { iso ->
+        VoleAlertDialog(
+            title = "No covering document",
+            confirmLabel = "OK",
+            onConfirm = { droppedDocFor = null },
+            dismissLabel = null,
+            onDismiss = { droppedDocFor = null },
+            content = {
+                Text("None of your documents cover ${world.countries[iso]?.name ?: iso}, so this stop keeps no document — its stay will show as \"no valid document\".")
+            },
         )
     }
     pendingAccessWarning?.let { w ->
