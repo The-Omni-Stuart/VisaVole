@@ -23,11 +23,11 @@ object WorldGeometry {
     fun load(context: Context): WorldMapData {
         val bytes = context.assets.open("world_robinson.bin").use { it.readBytes() }
         val buf = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
-        require(buf.getInt() == MAGIC) { "bad world_robinson.bin magic" }
         // a corrupt/tampered asset must degrade to an empty map, never crash startup. Every
         // structural int is bounds-checked against the remaining buffer before it sizes an array,
         // and any BufferUnderflow (a truncated asset) falls back to the empty map.
         return try {
+            if (buf.getInt() != MAGIC) return empty(0, 0)
             val width = buf.getInt().coerceIn(0, MAX_DIM)
             val height = buf.getInt().coerceIn(0, MAX_DIM)
             val count = buf.getInt()
