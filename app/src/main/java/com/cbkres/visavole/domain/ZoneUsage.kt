@@ -169,17 +169,9 @@ internal fun zoneSnapshot(
                 !it.arrival.isAfter(asOf) &&
                 (it.departure == null || !it.departure.isBefore(asOf))
         }
-    // An open future stop has no departure, so its figure is evaluated at its arrival instead.
-    val futureStop = trips.asSequence()
-        .flatMap { it.stops.asSequence() }
-        .filter { it.countryIso2 in zoneCountries && it.arrival.isAfter(asOf) }
-        .minByOrNull { it.arrival }
-    val projection = futureStop?.let { stop ->
-        val segments = usage.segments + ZoneSegment(stop.arrival, stop.departure ?: stop.arrival)
-        rule.windowDays?.let { total ->
-            remainingOn(rule, segments, stop.arrival)?.let { AllowanceProjection(stop.arrival, it, total) }
-        }
-    }
+    // Parked for the alpha-5 projected-allowance screen (audit M1); no screen read it. The
+    // computation — future open stops evaluated at their arrival — is in git next to its test.
+    val projection: AllowanceProjection? = null
     return AllowanceSnapshot(
         key = key,
         title = title,

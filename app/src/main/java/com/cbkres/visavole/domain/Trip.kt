@@ -98,7 +98,7 @@ enum class AllowanceStatus {
 data class Recovery(
     /** First date a used day has left the window. */
     val firstSliceBackOn: LocalDate,
-    /** From this date the allowance is whole again. */
+    /** From this date the allowance is whole again. Display parked for the alpha-5 screen (L13). */
     val wholeAgainOn: LocalDate,
     /** Days consumed today. Never more than [totalDays]. */
     val daysBack: Int,

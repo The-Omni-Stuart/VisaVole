@@ -168,17 +168,15 @@ class AllowanceRecoveryTest {
     }
 
     @Test
-    fun projectionIsEvaluatedAtAFutureOpenStopsArrival() {
-        // An open future stop has a known arrival but no departure: the figure is for that date.
+    fun projectionIsParked() {
+        // Parked for the alpha-5 projected-allowance screen (audit M1); this pins the parked
+        // state so a stale half-computation cannot return. Git history holds the value checks.
         val arrival = LocalDate.of(2027, 4, 1)
         val trip = Trip("t", listOf(TripStop("s", "DE", arrival, null)))
         val snapshot = zoneSnapshot(
             "stay:test", usageOf(rolling, segments), world(), today,
             docs = emptyList(), trips = listOf(trip), statuses = emptyMap(),
         )!!
-        assertEquals(arrival, snapshot.projection?.on)
-        assertEquals("the old stays are outside the window by then, the new stop costs one day",
-            29, snapshot.projection?.remainingDays)
-        assertEquals(30, snapshot.projection?.totalDays)
+        assertNull("parked for the alpha-5 screen (audit M1)", snapshot.projection)
     }
 }
