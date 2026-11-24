@@ -693,12 +693,14 @@ object GuardEngine {
         val daysUntil = ChronoUnit.DAYS.between(ctx.today, expiry)
         when {
             daysUntil in 1..92 -> findings += GuardFinding(
-                "trip.passport.expiringSoon3", GuardSeverity.WARN, "Passport expiring soon",
-                "Your $name passport expires on $expiry (${daysUntil} days from now).",
+                "trip.passport.expiringSoon3", GuardSeverity.WARN, "Passport expires within 3 months",
+                "Your $name passport expires on $expiry (${daysUntil} days from now). Many countries " +
+                    "want six months of validity beyond your stay — renew before you book.",
             )
             daysUntil in 93..183 -> findings += GuardFinding(
-                "trip.passport.expiringSoon6", GuardSeverity.WARN, "Passport expiring soon",
-                "Your $name passport expires on $expiry (${daysUntil} days from now).",
+                "trip.passport.expiringSoon6", GuardSeverity.WARN, "Passport expires within 6 months",
+                "Your $name passport expires on $expiry (${daysUntil} days from now). Some countries " +
+                    "want six months of validity beyond your stay — double-check your destination.",
             )
         }
         // use `!expiry.isBefore(start)` (expiry >= start) so a passport expiring exactly on
