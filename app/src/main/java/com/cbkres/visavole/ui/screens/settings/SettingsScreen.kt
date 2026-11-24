@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -55,11 +56,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.text
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.createBitmap
@@ -71,6 +67,7 @@ import com.cbkres.visavole.domain.FreshnessLevel
 import com.cbkres.visavole.domain.freshnessFor
 import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.HazeBox
+import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.app.AppState
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import com.cbkres.visavole.ui.screens.map.Severity
@@ -367,10 +364,12 @@ private fun DataBuildFooter(ready: AppState.Ready) {
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Pill(
-                    label = pills.buildLabel,
-                    labelColour = MaterialTheme.colorScheme.onSurfaceVariant,
-                    containerColour = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.10f),
+                StatusPill(
+                    text = pills.buildLabel,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    alpha = 0.10f,
+                    fontWeight = MaterialTheme.typography.labelSmall.fontWeight,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
                     leading = {
                         Box(
                             Modifier
@@ -386,10 +385,12 @@ private fun DataBuildFooter(ready: AppState.Ready) {
             }
             pills.warningLabel?.let { label ->
                 // The pill text is compact ("2 lapsed"); the announcement spells the counts out.
-                Pill(
-                    label = label,
-                    labelColour = warnText,
-                    containerColour = warnText.copy(alpha = 0.12f),
+                StatusPill(
+                    text = label,
+                    color = warnText,
+                    alpha = 0.12f,
+                    fontWeight = MaterialTheme.typography.labelSmall.fontWeight,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
                     leading = {
                         Icon(
                             Icons.Filled.Warning,
@@ -407,42 +408,6 @@ private fun DataBuildFooter(ready: AppState.Ready) {
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun Pill(
-    label: String,
-    labelColour: Color,
-    containerColour: Color,
-    a11yLabel: String,
-    leading: @Composable (() -> Unit)? = null,
-    onClick: (() -> Unit)? = null,
-    onClickLabel: String? = null,
-) {
-    val surface = Modifier
-        .background(containerColour)
-        .padding(horizontal = 12.dp, vertical = 7.dp)
-    // Clip before clickable so the tap ripple is clipped to the pill, not its square bounds.
-    val modifier = if (onClick != null) {
-        Modifier
-            .clip(RoundedCornerShape(50))
-            .clickable(onClickLabel = onClickLabel, onClick = onClick)
-            .semantics { contentDescription = a11yLabel }
-            .then(surface)
-    } else {
-        Modifier
-            .clip(RoundedCornerShape(50))
-            .clearAndSetSemantics { text = AnnotatedString(a11yLabel) }
-            .then(surface)
-    }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = modifier,
-    ) {
-        leading?.invoke()
-        Text(label, style = MaterialTheme.typography.labelSmall, color = labelColour)
     }
 }
 

@@ -59,6 +59,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.AccessLevel
 import com.cbkres.visavole.domain.AllowanceKind
@@ -144,12 +149,8 @@ internal fun docTitle(doc: Document, world: WorldData): String {
 
 // --- Shared visual vocabulary: one place defines the style, screens just supply content ---
 
-/**
- * Tonal status chip — the single source of the pill's shape, tonal fill (`color` at
- * [STATUS_CHIP_ALPHA]) and text colour. Compact card rows use the defaults; the country-card
- * header passes a larger [style]/[contentPadding]/[fontWeight]. [maxWidth] lets long labels wrap
- * instead of squeezing a weighted sibling; [bold] raises weight for terminal states (e.g. expired).
- */
+// Tonal status chip — the single source of the pill's shape, tonal fill (`color` at [alpha]) and
+// text colour; screens pass [leading]/[onClick]/[a11yLabel] or a larger [style] to specialise it.
 /** Keeps number+unit pairs together so a narrow pill never orphans the unit. */
 internal fun tidyPillText(text: String): String =
     text.replace(Regex("(?<=\\d) (?=[A-Za-z])"), "\u00a0")
@@ -172,20 +173,37 @@ internal fun StatusPill(
     style: TextStyle = MaterialTheme.typography.labelSmall,
     contentPadding: PaddingValues = PaddingValues(horizontal = 8.dp, vertical = 3.dp),
     fontWeight: FontWeight? = null,
+    alpha: Float = STATUS_CHIP_ALPHA,
+    leading: @Composable (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
+    onClickLabel: String? = null,
+    a11yLabel: String? = null,
 ) {
     val weight = fontWeight ?: (if (bold) FontWeight.Bold else FontWeight.SemiBold)
     Surface(
         shape = RoundedCornerShape(50),
-        color = color.copy(alpha = STATUS_CHIP_ALPHA),
+        color = color.copy(alpha = alpha),
         modifier = modifier.then(maxWidth?.let { Modifier.widthIn(max = it) } ?: Modifier),
     ) {
-        Text(
-            tidyPillText(text),
-            color = color,
-            fontWeight = weight,
-            style = style,
-            modifier = Modifier.padding(contentPadding),
-        )
+        // Clip before clickable so a tap ripple stays inside the pill, not its square bounds.
+        val announced = when {
+            onClick != null -> Modifier
+                .clip(RoundedCornerShape(50))
+                .clickable(onClickLabel = onClickLabel, onClick = onClick)
+                .semantics { contentDescription = a11yLabel ?: text }
+            a11yLabel != null -> Modifier
+                .clip(RoundedCornerShape(50))
+                .clearAndSetSemantics { this.text = AnnotatedString(a11yLabel) }
+            else -> Modifier
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = announced.then(Modifier.padding(contentPadding)),
+        ) {
+            leading?.invoke()
+            Text(tidyPillText(text), color = color, fontWeight = weight, style = style)
+        }
     }
 }
 
