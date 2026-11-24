@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -39,6 +40,10 @@ import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.hazeAlphas
 
 
+private const val MAX_VISIBLE_BREAKDOWN_ROWS = 5
+private val BREAKDOWN_ROW_HEIGHT = 32.dp
+private val BREAKDOWN_SPACING = 8.dp
+
 @Composable
 internal fun CountryDetailCard(
     countryName: String,
@@ -61,7 +66,18 @@ internal fun CountryDetailCard(
         // lower edge and washed out the last breakdown row (the card is a flat bottom sheet).
         shadowElevation = 0.dp,
     ) {
-        Column(Modifier.padding(20.dp)) {
+        // At most one scroll container is live at a time: while the breakdown overflows the
+        // card it scrolls itself, otherwise the whole card scrolls within the screen's height cap.
+        val cardScroll = rememberScrollState()
+        Column(
+            Modifier
+                .padding(20.dp)
+                .then(
+                    if (breakdown == null || breakdown.size <= MAX_VISIBLE_BREAKDOWN_ROWS)
+                        Modifier.verticalScroll(cardScroll)
+                    else Modifier,
+                ),
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(countryName, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.weight(1f))
@@ -149,9 +165,9 @@ internal fun CountryDetailCard(
 
                         val breakdownScroll = rememberScrollState()
 
-                        val maxVisibleBreakdownRows = 5
-                        val breakdownRowHeight = 32.dp
-                        val breakdownSpacing = 8.dp
+                        val maxVisibleBreakdownRows = MAX_VISIBLE_BREAKDOWN_ROWS
+                        val breakdownRowHeight = BREAKDOWN_ROW_HEIGHT
+                        val breakdownSpacing = BREAKDOWN_SPACING
 
                         val breakdownMaxHeight =
                             breakdownRowHeight * maxVisibleBreakdownRows +
@@ -179,7 +195,7 @@ internal fun CountryDetailCard(
                                 currentBreakdown.forEachIndexed { i, entry ->
 
                                     Row(
-                                        Modifier.height(breakdownRowHeight),
+                                        Modifier.heightIn(min = breakdownRowHeight),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
                                         val isYourCountry =
@@ -199,8 +215,6 @@ internal fun CountryDetailCard(
                                             ),
                                             style = MaterialTheme.typography.labelMedium,
                                             modifier = Modifier.widthIn(min = 72.dp),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
                                         )
 
                                         Spacer(Modifier.width(10.dp))
@@ -209,8 +223,6 @@ internal fun CountryDetailCard(
                                             entry.label,
                                             style = MaterialTheme.typography.bodyMedium,
                                             modifier = Modifier.weight(1f),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
                                         )
 
                                         if (entry.access.days != null) {
