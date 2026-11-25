@@ -4,6 +4,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.imePadding
@@ -19,7 +22,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -41,8 +46,8 @@ internal val LocalVisaDialogHeight = staticCompositionLocalOf<Dp?> { null }
  * [width] is the dialog's maximum width (340.dp for confirms, 400.dp for forms): a window
  * narrower than that gets the full width minus a small edge gap, so the trailing buttons are
  * never pushed off-screen; [maxHeight] caps form dialogs against the screen height;
- * [dismissable] = false keeps filled forms open on outside tap AND on the system Back button
- * (both are swallowed — use the explicit Cancel button to discard).
+ * [dismissable] = false keeps filled forms open on outside tap — Back still closes, as an
+ * explicit intent to leave (discard with the Cancel button, or accept with the confirm one).
  */
 @Composable
 internal fun VisaDialog(
@@ -56,32 +61,47 @@ internal fun VisaDialog(
     var shown by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { shown = true }
     Dialog(
-        // The platform still dispatches Back to onDismissRequest for non-dismissable dialogs
-        // (only outside TAP is gated by dismissOnClickOutside) — swallow it there too, or Back
-        // would wipe a filled form.
-        onDismissRequest = { if (dismissable) onDismissRequest() },
-        properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = dismissable),
+        // Back always closes, even a filled form: it is an explicit intent to leave, and
+        // swallowing it read as a dead button. Only the scrim tap is gated by [dismissable].
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        AnimatedVisibility(
-            visible = shown,
-            // There is no exit: closing unmounts the Dialog outright, so an exit transition
-            // here would never get to run.
-            enter = fadeIn(tween(160)) + scaleIn(tween(160), initialScale = 0.92f),
+        // A wrap-height dialog window resizes as its content composes and the system
+        // re-centres it each time — the dialog visibly snaps low, then centre. Pinning the
+        // window full-screen keeps it fixed so the pop-in animates in place; outside taps
+        // now land inside the window, so the scrim dismisses them — a raw tap gesture, as
+        // a clickable here would merge the dialog subtree into one query-hijacking node.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (dismissable) Modifier.pointerInput(Unit) {
+                        detectTapGestures(onTap = { onDismissRequest() })
+                    } else Modifier,
+                ),
+            contentAlignment = Alignment.Center,
         ) {
-            BoxWithConstraints {
-                val cap = maxHeightOverride ?: (maxHeight - DIALOG_CHROME_RESERVE).coerceAtLeast(200.dp)
-                CompositionLocalProvider(LocalVisaDialogHeight provides cap) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = MaterialTheme.shapes.large,
-                        tonalElevation = 0.dp,
-                        modifier = Modifier
-                            // The keyboard is the one inset a dialog cannot scroll its way out of.
-                            .imePadding()
-                            .padding(horizontal = DIALOG_EDGE_GAP)
-                            .widthIn(max = width)
-                            .heightIn(max = cap),
-                    ) { content() }
+            AnimatedVisibility(
+                visible = shown,
+                // There is no exit: closing unmounts the Dialog outright, so an exit transition
+                // here would never get to run.
+                enter = fadeIn(tween(160)) + scaleIn(tween(160), initialScale = 0.92f),
+            ) {
+                BoxWithConstraints {
+                    val cap = maxHeightOverride ?: (maxHeight - DIALOG_CHROME_RESERVE).coerceAtLeast(200.dp)
+                    CompositionLocalProvider(LocalVisaDialogHeight provides cap) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            shape = MaterialTheme.shapes.large,
+                            tonalElevation = 0.dp,
+                            modifier = Modifier
+                                // The keyboard is the one inset a dialog cannot scroll its way out of.
+                                .imePadding()
+                                .padding(horizontal = DIALOG_EDGE_GAP)
+                                .widthIn(max = width)
+                                .heightIn(max = cap),
+                        ) { content() }
+                    }
                 }
             }
         }
