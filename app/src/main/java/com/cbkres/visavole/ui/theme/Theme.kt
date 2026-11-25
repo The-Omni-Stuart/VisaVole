@@ -3,7 +3,10 @@ package com.cbkres.visavole.ui.theme
 import android.content.Context
 import android.os.Build
 import android.provider.Settings
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -14,6 +17,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -64,16 +68,67 @@ internal fun Visa_VoleTheme(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     val reducedMotion = reducedMotionFromScale(animatorScale.floatValue)
+    // A theme switch otherwise repaints every surface in one frame; easing the core roles
+    // makes Auto/Light/Dark read as a transition. Fixed-role colours snap — nothing in the
+    // app consumes them.
+    val duration = if (reducedMotion) 0 else 300
+    val animatedScheme = colorScheme.animateRoles(duration)
     // Expose the *effective* theme (which may be forced light/dark via the Settings override) so
     // every `isSystemInDarkTheme()` call below the theme reflects what the user is actually seeing
     // — not just the OS setting. The per-theme status colours key off this.
     CompositionLocalProvider(LocalEffectiveDarkTheme provides darkTheme, LocalReducedMotion provides reducedMotion) {
         MaterialTheme(
-            colorScheme = colorScheme,
+            colorScheme = animatedScheme,
             typography = Typography,
             content = content
         )
     }
+}
+
+/** Eases the core colour roles over [durationMillis]; fixed-role colours keep the target's value. */
+@Composable
+private fun ColorScheme.animateRoles(durationMillis: Int): ColorScheme {
+    val s = this
+    @Composable
+    fun anim(label: String, target: Color): Color =
+        animateColorAsState(target, tween(durationMillis), label = label).value
+    return s.copy(
+        primary = anim("primary", s.primary),
+        onPrimary = anim("onPrimary", s.onPrimary),
+        primaryContainer = anim("primaryContainer", s.primaryContainer),
+        onPrimaryContainer = anim("onPrimaryContainer", s.onPrimaryContainer),
+        inversePrimary = anim("inversePrimary", s.inversePrimary),
+        secondary = anim("secondary", s.secondary),
+        onSecondary = anim("onSecondary", s.onSecondary),
+        secondaryContainer = anim("secondaryContainer", s.secondaryContainer),
+        onSecondaryContainer = anim("onSecondaryContainer", s.onSecondaryContainer),
+        tertiary = anim("tertiary", s.tertiary),
+        onTertiary = anim("onTertiary", s.onTertiary),
+        tertiaryContainer = anim("tertiaryContainer", s.tertiaryContainer),
+        onTertiaryContainer = anim("onTertiaryContainer", s.onTertiaryContainer),
+        error = anim("error", s.error),
+        onError = anim("onError", s.onError),
+        errorContainer = anim("errorContainer", s.errorContainer),
+        onErrorContainer = anim("onErrorContainer", s.onErrorContainer),
+        background = anim("background", s.background),
+        onBackground = anim("onBackground", s.onBackground),
+        surface = anim("surface", s.surface),
+        onSurface = anim("onSurface", s.onSurface),
+        surfaceVariant = anim("surfaceVariant", s.surfaceVariant),
+        onSurfaceVariant = anim("onSurfaceVariant", s.onSurfaceVariant),
+        surfaceDim = anim("surfaceDim", s.surfaceDim),
+        surfaceBright = anim("surfaceBright", s.surfaceBright),
+        surfaceContainerLowest = anim("surfaceContainerLowest", s.surfaceContainerLowest),
+        surfaceContainerLow = anim("surfaceContainerLow", s.surfaceContainerLow),
+        surfaceContainer = anim("surfaceContainer", s.surfaceContainer),
+        surfaceContainerHigh = anim("surfaceContainerHigh", s.surfaceContainerHigh),
+        surfaceContainerHighest = anim("surfaceContainerHighest", s.surfaceContainerHighest),
+        outline = anim("outline", s.outline),
+        outlineVariant = anim("outlineVariant", s.outlineVariant),
+        inverseSurface = anim("inverseSurface", s.inverseSurface),
+        inverseOnSurface = anim("inverseOnSurface", s.inverseOnSurface),
+        scrim = anim("scrim", s.scrim),
+    )
 }
 
 private fun Context.animatorScale(): Float =

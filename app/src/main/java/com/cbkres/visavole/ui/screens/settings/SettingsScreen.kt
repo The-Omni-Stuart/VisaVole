@@ -156,11 +156,17 @@ internal fun SettingsScreen(
                         onClick = { onThemeModeChanged(mode) },
                         modifier = Modifier
                             .weight(1f)
-                            // The tint alone does not announce selection; a RadioButton role carries it.
                             .selectable(selected, role = Role.RadioButton) { onThemeModeChanged(mode) },
                         colors = ButtonDefaults.outlinedButtonColors(
+                            // A tint-only selection vanishes under a near-white dynamic scheme;
+                            // the selected option gets a filled container instead.
+                            containerColor = if (selected) {
+                                MaterialTheme.colorScheme.secondaryContainer
+                            } else {
+                                Color.Transparent
+                            },
                             contentColor = if (selected) {
-                                MaterialTheme.colorScheme.primary
+                                MaterialTheme.colorScheme.onSecondaryContainer
                             } else {
                                 MaterialTheme.colorScheme.onSurface
                             },
