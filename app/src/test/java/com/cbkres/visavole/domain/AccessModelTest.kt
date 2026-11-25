@@ -29,7 +29,7 @@ class AccessModelTest {
     private val today = LocalDate.of(2026, 9, 8)
 
     private fun corridor(p: String, d: String, type: String, days: Int? = null) = Corridor(p, d, type, days)
-    private fun regime(id: String, name: String, level: String, vararg m: String) = Regime(id, name, level, m.toList())
+    private fun regime(id: String, name: String, level: String, vararg m: String) = Regime(id, name, "", level, m.toList())
     private fun doc(id: String, kind: DocKind) = Document(id, id, kind)
     private fun world(
         baseline: Map<String, List<Corridor>> = emptyMap(),

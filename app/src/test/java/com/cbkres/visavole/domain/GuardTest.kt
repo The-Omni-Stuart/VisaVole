@@ -563,8 +563,8 @@ class GuardTest {
             ),
             emptyMap(),
             listOf(
-                Regime("eu-eea-efta", "EU/EEA/EFTA", "freedom-of-movement", listOf("IE", "CY", "DE", "FR", "CZ")),
-                Regime("schengen", "Schengen", "visa-free", listOf("DE", "FR", "CZ")),
+                Regime("eu-eea-efta", "EU/EEA/EFTA", "EU/EEA/EFTA", "freedom-of-movement", listOf("IE", "CY", "DE", "FR", "CZ")),
+                Regime("schengen", "Schengen", "Schengen", "visa-free", listOf("DE", "FR", "CZ")),
             ),
             mapOf("eu-res" to Holding("eu-res", "EU Residence", "residency", "EU")),
             emptyMap(),
@@ -1205,7 +1205,7 @@ class GuardTest {
         val w = WorldData(
             mapOf("FR" to Country("FR", "France"), "DE" to Country("DE", "Germany")),
             emptyMap(),
-            listOf(Regime("eu", "EU", "freedom-of-movement", listOf("FR", "DE"))),
+            listOf(Regime("eu", "EU", "EU", "freedom-of-movement", listOf("FR", "DE"))),
             emptyMap(),
             emptyMap(),
         )

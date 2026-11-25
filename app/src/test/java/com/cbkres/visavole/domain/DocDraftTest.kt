@@ -20,7 +20,7 @@ class DocDraftTest {
             for (i in 1..12) put("C%02d".format(i), Country("C%02d".format(i), "Country%02d".format(i)))
         },
         baseline = emptyMap(),
-        regimes = listOf(Regime("schengen", "Schengen Area", "visa-free", listOf("FR", "DE"))),
+        regimes = listOf(Regime("schengen", "Schengen Area", "Schengen", "visa-free", listOf("FR", "DE"))),
         holdings = mapOf(
             "fr-res" to Holding("fr-res", "France Residence", "residency", "FR"),
             "fr-visa" to Holding("fr-visa", "France Visa", "short_term_visa", "FR"),

@@ -24,7 +24,7 @@ class JdbcRepositoryTest {
                     "multiple_entry INTEGER, nationalities TEXT, valid_from TEXT, valid_to TEXT, source TEXT, note TEXT)",
             )
             st.executeUpdate("CREATE TABLE visa_rules (passport TEXT, destination TEXT, type TEXT, days INTEGER, valid_to TEXT)")
-            st.executeUpdate("CREATE TABLE mobility_regimes (id TEXT, name TEXT, level TEXT, members TEXT)")
+            st.executeUpdate("CREATE TABLE mobility_regimes (id TEXT, name TEXT, short_name TEXT, level TEXT, members TEXT)")
             st.executeUpdate("CREATE TABLE visa_holdings (id TEXT, name TEXT, category TEXT, issuing_country TEXT)")
             // No residence_min column: the hasColumn() branch must drop it from the SELECT.
             st.executeUpdate(
@@ -36,8 +36,8 @@ class JdbcRepositoryTest {
             st.executeUpdate("INSERT INTO countries VALUES ('DE','Germany')")
             st.executeUpdate("INSERT INTO visa_rules VALUES ('CZ','DE','free',NULL,NULL)")
             st.executeUpdate("INSERT INTO visa_rules VALUES ('CZ','FR','visa',90,NULL)")
-            st.executeUpdate("INSERT INTO mobility_regimes VALUES ('eu','EU','level','[\"AT\", \"BE\"]')")
-            st.executeUpdate("INSERT INTO mobility_regimes VALUES ('empty','Empty','level',NULL)")
+            st.executeUpdate("INSERT INTO mobility_regimes VALUES ('eu','EU','EU','level','[\"AT\", \"BE\"]')")
+            st.executeUpdate("INSERT INTO mobility_regimes VALUES ('empty','Empty','','level',NULL)")
             st.executeUpdate("INSERT INTO visa_holdings VALUES ('h1','Holding','residence','DE')")
             st.executeUpdate("INSERT INTO visa_benefits VALUES ('h1','AT','free',NULL,'double,multiple')")
             st.executeUpdate(

@@ -37,6 +37,7 @@ import com.cbkres.visavole.domain.GuardAction
 import com.cbkres.visavole.domain.GuardContext
 import com.cbkres.visavole.domain.GuardEngine
 import com.cbkres.visavole.domain.GuardFinding
+import com.cbkres.visavole.domain.Regime
 import com.cbkres.visavole.domain.ResidenceClass
 import com.cbkres.visavole.domain.WorldData
 import com.cbkres.visavole.domain.buildDocument
@@ -319,58 +320,63 @@ internal fun AddDocumentDialog(
                     }
                     Spacer(Modifier.height(8.dp))
                     val autoName = inferredBloc?.name
+                    // Half-width row: the db's short name (CIS, Schengen…) fits where
+                    // the full name would clip; the dropdown below still spells it out.
+                    fun blocLabel(r: Regime) = r.short.ifEmpty { r.name }
                     val blocValue = when (val choice = customBlocChoice) {
                         null -> autoName?.let { "$it (auto)" } ?: "none detected"
                         "" -> "none"
-                        else -> world.regimes.firstOrNull { it.id == choice }?.name ?: choice
+                        else -> world.regimes.firstOrNull { it.id == choice }?.let { blocLabel(it) } ?: choice
                     }
-                    SelectionField("Mobility bloc", blocValue) { onSelected ->
-                        DropdownMenuItem(
-                            text = { Text("Auto — ${autoName ?: "none detected"}") },
-                            onClick = { customBlocChoice = null; onSelected() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("No mobility bloc") },
-                            onClick = { customBlocChoice = ""; onSelected() },
-                        )
-                        world.regimes.sortedBy { it.name }.forEach { r ->
+                    // Bloc and class/entry are short picks; sharing a row keeps the form
+                    // inside one screen instead of a scroll.
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SelectionField("Mobility bloc", blocValue, Modifier.weight(1f)) { onSelected ->
                             DropdownMenuItem(
-                                text = { Text("${r.name} (${r.id})") },
-                                onClick = { customBlocChoice = r.id; onSelected() },
+                                text = { Text("Auto — ${autoName ?: "none detected"}") },
+                                onClick = { customBlocChoice = null; onSelected() },
                             )
-                        }
-                    }
-                    if (docType == DocType.RESIDENCE) {
-                        Spacer(Modifier.height(8.dp))
-                        SelectionField("Residence class", residenceClass.label) { onSelected ->
-                            ResidenceClass.entries.forEach { rc ->
+                            DropdownMenuItem(
+                                text = { Text("No mobility bloc") },
+                                onClick = { customBlocChoice = ""; onSelected() },
+                            )
+                            world.regimes.sortedBy { it.name }.forEach { r ->
                                 DropdownMenuItem(
-                                    text = { Text(rc.label) },
-                                    onClick = { residenceClass = rc; residenceClassEdited = true; onSelected() },
+                                    text = { Text("${r.name} (${r.id})") },
+                                    onClick = { customBlocChoice = r.id; onSelected() },
                                 )
                             }
                         }
-                    }
-                    if (docType == DocType.VISA) {
-                        Spacer(Modifier.height(8.dp))
-                        val entryValue = when (entryType) {
-                            "single" -> "Single entry"
-                            "double" -> "Double entry"
-                            else -> "Multiple entry"
+                        if (docType == DocType.RESIDENCE) {
+                            SelectionField("Residence class", residenceClass.label, Modifier.weight(1f)) { onSelected ->
+                                ResidenceClass.entries.forEach { rc ->
+                                    DropdownMenuItem(
+                                        text = { Text(rc.label) },
+                                        onClick = { residenceClass = rc; residenceClassEdited = true; onSelected() },
+                                    )
+                                }
+                            }
                         }
-                        SelectionField ("Entry type", entryValue) { onSelected ->
-                            DropdownMenuItem(
-                                text = { Text("Single entry") },
-                                onClick = { entryType = "single"; onSelected() },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Double entry") },
-                                onClick = { entryType = "double"; onSelected() },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Multiple entry") },
-                                onClick = { entryType = "multiple"; onSelected() },
-                            )
+                        if (docType == DocType.VISA) {
+                            val entryValue = when (entryType) {
+                                "single" -> "Single entry"
+                                "double" -> "Double entry"
+                                else -> "Multiple entry"
+                            }
+                            SelectionField("Entry type", entryValue, Modifier.weight(1f)) { onSelected ->
+                                DropdownMenuItem(
+                                    text = { Text("Single entry") },
+                                    onClick = { entryType = "single"; onSelected() },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Double entry") },
+                                    onClick = { entryType = "double"; onSelected() },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Multiple entry") },
+                                    onClick = { entryType = "multiple"; onSelected() },
+                                )
+                            }
                         }
                     }
                 }

@@ -109,7 +109,7 @@ object JdbcRepository {
         c.createStatement().use { st ->
             st.executeQuery(SQL_REGIMES).use { rs ->
                 while (rs.next()) {
-                    out.add(Regime(rs.getString("id"), rs.getString("name"), rs.getString("level"), parseIso2Array(rs.getString("members"))))
+                    out.add(Regime(rs.getString("id"), rs.getString("name"), rs.getString("short_name"), rs.getString("level"), parseIso2Array(rs.getString("members"))))
                 }
             }
         }

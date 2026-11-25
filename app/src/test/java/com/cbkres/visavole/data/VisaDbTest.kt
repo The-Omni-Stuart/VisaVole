@@ -14,7 +14,7 @@ class VisaDbTest {
 
     @Test
     fun fingerprintFallsBackToVersionConstantWithoutSidecar() {
-        assertEquals("2|4096", VisaDb.fingerprint(null, 4096))
+        assertEquals("${VisaDb.DB_VERSION}|4096", VisaDb.fingerprint(null, 4096))
     }
 
     @Test

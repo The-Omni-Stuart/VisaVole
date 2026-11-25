@@ -15,7 +15,7 @@ internal const val SQL_BASELINE_ALL = "SELECT passport, destination, type, days,
 internal fun sqlBaselineChunked(placeholders: String): String =
     "$SQL_BASELINE_ALL WHERE passport IN ($placeholders)"
 
-internal const val SQL_REGIMES = "SELECT id, name, level, members FROM mobility_regimes"
+internal const val SQL_REGIMES = "SELECT id, name, short_name, level, members FROM mobility_regimes"
 
 internal const val SQL_HOLDINGS = "SELECT id, name, category, issuing_country FROM visa_holdings"
 

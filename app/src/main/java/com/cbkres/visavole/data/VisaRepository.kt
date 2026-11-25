@@ -90,7 +90,7 @@ class VisaRepository(private val db: VisaDb) {
             while (cur.moveToNext()) {
                 // shared lenient parser (see parseIso2Array) — identical to the JVM mirror,
                 // so a malformed members string degrades instead of crashing the startup load.
-                out.add(Regime(cur.getString(0), cur.getString(1), cur.getString(2), parseIso2Array(cur.getString(3))))
+                out.add(Regime(cur.getString(0), cur.getString(1), cur.getString(2), cur.getString(3), parseIso2Array(cur.getString(4))))
             }
         }
         return out

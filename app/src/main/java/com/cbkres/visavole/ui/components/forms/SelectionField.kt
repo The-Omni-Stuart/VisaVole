@@ -21,13 +21,14 @@ import androidx.compose.ui.Modifier
 internal fun SelectionField(
     label: String,
     value: String,
+    modifier: Modifier = Modifier,
     items: @Composable ColumnScope.(onSelected: () -> Unit) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = it },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier,
     ) {
         OutlinedTextField(
             value = value,

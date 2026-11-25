@@ -22,7 +22,14 @@ internal fun grantValidOn(validFrom: String?, validTo: String?, today: LocalDate
 }
 
 /** A mobility bloc from `mobility_regimes`; [members] are ISO2 codes, [level] is freedom-of-movement or visa-free. */
-data class Regime(val id: String, val name: String, val level: String, val members: List<String>)
+data class Regime(
+    val id: String,
+    val name: String,
+    /** Display abbreviation from the db (CIS, TTTA, Schengen…); may be empty. */
+    val short: String = "",
+    val level: String,
+    val members: List<String>,
+)
 
 /** A held-document category from `visa_holdings`; [category] is residency / short_term_visa / long_term_visa / special_permit. */
 data class Holding(val id: String, val name: String, val category: String, val issuingCountry: String)

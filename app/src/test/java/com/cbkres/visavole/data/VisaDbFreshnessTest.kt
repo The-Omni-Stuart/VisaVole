@@ -80,7 +80,7 @@ class VisaDbFreshnessTest {
             st.executeUpdate("CREATE TABLE countries (iso2 TEXT PRIMARY KEY, name TEXT)")
             st.executeUpdate("CREATE TABLE stay_rules (id TEXT, countries TEXT, window_type TEXT, valid_to TEXT)")
             st.executeUpdate("CREATE TABLE visa_rules (passport TEXT, destination TEXT, type TEXT, days INTEGER, valid_to TEXT)")
-            st.executeUpdate("CREATE TABLE mobility_regimes (id TEXT, name TEXT, level TEXT, members TEXT)")
+            st.executeUpdate("CREATE TABLE mobility_regimes (id TEXT, name TEXT, short_name TEXT, level TEXT, members TEXT)")
             st.executeUpdate("CREATE TABLE visa_holdings (id TEXT, name TEXT, category TEXT, issuing_country TEXT)")
             st.executeUpdate("CREATE TABLE visa_benefits (holding TEXT, destination TEXT, type TEXT, days INTEGER, entry_type TEXT)")
             validTos.forEachIndexed { i, validTo ->
