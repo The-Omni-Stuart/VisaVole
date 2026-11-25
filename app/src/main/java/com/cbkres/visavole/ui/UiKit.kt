@@ -416,7 +416,7 @@ internal fun VisaSnackbarHost(hostState: SnackbarHostState, modifier: Modifier =
     )
 }
 
-// --- Allowance ring: shared by the Trips tab (112.dp primary + switcher) and the Documents tab (72.dp per document) ---
+// --- Allowance ring: shared by the Trips tab's 112.dp ring and the allowance switcher ---
 
 internal fun allowanceFraction(a: AllowanceSnapshot): Float = when {
     // guard a zero-day window — dividing by 0f is NaN and would poison drawArc's sweep.

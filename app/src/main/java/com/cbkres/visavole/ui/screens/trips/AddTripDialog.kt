@@ -40,12 +40,14 @@ import com.cbkres.visavole.domain.GuardMutation
 import com.cbkres.visavole.domain.GuardResult
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.TripModel
+import com.cbkres.visavole.domain.TripWarnings
 import com.cbkres.visavole.domain.TripStop
 import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.VisaDialog
 import com.cbkres.visavole.ui.VoleAlertDialog
 import com.cbkres.visavole.ui.GuardFindingsDialog
 import com.cbkres.visavole.ui.app.AppState
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -432,13 +434,16 @@ internal fun AddTripDialog(
         if (prev != null && next != null && departure != null) {
             val prevName = ready.world.countries[prev.countryIso2]?.name ?: prev.countryIso2
             val nextName = ready.world.countries[next.countryIso2]?.name ?: next.countryIso2
+            val gapFact = TripWarnings.gapSentence(
+                prevName, nextName, ChronoUnit.DAYS.between(departure.plusDays(1), next.arrival).toInt(),
+            )
             val canUndo = lastStopSnapshot != null
             GapDialog(
                 details = "$departure → ${next.arrival}",
                 message = if (canUndo)
-                    "There is a gap between $prevName and $nextName. You can keep both stops in this trip, undo the last change, or end this trip and start a new trip after the gap."
+                    "$gapFact You can keep both stops in this trip, undo the last change, or end this trip and start a new trip after the gap."
                 else
-                    "There is a gap between $prevName and $nextName. You can keep both stops in this trip or end this trip and start a new trip after the gap.",
+                    "$gapFact You can keep both stops in this trip or end this trip and start a new trip after the gap.",
                 error = gapError,
                 canUndo = canUndo,
                 onUndo = { cancelLastStopChange() },

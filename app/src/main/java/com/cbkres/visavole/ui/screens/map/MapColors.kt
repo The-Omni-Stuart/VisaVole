@@ -118,9 +118,6 @@ val detailCardShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, botto
 // Accessible text/pill tones derived from the map palette. The bright map fills are for the
 // canvas; these darker shades are for labels and tonal chips on theme-driven surfaces.
 const val STATUS_CHIP_ALPHA = 0.16f
-// The standard dimming for an inactive/disabled control — e.g. the delete button while a doc
-// is in use, or a non-primary passport star. One shared value so every "greyed out" element
-// reads with the same tone.
 
 /**
  * The severity levels every status colour in the app collapses to: allowance rings, guard

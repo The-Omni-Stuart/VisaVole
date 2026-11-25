@@ -201,8 +201,8 @@ internal fun DocumentsScreen(
                                         // Fire the flash only once the centring scroll has settled, so it
                                         // lands on the card wherever it sits in the list — not while the
                                         // card is still off-screen mid-scroll. Clear the trigger once
-                                        // the ripple has had time to play (~600 ms: a 300 ms held press
-                                        // then a 300 ms release fade) — FlashTrigger.expire only
+                                        // the ripple has had time to play (900 ms: a 300 ms held press
+                                        // then a 300 ms release fade, plus margin) — FlashTrigger.expire only
                                         // clears if no newer tap took over, so a card re-entering the
                                         // composition never replays a spent flash.
                                         scope.launch {

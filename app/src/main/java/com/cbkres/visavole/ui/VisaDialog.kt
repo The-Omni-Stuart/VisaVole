@@ -45,16 +45,15 @@ internal val LocalVisaDialogHeight = staticCompositionLocalOf<Dp?> { null }
  *
  * [width] is the dialog's maximum width (340.dp for confirms, 400.dp for forms): a window
  * narrower than that gets the full width minus a small edge gap, so the trailing buttons are
- * never pushed off-screen; [maxHeight] caps form dialogs against the screen height;
- * [dismissable] = false keeps filled forms open on outside tap — Back still closes, as an
- * explicit intent to leave (discard with the Cancel button, or accept with the confirm one).
+ * never pushed off-screen; the height is capped against the dialog window (see
+ * [LocalVisaDialogHeight]); [dismissable] = false keeps filled forms open on outside tap —
+ * Back still closes, as an explicit intent to leave (discard with the Cancel button, or
+ * accept with the confirm one).
  */
 @Composable
 internal fun VisaDialog(
     onDismissRequest: () -> Unit,
     width: Dp = 340.dp,
-    /** Caps the dialog; measured from its own window when absent, never from the screen's height. */
-    maxHeightOverride: Dp? = null,
     dismissable: Boolean = true,
     content: @Composable () -> Unit,
 ) {
@@ -88,7 +87,7 @@ internal fun VisaDialog(
                 enter = fadeIn(tween(160)) + scaleIn(tween(160), initialScale = 0.92f),
             ) {
                 BoxWithConstraints {
-                    val cap = maxHeightOverride ?: (maxHeight - DIALOG_CHROME_RESERVE).coerceAtLeast(200.dp)
+                    val cap = (maxHeight - DIALOG_CHROME_RESERVE).coerceAtLeast(200.dp)
                     CompositionLocalProvider(LocalVisaDialogHeight provides cap) {
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceContainerHigh,

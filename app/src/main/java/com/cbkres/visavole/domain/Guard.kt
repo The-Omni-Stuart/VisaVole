@@ -643,7 +643,8 @@ object GuardEngine {
     /**
      * `trip.ongoing.cap` (MUTATE+WARN) — at most one ongoing trip. Saving a new ongoing trip emits
      * a [GuardMutation.EndTrip] for the ongoing trip with the earliest start; the UI confirms it
-     * and "keep both" simply declines the mutation (see §13.4).
+     * and "keep both" simply declines the mutation (see §13.4). The finding's message is
+     * machine-only — AddTripDialog renders OngoingConflictDialog with country names instead.
      */
     private fun ongoingCapRule(candidate: Trip, ctx: GuardContext): GuardResult? {
         if (candidate.statusAt(ctx.today) != TripStatus.ONGOING) return null

@@ -116,7 +116,7 @@ internal fun MapLegend(counts: Map<AccessLevel?, Int>, homeCount: Int = 1) {
                             .background(colorFor(null)),
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text("No documented rule", style = MaterialTheme.typography.labelSmall)
+                    Text(AccessLevel.UNKNOWN.label(), style = MaterialTheme.typography.labelSmall)
                     Spacer(Modifier.width(4.dp))
                     Text(
                         "${counts[null] ?: 0}",

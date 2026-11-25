@@ -238,6 +238,10 @@ internal object TripWarnings {
         else -> null
     }
 
+    /** One sentence, every surface: the findings line and the live gap dialog say this identically. */
+    fun gapSentence(leftLabel: String, rightLabel: String, gapDays: Int): String =
+        "There is a $gapDays-day gap between $leftLabel and $rightLabel, so this trip is not continuous."
+
     fun gapWarningsFor(trip: Trip): List<TripWarning> {
         val ordered = TripModel.sortedStops(trip.stops)
         val out = mutableListOf<TripWarning>()
@@ -251,7 +255,7 @@ internal object TripWarnings {
                         "trip.gap",
                         WarningSeverity.WARNING,
                         "Gap between stops",
-                        "There is a $gapDays-day gap between stop ${i + 1} and stop ${i + 2}, so this trip is not continuous.",
+                        gapSentence("stop ${i + 1}", "stop ${i + 2}", gapDays),
                     ),
                 )
             }
