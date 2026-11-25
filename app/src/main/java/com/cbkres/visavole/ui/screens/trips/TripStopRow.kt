@@ -122,10 +122,18 @@ private fun StopRow(
             Column(Modifier.weight(1f)) {
                 Text(world.countries[stop.countryIso2]?.name ?: stop.countryIso2, style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "${stop.arrival} → ${stop.departure ?: "open"}${docs.firstOrNull { it.id == stop.documentId }?.let { " · ${it.displayLabel(passportCounts, passportNumbers)}" } ?: ""}",
+                    "${stop.arrival} → ${stop.departure ?: "open"}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // Own line for the document: appended to the dates it wrapped anyway.
+                docs.firstOrNull { it.id == stop.documentId }?.let {
+                    Text(
+                        it.displayLabel(passportCounts, passportNumbers),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text(
                     rule?.let { "Counts toward: ${it.summary()}" } ?: "No shared stay rule",
                     style = MaterialTheme.typography.labelSmall,

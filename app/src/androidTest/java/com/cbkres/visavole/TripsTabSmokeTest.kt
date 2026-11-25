@@ -47,8 +47,10 @@ class TripsTabSmokeTest {
         // The open keyboard can push the Done button below the dialog's scroll fold.
         composeRule.onNode(hasText("Done")).performScrollTo().performClick()
 
-        // The stop row back inside the Add-trip dialog shows the country name.
-        composeRule.waitUntilExactlyOneExists(hasText("Germany"), STEP_TIMEOUT_MS)
+        // The stop row back inside the Add-trip dialog: country title, then the document on
+        // its own line. Exact match — "Passport · Germany" also contains the country name.
+        composeRule.waitUntilExactlyOneExists(hasText("Germany", substring = false), STEP_TIMEOUT_MS)
+        composeRule.waitUntilExactlyOneExists(hasText("Passport · Germany"), STEP_TIMEOUT_MS)
         composeRule.onNode(hasText("Add")).performClick()
 
         composeRule.waitUntilExactlyOneExists(hasText("No final departure"), STEP_TIMEOUT_MS)

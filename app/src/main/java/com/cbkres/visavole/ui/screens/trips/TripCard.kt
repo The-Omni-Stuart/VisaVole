@@ -284,7 +284,14 @@ internal fun TripCard(
                             }
                         }
                         Text(
-                            "${stop.arrival} → ${stop.departure ?: "open"}${sr.docLabel?.let { " · $it" } ?: " · $NO_VALID_DOC"}",
+                            "${stop.arrival} → ${stop.departure ?: "open"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        // The document line gets its own row: appended to the dates it wrapped
+                        // anyway, and a wrap mid "Passport: …" read worse than a clean break.
+                        Text(
+                            sr.docLabel ?: NO_VALID_DOC,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
