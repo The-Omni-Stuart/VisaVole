@@ -4,6 +4,7 @@ import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
@@ -11,6 +12,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -39,6 +42,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -566,6 +570,26 @@ internal fun WorldMapCanvas(
         ) {
             mapDraw()
         }
+
+        // Soft horizon: content melts into the app background at the top/bottom edges instead
+        // of hard-clipping under the search bar and legend — same haze as the scrolling lists.
+        val haze = MaterialTheme.colorScheme.background
+        val topHaze = remember(haze) { Brush.verticalGradient(0f to haze, 1f to Color.Transparent) }
+        val bottomHaze = remember(haze) { Brush.verticalGradient(0f to Color.Transparent, 1f to haze) }
+        Box(
+            Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(topInset + 48.dp)
+                .background(topHaze),
+        )
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(controlsBottomPadding + 40.dp)
+                .background(bottomHaze),
+        )
 
         val cx = canvasSize.width / 2f
         val cy = canvasSize.height / 2f
