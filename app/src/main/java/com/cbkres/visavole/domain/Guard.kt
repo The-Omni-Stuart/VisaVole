@@ -706,11 +706,20 @@ object GuardEngine {
         }
         // use `!expiry.isBefore(start)` (expiry >= start) so a passport expiring exactly on
         // the trip start day is flagged — the strict `isAfter` let that case slip through both the
-        // during-trip and the expired-before-trip checks.
-        if (!expiry.isBefore(start) && (end == null || !expiry.isAfter(end))) {
+        // during-trip and the expired-before-trip checks. An open-ended stay is flagged only
+        // within the open-stay horizon (a 2032 passport on a 2026 trip was noise), and as a "may".
+        val expiresInsideTrip = !expiry.isBefore(start) && when {
+            end != null -> !expiry.isAfter(end)
+            else -> !expiry.isAfter(start.plusDays(OPEN_STAY_PROBE_HORIZON_DAYS))
+        }
+        if (expiresInsideTrip) {
             findings += GuardFinding(
                 "trip.passport.expiresDuringTrip", GuardSeverity.WARN, "Passport expires during trip",
-                "Your $name passport expires on $expiry, before this trip ends${end?.let { " ($it)" } ?: " (open-ended)"}.",
+                if (end == null)
+                    "Your $name passport expires on $expiry — it may expire during this open-ended " +
+                        "trip depending on how long you stay."
+                else
+                    "Your $name passport expires on $expiry, before this trip ends ($end).",
             )
         }
         if (expiry.isBefore(start)) {

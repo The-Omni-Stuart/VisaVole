@@ -489,6 +489,21 @@ class TripModelTest {
     }
 
     @Test
+    fun openStayProbesExtraStepOnceDespiteFarFutureExpiry() {
+        // An open-ended stop spans every probe date, so probing each document expiry warned
+        // once per far-future expiry — a 2032 passport turned one missing e-visa into two.
+        val far = Document("p-GB", "GB", Passport("GB"), expiry = today.plusDays(2000).toString())
+        val candidate = trip("c", stop("s1", "AF", today.minusDays(1), null))
+        val w = world(
+            countries = mapOf("AF" to Country("AF", "Afghanistan")),
+            baseline = mapOf("GB" to listOf(Corridor("GB", "AF", "e-visa", null))),
+        )
+        val warnings = TripModel.projectionWarningsFor(candidate, emptyList(), listOf(far), w, today)
+        val extra = warnings.filter { it.code == "trip.access.extraStep" }
+        assertEquals("one extra-step warning, not one per probe date", 1, extra.size)
+    }
+
+    @Test
     fun projectionWarnsWhenAllowanceWouldBeExceeded() {
         val candidate = trip("c", stop("s1", "DE", today.minusDays(5), today.plusDays(90)))
         val warnings = TripModel.projectionWarningsFor(candidate, emptyList(), listOf(passport("GB")), world(stayRules = listOf(schengen)), today)

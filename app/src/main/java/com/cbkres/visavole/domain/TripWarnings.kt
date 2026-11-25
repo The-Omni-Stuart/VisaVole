@@ -7,6 +7,9 @@ import com.cbkres.visavole.domain.AccessLevel.VISA_REQUIRED
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
+/** How far ahead an open-ended stay is probed for expiring grants and passport validity. */
+internal const val OPEN_STAY_PROBE_HORIZON_DAYS = 365L
+
 /**
  * The four trip warnings engines behind the [TripModel] facade: structural validation,
  * cross-trip overlap, forward projection of allowance/entries/access, and within-trip
@@ -186,17 +189,22 @@ internal object TripWarnings {
 
         // Probe access at every date the answer can change: stop boundaries from today onward,
         // and the day each held document stops being valid — an open-ended stay has no end date
-        // to catch a grant expiring mid-stay otherwise.
+        // to catch a grant expiring mid-stay otherwise. Doc-expiry probes are capped a year ahead:
+        // an open stop spans every probe, so uncapped ones warned per far-future expiry.
         val dates = linkedSetOf<LocalDate>()
         for (stop in candidate.stops) {
             if (!stop.arrival.isBefore(today)) dates.add(stop.arrival)
             val end = stop.departure
             if (end != null && !end.isBefore(today) && !end.isBefore(stop.arrival)) dates.add(end)
+            // A stay already running is probed today: its arrival is past and an open-ended one
+            // has no end, so otherwise no date would cover the "now" the traveller is in.
+            if (!stop.arrival.isAfter(today) && (end == null || !end.isBefore(today))) dates.add(today)
         }
+        val horizon = today.plusDays(OPEN_STAY_PROBE_HORIZON_DAYS)
         for (doc in docs) {
             val expiry = doc.expiry.toDateOrNull() ?: continue
             val breaksTheDayAfter = expiry.plusDays(1)
-            if (!breaksTheDayAfter.isBefore(today)) dates.add(breaksTheDayAfter)
+            if (!breaksTheDayAfter.isBefore(today) && !breaksTheDayAfter.isAfter(horizon)) dates.add(breaksTheDayAfter)
         }
         val accessSeen = HashSet<String>()
         for (date in dates) {

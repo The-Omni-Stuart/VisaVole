@@ -1178,6 +1178,19 @@ class GuardTest {
             docs = listOf(p), primaryId = "p1",
         )
         assertTrue(codes(r).contains("trip.passport.expiresDuringTrip"))
+        val f = r.warnings.first { it.code == "trip.passport.expiresDuringTrip" }
+        assertTrue("open-ended wording is a may, not a certainty", f.message.contains("may expire"))
+    }
+
+    @Test fun openEndedTripIgnoresPassportExpiryBeyondHorizon() {
+        // an open-ended stay has no end to compare against — a passport expiring years ahead
+        // is not a "during trip" fact. The horizon anchors at the trip start, not today.
+        val p = passport("p1", "FR", expiry = today.plusDays(380).toString())
+        val r = addTrip(
+            trip("t1", stop("s1", "DE", today.plusDays(10), null)),
+            docs = listOf(p), primaryId = "p1",
+        )
+        assertFalse(codes(r).contains("trip.passport.expiresDuringTrip"))
     }
 
     @Test fun passportExpiredBeforeForeignTripIsBlocked() {
