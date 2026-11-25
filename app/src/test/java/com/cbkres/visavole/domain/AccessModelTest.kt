@@ -1128,6 +1128,22 @@ class AccessModelTest {
         assertFalse("SG" in AccessModel.ownVisaCountries(listOf(sgDoc), w, today = today))
     }
 
+    @Test fun residencePermitShowsEvenUnderBlocFreedom() {
+        val w = world(
+            regimes = listOf(regime("eu", "EU", "freedom-of-movement", "BE", "CZ")),
+            holdings = mapOf("cz-residence" to DataHolding("cz-residence", "Czech residence permit", "residency", "CZ")),
+        )
+        val docs = listOf(doc("p", Passport("BE")), doc("r", Holding("cz-residence")))
+        // The merged level stays freedom of movement — the permit must not downgrade the right.
+        assertEquals(FREEDOM, AccessModel.compute(docs, w, today = today)["CZ"]!!.level)
+        // But the map knows the permit is held and paints it teal (see mapFill's isResidence).
+        assertEquals(setOf("CZ"), AccessModel.residenceCountries(docs, w, today))
+        // Expired permits drop out, and passports never join the set.
+        val expired = Document("r", "r", Holding("cz-residence"), expiry = "2026-09-07")
+        assertTrue(AccessModel.residenceCountries(listOf(doc("p", Passport("BE")), expired), w, today).isEmpty())
+        assertTrue(AccessModel.residenceCountries(listOf(doc("p", Passport("BE"))), w, today).isEmpty())
+    }
+
     @Test fun strongerResidenceClassWinsOnTie() {
         val w = world(
             holdings = mapOf("schengen-residence" to DataHolding("schengen-residence", "Schengen/EU Residence", "residency", "EU")),

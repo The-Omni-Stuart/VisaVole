@@ -75,12 +75,20 @@ private fun paletteFor(level: AccessLevel?): LevelPalette =
 internal fun colorFor(level: AccessLevel?): Color = paletteFor(level).fill
 
 /**
- * The one place the map's special cases are decided: the traveller's home country and a
- * short-term visa's own country override the level palette; everything else is the level's
- * fill. [isOwn] means the country is one of the traveller's own-visa countries.
+ * The one place the map's special cases are decided: the traveller's home country, a residence
+ * country and a short-term visa's own country override the level palette; everything else is the
+ * level's fill. [isOwn] means the country is one of the traveller's own-visa countries;
+ * [isResidence] that a live residence permit is held there (shown teal even under freedom of
+ * movement — see [com.cbkres.visavole.domain.AccessModel.residenceCountries]).
  */
-internal fun mapFill(level: AccessLevel?, isHome: Boolean = false, isOwn: Boolean = false): Color = when {
+internal fun mapFill(
+    level: AccessLevel?,
+    isHome: Boolean = false,
+    isOwn: Boolean = false,
+    isResidence: Boolean = false,
+): Color = when {
     isHome -> HOME
+    isResidence -> RESIDENCE_FILL
     level == AccessLevel.COVERED && isOwn -> COVERED_OWN
     else -> colorFor(level)
 }
@@ -90,8 +98,15 @@ internal fun mapFill(level: AccessLevel?, isHome: Boolean = false, isOwn: Boolea
  * shade is theme-aware: [isDark] picks the brighter [LevelPalette.darkTone] on a near-black
  * surface so the text keeps AA contrast, and the darker [LevelPalette.tone] on a light one.
  */
-internal fun statusTone(level: AccessLevel?, isDark: Boolean, isHome: Boolean = false, isOwn: Boolean = false): Color = when {
+internal fun statusTone(
+    level: AccessLevel?,
+    isDark: Boolean,
+    isHome: Boolean = false,
+    isOwn: Boolean = false,
+    isResidence: Boolean = false,
+): Color = when {
     isHome -> if (isDark) HOME_DARK else HOME_TONE
+    isResidence -> paletteFor(AccessLevel.RESIDENCE).let { if (isDark) it.darkTone else it.tone }
     level == AccessLevel.COVERED && isOwn -> if (isDark) COVERED_OWN_DARK else COVERED_OWN_TONE
     else -> paletteFor(level).let { if (isDark) it.darkTone else it.tone }
 }

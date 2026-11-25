@@ -20,6 +20,8 @@ sealed interface AppState {
     data class Ready(
         val homeCountries: Set<String>,
         val ownVisaCountries: Set<String>,
+        /** Countries with a live residence permit — teal on the map even under freedom of movement. */
+        val residenceCountries: Set<String>,
         val docs: List<Document>,
         val access: Map<String, Access>,
         /** This publish's unified document validity ([DocStatus.all]) — screens read it instead

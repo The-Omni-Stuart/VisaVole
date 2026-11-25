@@ -307,6 +307,32 @@ object AccessModel {
         }.toSet()
 
     /**
+     * The countries the traveller holds a live residence permit for — the issuing country of a
+     * residence-like [Holding] or the target country of a residence [Custom]. On the map these
+     * render teal even when a passport's freedom of movement outranks the permit: the card is the
+     * concrete fact about that one country, while the bloc right is generic and already shown by
+     * every neighbour.
+     */
+    fun residenceCountries(
+        docs: List<Document>,
+        world: WorldData,
+        today: LocalDate,
+        trips: List<Trip> = emptyList(),
+        statuses: Map<String, DocStatus>? = null,
+    ): Set<String> =
+        docs.flatMap { d ->
+            if (unusableOf(d, docs, world, today, trips, statuses)) return@flatMap emptyList()
+            when (val k = d.kind) {
+                is Passport -> emptyList()
+                is Holding -> {
+                    val h = world.holdings[k.holdingId] ?: return@flatMap emptyList()
+                    if (h.category in RESIDENCE_LIKE_HOLDING_CATEGORIES) listOf(h.issuingCountry) else emptyList()
+                }
+                is Custom -> if (k.kind == "residence") k.countries.toList() else emptyList()
+            }
+        }.toSet()
+
+    /**
      * Per-document access to [dest], strongest first, for the "enter with" breakdown in the detail
      * card — so the user sees exactly which passport/document unlocks entry. Expired non-passport
      * documents and documents with no documented rule are omitted.

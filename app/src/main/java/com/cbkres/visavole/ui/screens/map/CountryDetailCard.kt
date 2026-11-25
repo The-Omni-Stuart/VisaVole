@@ -53,6 +53,9 @@ internal fun CountryDetailCard(
     modifier: Modifier = Modifier,
     isHome: Boolean = false,
     isOwnCovered: Boolean = false,
+    /** A live residence permit is held here; the pill goes teal and names the permit even when
+     *  a passport's freedom of movement outranks it (the map shows the same teal). */
+    isResidence: Boolean = false,
     homePassport: String? = null,
     daysLabel: String? = null,
 ) {
@@ -88,7 +91,7 @@ internal fun CountryDetailCard(
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val chipTone =
-                    statusTone(level, LocalEffectiveDarkTheme.current, isHome, isOwnCovered)
+                    statusTone(level, LocalEffectiveDarkTheme.current, isHome, isOwnCovered, isResidence)
                 StatusPill(
                     text = if (isHome) "Your country" else level.label(),
                     color = chipTone,
@@ -106,6 +109,10 @@ internal fun CountryDetailCard(
             val subtext = when {
                 isHome -> "Passport: ${homePassport.orEmpty()}"
                 access == null || access.level == AccessLevel.UNKNOWN -> ""
+                // Freedom-of-movement outranks the permit in the merged access, so its reason
+                // would name the bloc; the teal pill promises the permit — name that instead.
+                isResidence -> breakdown?.firstOrNull { it.access.level == AccessLevel.RESIDENCE }?.label
+                    ?: accessReasonLabel(access.reason)
                 else -> {
                     val reason = accessReasonLabel(access.reason)
                     (reason + classSuffix).trim()

@@ -29,16 +29,19 @@ import com.cbkres.visavole.ui.tapSink
  * The legend's numbers: per-level counts over the non-home access entries (homes get their own
  * swatch), plus the null-key slate count — what the canvas actually paints slate: a country in
  * the drawable [drawableIso] geometry set that is not a home and has no access entry, or an
- * UNKNOWN one (MapColors has no UNKNOWN palette, so those fill slate too).
+ * UNKNOWN one (MapColors has no UNKNOWN palette, so those fill slate too). Countries in
+ * [residenceCountries] count as RESIDENCE, matching the teal the canvas paints for them even
+ * when a passport's freedom of movement outranks the permit.
  */
 internal fun legendCounts(
     drawableIso: Set<String>,
     access: Map<String, Access>,
     homeCountries: Set<String>,
+    residenceCountries: Set<String> = emptySet(),
 ): Map<AccessLevel?, Int> {
     val levels = access.entries
         .filter { it.key !in homeCountries }
-        .groupBy { it.value.level }
+        .groupBy { (iso, acc) -> if (iso in residenceCountries) AccessLevel.RESIDENCE else acc.level }
         .mapValues { it.value.size }
     val slate = (drawableIso - homeCountries).count { iso ->
         val level = access[iso]?.level

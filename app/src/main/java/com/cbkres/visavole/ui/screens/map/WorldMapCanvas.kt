@@ -80,18 +80,19 @@ private const val FLING_EDGE_SLIDE_DAMPING = 0.3f
 private const val ZOOM_FLING_DECAY_MS = 150f
 private const val ZOOM_FLING_MIN_VELOCITY = 0.00015f
 /**
- * Content identity of the map's colours: the [access]/[homeCountries]/[ownVisaCountries] sets
- * arrive as fresh instances on every publish, so folding their content-based hashCodes (Map/Set
- * contract, entries compared via [Access] equality) into one Int keys the `drawShapes` build by
- * what it paints, not by instance identity. A collision would keep stale fills until the next
- * content change — a risk bounded to one repaint.
+ * Content identity of the map's colours: the [access]/[homeCountries]/[ownVisaCountries]/
+ * [residenceCountries] sets arrive as fresh instances on every publish, so folding their
+ * content-based hashCodes (Map/Set contract, entries compared via [Access] equality) into one Int
+ * keys the `drawShapes` build by what it paints, not by instance identity. A collision would keep
+ * stale fills until the next content change — a risk bounded to one repaint.
  */
 internal fun mapPaintKey(
     access: Map<String, Access>,
     homeCountries: Set<String>,
     ownVisaCountries: Set<String>,
+    residenceCountries: Set<String>,
 ): Int =
-    (access.hashCode() * 31 + homeCountries.hashCode()) * 31 + ownVisaCountries.hashCode()
+    ((access.hashCode() * 31 + homeCountries.hashCode()) * 31 + ownVisaCountries.hashCode()) * 31 + residenceCountries.hashCode()
 
 /**
  * Robinson world choropleth. Each country is filled by the traveller's [Access] level for it.
@@ -117,6 +118,7 @@ internal fun WorldMapCanvas(
     onCountryTap: (String?) -> Unit,
     homeCountries: Set<String> = emptySet(),
     ownVisaCountries: Set<String> = emptySet(),
+    residenceCountries: Set<String> = emptySet(),
     controlsBottomPadding: Dp = 24.dp,
     // The live bottom inset (controls + card) the centre-on-country tween aims above. The tween
     // reads it each frame so a card that grows/shrinks as its rows arrive eases into the fit
@@ -130,8 +132,8 @@ internal fun WorldMapCanvas(
     var controlsH by remember { mutableStateOf(0.dp) }
     // Keyed by content (see mapPaintKey): a publish that leaves the colours equal — e.g. starring
     // a passport — must not rebuild the ~204 fills and repaint the world.
-    val paintKey = remember(access, homeCountries, ownVisaCountries) {
-        mapPaintKey(access, homeCountries, ownVisaCountries)
+    val paintKey = remember(access, homeCountries, ownVisaCountries, residenceCountries) {
+        mapPaintKey(access, homeCountries, ownVisaCountries, residenceCountries)
     }
     val drawShapes: List<DrawShape> = remember(shapes, paintKey) {
         shapes.map { s ->
@@ -140,7 +142,7 @@ internal fun WorldMapCanvas(
                 s.iso,
                 s.path,
                 s.bbox,
-                mapFill(lvl, s.iso in homeCountries, s.iso in ownVisaCountries),
+                mapFill(lvl, s.iso in homeCountries, s.iso in ownVisaCountries, s.iso in residenceCountries),
                 s.labelAnchor,
             )
         }

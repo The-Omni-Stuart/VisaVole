@@ -66,6 +66,16 @@ class MapLegendCountsTest {
     }
 
     @Test
+    fun residencePermitUnderBlocFreedomCountsAsResidence() {
+        // The canvas paints BE teal (the permit outranks freedom visually), so the legend must
+        // too: BE leaves the FREEDOM bucket and joins RESIDENCE, while CZ stays in FREEDOM.
+        val acc = mapOf("BE" to Access(FREEDOM, null), "CZ" to Access(FREEDOM, null))
+        val counts = legendCounts(setOf("BE", "CZ"), acc, homeCountries = setOf("DE"), residenceCountries = setOf("BE"))
+        assertEquals(1, counts[AccessLevel.RESIDENCE])
+        assertEquals(1, counts[FREEDOM])
+    }
+
+    @Test
     fun oldBuilderShapeHadNoSlateKeyForThisFixture() {
         // Regression pin for the S23/M7 bug: the old builder's exact bucketing (groupBy on the
         // non-nullable level) leaves the legend's slate read `counts[null]` at 0 for the same

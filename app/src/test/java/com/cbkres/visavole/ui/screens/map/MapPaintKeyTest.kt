@@ -21,22 +21,23 @@ class MapPaintKeyTest {
         val entries = listOf(access("DE", 90), access("FR", 90), access("US", null))
         val a = LinkedHashMap(entries.toMap())
         val b = buildMap { entries.reversed().forEach { (k, v) -> put(k, v) } }
-        val emptyMix = mapPaintKey(a, setOf("GB"), setOf("DE"))
-        assertEquals("insertion order and Map implementation must not change the key", emptyMix, mapPaintKey(b, setOf("GB"), setOf("DE")))
+        val emptyMix = mapPaintKey(a, setOf("GB"), setOf("DE"), emptySet())
+        assertEquals("insertion order and Map implementation must not change the key", emptyMix, mapPaintKey(b, setOf("GB"), setOf("DE"), emptySet()))
         // Equal-content Access instances in distinct maps: Map contract does the rest.
-        assertEquals(mapPaintKey(LinkedHashMap(entries.toMap()), setOf("GB"), setOf("DE")), mapPaintKey(a, buildSet { add("GB") }, linkedSetOf("DE")))
+        assertEquals(mapPaintKey(LinkedHashMap(entries.toMap()), setOf("GB"), setOf("DE"), emptySet()), mapPaintKey(a, buildSet { add("GB") }, linkedSetOf("DE"), emptySet()))
     }
 
     @Test fun emptyMapsShareTheEmptyKey() {
-        assertEquals(mapPaintKey(emptyMap(), emptySet(), emptySet()), mapPaintKey(LinkedHashMap(), linkedSetOf(), setOf()))
+        assertEquals(mapPaintKey(emptyMap(), emptySet(), emptySet(), emptySet()), mapPaintKey(LinkedHashMap(), linkedSetOf(), setOf(), linkedSetOf()))
     }
 
     @Test fun everyColourInputChangesTheKey() {
-        val base = mapPaintKey(mapOf(access("DE", 90)), setOf("GB"), setOf("DE"))
-        assertNotEquals(base, mapPaintKey(mapOf(access("DE", 30)), setOf("GB"), setOf("DE")))
-        assertNotEquals(base, mapPaintKey(mapOf("DE" to Access(AccessLevel.FREEDOM, 90)), setOf("GB"), setOf("DE")))
-        assertNotEquals(base, mapPaintKey(mapOf(access("DE", 90)), setOf("GB", "FR"), setOf("DE")))
-        assertNotEquals(base, mapPaintKey(mapOf(access("DE", 90)), setOf("GB"), setOf()))
+        val base = mapPaintKey(mapOf(access("DE", 90)), setOf("GB"), setOf("DE"), emptySet())
+        assertNotEquals(base, mapPaintKey(mapOf(access("DE", 30)), setOf("GB"), setOf("DE"), emptySet()))
+        assertNotEquals(base, mapPaintKey(mapOf("DE" to Access(AccessLevel.FREEDOM, 90)), setOf("GB"), setOf("DE"), emptySet()))
+        assertNotEquals(base, mapPaintKey(mapOf(access("DE", 90)), setOf("GB", "FR"), setOf("DE"), emptySet()))
+        assertNotEquals(base, mapPaintKey(mapOf(access("DE", 90)), setOf("GB"), setOf(), emptySet()))
+        assertNotEquals(base, mapPaintKey(mapOf(access("DE", 90)), setOf("GB"), setOf("DE"), setOf("CZ")))
     }
 
     @Test fun residenceClassAndReasonParticipateInEquality() {
@@ -45,8 +46,8 @@ class MapPaintKeyTest {
         val without = Access(AccessLevel.RESIDENCE, null, fromDocument = true)
         assertNotEquals(withClass, without)
         assertNotEquals(
-            mapPaintKey(mapOf("DE" to withClass), emptySet(), emptySet()),
-            mapPaintKey(mapOf("DE" to without), emptySet(), emptySet()),
+            mapPaintKey(mapOf("DE" to withClass), emptySet(), emptySet(), emptySet()),
+            mapPaintKey(mapOf("DE" to without), emptySet(), emptySet(), emptySet()),
         )
     }
 }

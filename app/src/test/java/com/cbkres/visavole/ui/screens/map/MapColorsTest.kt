@@ -88,6 +88,8 @@ class MapColorsTest {
         assertTrue("home light tone fails AA ($homeLight)", homeLight >= 4.5)
         val ownLight = lightSurfaces.minOf { contrastRatio(statusTone(AccessLevel.COVERED, isDark = false, isOwn = true), it) }
         assertTrue("own-visa light tone fails AA ($ownLight)", ownLight >= 4.5)
+        val resLight = lightSurfaces.minOf { contrastRatio(statusTone(AccessLevel.FREEDOM, isDark = false, isResidence = true), it) }
+        assertTrue("residence light tone fails AA ($resLight)", resLight >= 4.5)
 
         val darkScheme = darkColorScheme()
         val darkSurfaces = listOf(darkScheme.surface, darkScheme.surfaceContainer, darkScheme.surfaceContainerHigh)
@@ -95,5 +97,16 @@ class MapColorsTest {
         assertTrue("home dark tone fails AA ($homeDark)", homeDark >= 4.5)
         val ownDark = darkSurfaces.minOf { contrastRatio(statusTone(AccessLevel.COVERED, isDark = true, isOwn = true), it) }
         assertTrue("own-visa dark tone fails AA ($ownDark)", ownDark >= 4.5)
+        val resDark = darkSurfaces.minOf { contrastRatio(statusTone(AccessLevel.FREEDOM, isDark = true, isResidence = true), it) }
+        assertTrue("residence dark tone fails AA ($resDark)", resDark >= 4.5)
+    }
+
+    /** A residence permit paints teal even where a passport's freedom of movement outranks it. */
+    @Test fun residencePermitOutranksFreedomOfMovementOnTheMap() {
+        assertEquals(RESIDENCE_FILL, mapFill(AccessLevel.FREEDOM, isResidence = true))
+        // Home still wins: a country you are a citizen of is blue, not teal.
+        assertEquals(HOME, mapFill(AccessLevel.FREEDOM, isHome = true, isResidence = true))
+        // Without the permit the level paints as before.
+        assertEquals(colorFor(AccessLevel.FREEDOM), mapFill(AccessLevel.FREEDOM))
     }
 }

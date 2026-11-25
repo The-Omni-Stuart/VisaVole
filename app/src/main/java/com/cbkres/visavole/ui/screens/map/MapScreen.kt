@@ -158,6 +158,7 @@ internal fun MapScreen(
             onCountryTap = pick,
             homeCountries = s.homeCountries,
             ownVisaCountries = s.ownVisaCountries,
+            residenceCountries = s.residenceCountries,
             controlsBottomPadding = controlsBottomPadding,
             centeringInsetNow = { if (cardVisible) cardH + 24.dp else legendH + 8.dp },
             topInset = searchBarH,
@@ -274,6 +275,7 @@ internal fun MapScreen(
 
                         isHome = selected in s.homeCountries,
                         isOwnCovered = selected in s.ownVisaCountries,
+                        isResidence = selected in s.residenceCountries,
                         homePassport =
                             if (selected in s.homeCountries) {
                                 s.world.countries[selected]?.name
@@ -296,7 +298,7 @@ internal fun MapScreen(
                 // level buckets and out of the slate count; the slate row counts what the
                 // canvas can actually paint (the geometry set, incl. e.g. AQ which has no DB row).
                 MapLegend(
-                    legendCounts(s.geometry.countries.keys, s.access, s.homeCountries),
+                    legendCounts(s.geometry.countries.keys, s.access, s.homeCountries, s.residenceCountries),
                     s.homeCountries.size,
                 )
             }

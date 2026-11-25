@@ -500,6 +500,8 @@ internal fun deriveReady(input: PublishedInputs): AppState.Ready {
     val statuses = DocStatus.all(docs, trips, world, today)
     val ownVisaCountries =
         if (homeCountries.isNotEmpty()) AccessModel.ownVisaCountries(docs, world, today, trips = trips, statuses = statuses) else emptySet()
+    val residenceCountries =
+        if (homeCountries.isNotEmpty()) AccessModel.residenceCountries(docs, world, today, trips = trips, statuses = statuses) else emptySet()
     val effectiveDocs = if (homeCountries.isNotEmpty()) TripModel.effectiveDocs(docs, trips, world, today, statuses = statuses) else docs
     val access =
         if (homeCountries.isNotEmpty()) AccessModel.compute(effectiveDocs, world, today, trips = trips, statuses = statuses) else emptyMap()
@@ -521,6 +523,7 @@ internal fun deriveReady(input: PublishedInputs): AppState.Ready {
         homeCountries = homeCountries,
         removeBlockings = removeBlockings,
         ownVisaCountries = ownVisaCountries,
+        residenceCountries = residenceCountries,
         docs = docs,
         access = access,
         statuses = statuses,
