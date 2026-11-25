@@ -51,7 +51,6 @@ import com.cbkres.visavole.ui.docTitle
 import com.cbkres.visavole.ui.docTypeBadge
 import com.cbkres.visavole.ui.screens.AddFab
 import com.cbkres.visavole.ui.screens.EmptyState
-import com.cbkres.visavole.ui.screens.ScreenHeader
 import com.cbkres.visavole.ui.screens.SectionLabel
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import com.cbkres.visavole.ui.VoleAlertDialog
@@ -94,10 +93,6 @@ internal fun DocumentsScreen(
     // publishes (a fresh per-publish map in a captured lambda would force every card to recompose).
     val blockings by rememberUpdatedState(removeBlockings)
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
-        ScreenHeader(
-            "Documents",
-            "Manage your passports and permits, unlocking your map."
-        )
         Box(Modifier.weight(1f)) {
         if (ready.docs.isEmpty()) {
             EmptyState("No documents yet. Start with a passport or a residence permit.")

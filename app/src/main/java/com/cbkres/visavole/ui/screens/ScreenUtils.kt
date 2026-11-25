@@ -9,9 +9,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -42,16 +40,6 @@ internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier.padding(top = 6.dp, bottom = 2.dp),
     )
-}
-
-/** Screen title + one-line subtitle, with the standard 12.dp gap before the first control. */
-@Composable
-internal fun ScreenHeader(title: String, subtitle: String, modifier: Modifier = Modifier) {
-    Column(modifier) {
-        Text(title, style = MaterialTheme.typography.headlineSmall)
-        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(12.dp))
-    }
 }
 
 /** Primary "Add …" action floating over the list's haze, styled like the map's control panel. */

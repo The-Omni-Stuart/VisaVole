@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -60,6 +62,19 @@ private val MapZoomSaver = object : Saver<MutableFloatState, Float> {
 private val MapCenterSaver = object : Saver<MutableState<Offset>, List<Float>> {
     override fun SaverScope.save(value: MutableState<Offset>): List<Float> = listOf(value.value.x, value.value.y)
     override fun restore(value: List<Float>): MutableState<Offset> = mutableStateOf(Offset(value[0], value[1]))
+}
+
+/** The top bar's two-line title for tabs that moved their header up here. */
+@Composable
+private fun BarHeader(title: String, subtitle: String) {
+    Column {
+        Text(title, style = MaterialTheme.typography.titleLarge)
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -120,7 +135,17 @@ internal fun MainScaffold(
             // removing it, so the content area never moves — the map's search bar and legend stay
             // put while Settings is open and nothing pops back on the way out.
             TopAppBar(
-                title = { Text(if (showSettings) "Settings" else "Visa Vole") },
+                title = {
+                    // Settings wins first, so its bar never keeps the tab's header behind the
+                    // back arrow; Documents/Trips carry their header here to start lists at top.
+                    if (showSettings) {
+                        Text("Settings")
+                    } else when (tab) {
+                        1 -> BarHeader("Documents", "Manage your passports and permits, unlocking your map.")
+                        2 -> BarHeader("Trips", "Record your trips and track visa allowance balances.")
+                        else -> Text("Visa Vole")
+                    }
+                },
                 navigationIcon = {
                     if (showSettings) {
                         IconButton(onClick = { showSettings = false }) {

@@ -44,7 +44,6 @@ import com.cbkres.visavole.ui.components.statuscard.FlashTrigger
 import com.cbkres.visavole.ui.components.statuscard.StatusCard
 import com.cbkres.visavole.ui.screens.AddFab
 import com.cbkres.visavole.ui.screens.EmptyState
-import com.cbkres.visavole.ui.screens.ScreenHeader
 import com.cbkres.visavole.ui.screens.SectionLabel
 import com.cbkres.visavole.ui.toUtcMillis
 import com.cbkres.visavole.ui.VoleAlertDialog
@@ -85,11 +84,6 @@ internal fun TripsScreen(
     val toggleExpanded by rememberUpdatedState(onToggleExpanded)
 
     Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
-        ScreenHeader(
-            "Trips",
-            "Record your trips and track visa allowance balances."
-        )
-
         val sections = ready.tripSections
         val tripIndex = remember(sections.upcoming, sections.current, sections.previous) {
             sectionedIndices(

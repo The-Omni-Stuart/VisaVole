@@ -66,7 +66,8 @@ class OnboardingFlowSmokeTest {
         // path and the on-disk write above; a real process kill is out of reach from the test
         // process and the decode side is JVM-covered (StateCodecTest, VisaStateStoreTest).
         composeRule.activityRule.scenario.recreate()
-        composeRule.waitForAnyText("Visa Vole", timeoutMillis = LOAD_TIMEOUT_MS)
+        // The tab is saved state, so the app bar comes back showing the Documents header.
+        composeRule.waitForAnyText("Documents", timeoutMillis = LOAD_TIMEOUT_MS)
         composeRule.clickNavTab("Documents")
         composeRule.waitForAnyText("Passport", "Germany")
     }
