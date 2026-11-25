@@ -95,7 +95,7 @@ LAT = [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90]
 XT  = [1.0000,0.9986,0.9954,0.9900,0.9822,0.9730,0.9600,0.9427,0.9216,0.8962,0.8679,0.8350,0.7986,0.7597,0.7186,0.6732,0.6213,0.5722,0.5322]
 YT  = [0.0000,0.0620,0.1240,0.1860,0.2480,0.3100,0.3720,0.4340,0.4958,0.5571,0.6176,0.6769,0.7346,0.7903,0.8435,0.8936,0.9394,0.9761,1.0000]
 
-def robinson_raw(lon, lat):
+def robinson_raw(lon, lat, wrap=True):
     a = abs(lat)
     if a >= 90:
         xv, yv = XT[-1], YT[-1]
@@ -109,7 +109,9 @@ def robinson_raw(lon, lat):
             xv, yv = XT[i], YT[i]
     # Rotate the longitude so the cut (antimeridian) sits at 180+C, i.e. in
     # the open Pacific east of the Chukchi tip, keeping it connected to Russia.
-    mlon = wrap180(lon - CENTRAL_MERIDIAN)
+    mlon = lon - CENTRAL_MERIDIAN
+    if wrap:
+        mlon = wrap180(mlon)
     return 0.8487*xv*math.radians(mlon), 1.3523*yv*(1.0 if lat >= 0 else -1.0)
 
 def dp(points, eps):
@@ -343,12 +345,35 @@ for ti, parent in sorted(TERRITORY_PARENT.items()):
 def proj_ring(ring):
     return [robinson_raw(lo, la) for (lo, la) in ring]
 
+def unwrap_lon(ring):
+    # Make consecutive longitudes continuous (|dlon| <= 180) so a ring that
+    # winds past +/-180 projects as one sweep instead of map-spanning streaks.
+    out = []
+    prev = None
+    for lo, la in ring:
+        if prev is not None:
+            while lo - prev > 180: lo -= 360
+            while prev - lo > 180: lo += 360
+        out.append([lo, la]); prev = lo
+    return out
+
 all_rings = {}
 split_seam_rings = []
 for iso, c in countries.items():
     kept = []
     for ring in c["rings"]:
-        if iso != "AQ" and ring_crosses_cut(ring):
+        if iso == "AQ":
+            # Antarctica winds around the pole: split at the cut, unwrap into a
+            # single sweep, project without re-wrapping. A part that spans the
+            # full width closes along lat -90 (the continent's true southern
+            # edge) so the cut closure never becomes a map-spanning streak.
+            for part in split_ring_at_cut(ring):
+                u = unwrap_lon(part)
+                if len(u) >= 3 and abs(u[-1][0] - u[0][0]) > 180:
+                    u.append([u[-1][0], -90.0])
+                    u.append([u[0][0], -90.0])
+                kept.append([robinson_raw(lo, la, wrap=False) for lo, la in u])
+        elif ring_crosses_cut(ring):
             parts = split_ring_at_cut(ring)
             split_seam_rings.append((iso, len(ring), len(parts), sum(len(p) for p in parts)))
             kept.extend(proj_ring(p) for p in parts)
