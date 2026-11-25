@@ -84,7 +84,7 @@ class VisaDb(context: Context) {
         private const val ASSET_NAME = "visa_data.db"
         private const val ASSET_SHA_NAME = "visa_data.db.sha256"
         private const val DB_NAME = "visa_data.db"
-        private const val DB_VERSION = 2
+        private const val DB_VERSION = 3
         private const val TAG = "VisaDb"
 
         /** The refresh trigger: the SHA sidecar when present, else the legacy version constant. */
