@@ -48,6 +48,7 @@ import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.VisaDialog
 import com.cbkres.visavole.ui.components.forms.CountryPicker
 import com.cbkres.visavole.ui.components.forms.SelectionField
+import com.cbkres.visavole.ui.components.forms.VoleMenuItemPadding
 import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.toUtcIsoDate
 import com.cbkres.visavole.ui.toUtcMillis
@@ -304,15 +305,18 @@ internal fun AddDocumentDialog(
                     }
                     SelectionField("Type", typeValue) { onSelected ->
                         DropdownMenuItem(
+                            contentPadding = VoleMenuItemPadding,
                             text = { Text("Auto — ${autoTypeName ?: "none"}") },
                             onClick = { holdingChoice = null; onSelected() },
                         )
                         DropdownMenuItem(
+                            contentPadding = VoleMenuItemPadding,
                             text = { Text("No known type (custom only)") },
                             onClick = { holdingChoice = ""; onSelected() },
                         )
                         world.holdingsForKind(docType.kind).forEach { h ->
                             DropdownMenuItem(
+                                contentPadding = VoleMenuItemPadding,
                                 text = { Text(h.name) },
                                 onClick = { holdingChoice = h.id; onSelected() },
                             )
@@ -323,6 +327,11 @@ internal fun AddDocumentDialog(
                     // Half-width row: the db's short name (CIS, Schengen…) fits where
                     // the full name would clip; the dropdown below still spells it out.
                     fun blocLabel(r: Regime) = r.short.ifEmpty { r.name }
+                    // Menu form spells the name out and adds the db abbreviation in brackets,
+                    // unless the name already carries it ("… States (OECS)" needs no " (OECS)").
+                    fun blocMenuLabel(r: Regime) =
+                        if (r.short.isEmpty() || r.name.contains(r.short, ignoreCase = true)) r.name
+                        else "${r.name} (${r.short})"
                     val blocValue = when (val choice = customBlocChoice) {
                         null -> autoName?.let { "$it (auto)" } ?: "none detected"
                         "" -> "none"
@@ -333,16 +342,19 @@ internal fun AddDocumentDialog(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         SelectionField("Mobility bloc", blocValue, Modifier.weight(1f)) { onSelected ->
                             DropdownMenuItem(
+                                contentPadding = VoleMenuItemPadding,
                                 text = { Text("Auto — ${autoName ?: "none detected"}") },
                                 onClick = { customBlocChoice = null; onSelected() },
                             )
                             DropdownMenuItem(
+                                contentPadding = VoleMenuItemPadding,
                                 text = { Text("No mobility bloc") },
                                 onClick = { customBlocChoice = ""; onSelected() },
                             )
                             world.regimes.sortedBy { it.name }.forEach { r ->
                                 DropdownMenuItem(
-                                    text = { Text("${r.name} (${r.id})") },
+                                    contentPadding = VoleMenuItemPadding,
+                                    text = { Text(blocMenuLabel(r)) },
                                     onClick = { customBlocChoice = r.id; onSelected() },
                                 )
                             }
@@ -351,6 +363,7 @@ internal fun AddDocumentDialog(
                             SelectionField("Residence class", residenceClass.label, Modifier.weight(1f)) { onSelected ->
                                 ResidenceClass.entries.forEach { rc ->
                                     DropdownMenuItem(
+                                        contentPadding = VoleMenuItemPadding,
                                         text = { Text(rc.label) },
                                         onClick = { residenceClass = rc; residenceClassEdited = true; onSelected() },
                                     )
@@ -365,14 +378,17 @@ internal fun AddDocumentDialog(
                             }
                             SelectionField("Entry type", entryValue, Modifier.weight(1f)) { onSelected ->
                                 DropdownMenuItem(
+                                    contentPadding = VoleMenuItemPadding,
                                     text = { Text("Single entry") },
                                     onClick = { entryType = "single"; onSelected() },
                                 )
                                 DropdownMenuItem(
+                                    contentPadding = VoleMenuItemPadding,
                                     text = { Text("Double entry") },
                                     onClick = { entryType = "double"; onSelected() },
                                 )
                                 DropdownMenuItem(
+                                    contentPadding = VoleMenuItemPadding,
                                     text = { Text("Multiple entry") },
                                     onClick = { entryType = "multiple"; onSelected() },
                                 )

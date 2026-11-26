@@ -242,7 +242,7 @@ class GuardTest {
         val f = r.findings.firstOrNull { it.code == "doc.inUse.validity" }
         assertNotNull(f)
         assertTrue("msg=${f!!.message}", f.message.contains("trip to Germany"))
-        assertTrue(f.message.contains("15 Oct 2026"))
+        assertTrue(f.message.contains("15 Oct. 2026"))
     }
 
     @Test fun validFromAfterStayStartIsBlocked() {
@@ -457,7 +457,7 @@ class GuardTest {
         val f = r.warnings.firstOrNull { it.code == "doc.single.perCountry" }
         assertNotNull(f)
         assertTrue("msg=${f!!.message}", f.message.contains("Visa: CA"))
-        assertTrue(f.message.contains("1 Oct 2026"))
+        assertTrue(f.message.contains("1 Oct. 2026"))
         assertTrue(f.message.contains("one valid visa per country"))
         assertFalse("msg=${f.message}", f.message.contains("still used by"))
     }

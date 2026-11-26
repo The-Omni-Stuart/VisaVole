@@ -51,6 +51,7 @@ import com.cbkres.visavole.ui.VisaDialog
 import com.cbkres.visavole.ui.VoleAlertDialog
 import com.cbkres.visavole.ui.components.forms.CountryPicker
 import com.cbkres.visavole.ui.components.forms.SelectionField
+import com.cbkres.visavole.ui.components.forms.VoleMenuItemPadding
 import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import com.cbkres.visavole.ui.screens.map.Severity
@@ -167,6 +168,7 @@ internal fun StopEditorDialog(
                         ?: "None"
                 ) { onSelected ->
                     DropdownMenuItem(
+                        contentPadding = VoleMenuItemPadding,
                         text = { Text("None") },
                         onClick = {
                             stop = stop.copy(documentId = null)
@@ -176,6 +178,7 @@ internal fun StopEditorDialog(
                     )
                     relevantDocs.forEach { d ->
                         DropdownMenuItem(
+                            contentPadding = VoleMenuItemPadding,
                             text = { Text(d.displayLabel(passportCounts, passportNumbers)) },
                             onClick = {
                                 stop = stop.copy(documentId = d.id)

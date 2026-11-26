@@ -53,7 +53,7 @@ class AllowanceSummaryTest {
             effectiveExpiry = LocalDate.of(2026, 9, 1),
             remainingDays = 0,
         )
-        assertEquals("Expired on 1 Sep 2026", allowanceSummary(visa))
+        assertEquals("Expired on 1 Sep. 2026", allowanceSummary(visa))
 
         // A DANGER rolling zone is "out of days", not "expired" — windows keep the day-count line.
         val zone = snapshot(kind = AllowanceKind.ROLLING, status = AllowanceStatus.DANGER).copy(
@@ -126,7 +126,7 @@ class AllowanceSummaryTest {
     @Test
     fun recoveryLinePrintsBothDatesAtHomeAndGoesQuietInsideTheZone() {
         val atHome = recovering()
-        assertEquals("Regenerating from 1 Apr 2027 (2 days)", allowanceAlternateLine(atHome))
+        assertEquals("Regenerating from 1 Apr. 2027 (2 days)", allowanceAlternateLine(atHome))
         assertEquals(null, allowanceAlternateLine(atHome.copy(currentTripId = "trip")))
         assertEquals(null, allowanceAlternateLine(atHome.copy(overstayDays = 1)))
     }
