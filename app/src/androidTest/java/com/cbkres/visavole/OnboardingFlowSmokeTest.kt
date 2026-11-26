@@ -38,6 +38,18 @@ class OnboardingFlowSmokeTest {
         composeRule.waitUntilExactlyOneExists(hasText("Next"), STEP_TIMEOUT_MS)
         composeRule.settlePop()
         composeRule.onNode(hasText("Next")).performClick()
+        // Distinguishes "expiry never opened" from "opened, then something dismissed it":
+        // sampled right after the click, long before the Done wait expires.
+        var elapsed = 0L
+        listOf(200L, 1000L, 3000L).forEach { at ->
+            composeRule.mainClock.advanceTimeBy(at - elapsed)
+            elapsed = at
+            Log.i(
+                "VisaVole", "t+$at Next=" + composeRule.onAllNodesWithText("Next").fetchSemanticsNodes().size +
+                    " Done=" + composeRule.onAllNodesWithText("Done").fetchSemanticsNodes().size +
+                    " ChooseDates=" + composeRule.onAllNodesWithText("Choose dates").fetchSemanticsNodes().size,
+            )
+        }
         try {
             composeRule.waitUntilExactlyOneExists(hasText("Done"), STEP_TIMEOUT_MS)
         } catch (e: Throwable) {
