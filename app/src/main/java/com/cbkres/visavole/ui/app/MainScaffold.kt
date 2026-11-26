@@ -7,11 +7,15 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ConnectingAirports
@@ -44,12 +48,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import com.cbkres.visavole.domain.freshnessFor
 import com.cbkres.visavole.ui.LocalReducedMotion
 import com.cbkres.visavole.ui.Motion
 import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.VisaSnackbarHost
+import com.cbkres.visavole.ui.freshnessDotColor
+import com.cbkres.visavole.ui.freshnessWord
 import com.cbkres.visavole.ui.screens.documents.DocumentsScreen
+import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import com.cbkres.visavole.ui.screens.map.MapScreen
 import com.cbkres.visavole.ui.screens.map.defaultCenter
 import com.cbkres.visavole.ui.screens.settings.SettingsScreen
@@ -69,14 +80,25 @@ private val MapCenterSaver = object : Saver<MutableState<Offset>, List<Float>> {
 
 /** The top bar's two-line title for tabs that moved their header up here. */
 @Composable
-private fun BarHeader(title: String, subtitle: String) {
+private fun BarHeader(title: String, subtitle: String, dotColor: Color? = null) {
     Column {
         Text(title, style = MaterialTheme.typography.titleLarge)
-        Text(
-            subtitle,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            dotColor?.let {
+                Box(
+                    Modifier
+                        .padding(end = 6.dp)
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(it),
+                )
+            }
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -146,7 +168,24 @@ internal fun MainScaffold(
                     } else when (tab) {
                         1 -> BarHeader("Documents", "Manage your passports and permits, unlocking your map.")
                         2 -> BarHeader("Trips", "Record your trips and track visa allowance balances.")
-                        else -> Text("Visa Vole", style = MaterialTheme.typography.titleLarge)
+                        else -> {
+                            // The map is where the data is trusted, so its header carries the
+                            // build's freshness — same verdict and dot as the Settings pill.
+                            val meta = s.world.visaDbMeta
+                            val freshness = freshnessFor(
+                                generated = meta.generated,
+                                rulesVerifiedAt = meta.rulesVerifiedAt,
+                                nextReview = meta.nextReview,
+                                lapsedRules = meta.lapsedRules,
+                                lapsingSoon = meta.lapsingSoon,
+                                today = s.today,
+                            )
+                            BarHeader(
+                                "Visa Vole",
+                                "Database · ${freshnessWord(freshness.level)}",
+                                dotColor = freshnessDotColor(freshness.level, LocalEffectiveDarkTheme.current),
+                            )
+                        }
                     }
                 },
                 navigationIcon = {

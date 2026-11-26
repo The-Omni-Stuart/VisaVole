@@ -74,6 +74,7 @@ import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.AllowanceStatus
 import com.cbkres.visavole.domain.DocKind
 import com.cbkres.visavole.domain.Document
+import com.cbkres.visavole.domain.FreshnessLevel
 import com.cbkres.visavole.domain.WorldData
 import com.cbkres.visavole.domain.docCategory
 import com.cbkres.visavole.domain.toDateOrNull
@@ -165,6 +166,23 @@ internal val PILL_MAX_WIDTH = 120.dp
 
 /** The one faded treatment for a control present but not acting — tappable where the tap explains. */
 internal fun Modifier.faded(faded: Boolean): Modifier = alpha(if (faded) DIM_ALPHA else 1f)
+
+/** The word for a data-freshness band; NEUTRAL makes no age claim the audit trail can't back. */
+internal fun freshnessWord(level: FreshnessLevel): String = when (level) {
+    FreshnessLevel.GREEN -> "Recent"
+    FreshnessLevel.AMBER -> "Possibly stale"
+    FreshnessLevel.RED -> "Outdated (please update)"
+    FreshnessLevel.NEUTRAL -> "Unverified"
+}
+
+/** The freshness dot's colour, shared by the map header and the Settings build pill. */
+@Composable
+internal fun freshnessDotColor(level: FreshnessLevel, isDark: Boolean): Color = when (level) {
+    FreshnessLevel.GREEN -> severityColor(Severity.OK, isDark)
+    FreshnessLevel.AMBER -> severityColor(Severity.CAUTION, isDark)
+    FreshnessLevel.RED -> severityColor(Severity.BAD, isDark)
+    FreshnessLevel.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant
+}
 
 @Composable
 internal fun StatusPill(

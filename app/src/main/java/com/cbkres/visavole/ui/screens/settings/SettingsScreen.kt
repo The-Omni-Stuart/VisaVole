@@ -63,10 +63,10 @@ import androidx.core.net.toUri
 import com.cbkres.visavole.R
 import com.cbkres.visavole.data.BackupManager
 import com.cbkres.visavole.data.PersistedState
-import com.cbkres.visavole.domain.FreshnessLevel
 import com.cbkres.visavole.domain.freshnessFor
 import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.HazeBox
+import com.cbkres.visavole.ui.freshnessDotColor
 import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.app.AppState
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
@@ -327,12 +327,7 @@ private fun DataBuildFooter(ready: AppState.Ready) {
         lapsingSoon = meta.lapsingSoon,
         today = ready.today,
     )
-    val dotColour = when (freshness.level) {
-        FreshnessLevel.GREEN -> severityColor(Severity.OK, isDark)
-        FreshnessLevel.AMBER -> severityColor(Severity.CAUTION, isDark)
-        FreshnessLevel.RED -> severityColor(Severity.BAD, isDark)
-        FreshnessLevel.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
+    val dotColour = freshnessDotColor(freshness.level, isDark)
     // Counts guarded once so the compact pill and its spoken-out label can never disagree.
     val lapsedRules = meta.lapsedRules.takeIf { it > 0 }
     val lapsingSoon = meta.lapsingSoon.takeIf { it > 0 }
