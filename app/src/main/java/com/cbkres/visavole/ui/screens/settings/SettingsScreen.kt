@@ -370,7 +370,6 @@ private fun DataBuildFooter(ready: AppState.Ready) {
                     text = pills.buildLabel,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     alpha = STATUS_CHIP_ALPHA,
-                    fontWeight = MaterialTheme.typography.labelSmall.fontWeight,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
                     leading = {
                         Box(
@@ -391,7 +390,6 @@ private fun DataBuildFooter(ready: AppState.Ready) {
                     text = label,
                     color = warnText,
                     alpha = STATUS_CHIP_ALPHA,
-                    fontWeight = MaterialTheme.typography.labelSmall.fontWeight,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
                     leading = {
                         Icon(
