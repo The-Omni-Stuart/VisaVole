@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -26,11 +27,11 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDefaults
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -235,7 +236,7 @@ internal fun CountryRow(
 }
 
 /**
- * The shared list-card frame, derived from the trip card: an [ElevatedCard] with 16.dp padding,
+ * The shared list-card frame, derived from the trip card: a shadowless tonal Card with 16.dp padding,
  * a weighted content column (rows spaced by 8.dp) and a trailing vertical column of icon actions.
  * Screens supply their own content rows and action icons; the padding/spacing/shape live here.
  *
@@ -280,7 +281,12 @@ internal fun VisaListCard(
         .clip(shape)
         .then(onClick?.let { Modifier.clickable(onClick = it) } ?: Modifier)
         .indication(flashSource, LocalIndication.current)
-    ElevatedCard(shape = shape, modifier = cardModifier) {
+    Card(
+        shape = shape,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        elevation = CardDefaults.cardElevation(0.dp),
+        modifier = cardModifier,
+    ) {
         Box {
             // Top-aligned: the action buttons stack is often taller than the text, and centring
             // made short cards float their text in the middle. Top keeps the title on the top line.
@@ -310,11 +316,8 @@ internal fun DateFieldButton(text: String, onClick: () -> Unit) {
     }
 }
 
-/** M3 date picker with the app's button vocabulary; [onConfirm] receives the chosen date (or
- *  null) and the caller is responsible for closing. [secondaryLabel] replaces "Cancel" (e.g. "Clear").
- *  [minDate]/[maxDate] bound the selectable range (dates outside are dimmed and cannot be chosen);
- *  leave both null for an unbounded picker. Confirm stays disabled while the selection — possibly
- *  the untouched initial date — sits outside the bounds, so no call site can confirm an illegal date. */
+/** The M3 calendar inside [VisaDialog] chrome with the standard confirm row, so it pops and sits
+ *  like every other dialog. Bounds dim out-of-range dates and gate Confirm on a legal selection. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun VisaDatePickerDialog(
@@ -354,29 +357,32 @@ internal fun VisaDatePickerDialog(
     val inBounds = selected == null ||
         (minDate == null || !selected.isBefore(minDate)) &&
         (maxDate == null || !selected.isAfter(maxDate))
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = { onConfirm(selected) }, enabled = inBounds) {
-                Text(confirmLabel)
+    VisaDialog(onDismissRequest = onDismiss, width = 400.dp) {
+        Column(Modifier.padding(20.dp)) {
+            DatePicker(state = state)
+            Spacer(Modifier.height(20.dp))
+            // The one confirm-row grammar, so the picker pops and sits like every other dialog.
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedButton(onClick = { (onSecondary ?: onDismiss)() }) {
+                    Text(secondaryLabel ?: "Cancel")
+                }
+                Spacer(Modifier.width(12.dp))
+                Button(onClick = { onConfirm(selected) }, enabled = inBounds) {
+                    Text(confirmLabel)
+                }
             }
-        },
-        dismissButton = {
-            if (secondaryLabel != null && onSecondary != null) {
-                TextButton(onClick = onSecondary) { Text(secondaryLabel) }
-            } else {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-            }
-        },
-    ) {
-        DatePicker(state = state)
+        }
     }
 }
 
 /**
  * The app's snackbar host: the stock M3 snackbar is a flat full-width bar with square corners and
- * no margin, so this re-skins it with the card vocabulary — a tonal `surfaceContainerHigh` surface,
- * 16.dp rounded corners, horizontal margins, and a tonal elevation that reads in light and dark.
+ * no margin, so this re-skins it with the card vocabulary — a tonal `surfaceContainerHighest`
+ * surface (the step above the sheets it floats over), 16.dp rounded corners, horizontal margins.
  */
 @Composable
 internal fun VisaSnackbarHost(hostState: SnackbarHostState, modifier: Modifier = Modifier) {
@@ -387,8 +393,8 @@ internal fun VisaSnackbarHost(hostState: SnackbarHostState, modifier: Modifier =
             // Settings hides the nav bar, so the host's Scaffold inset collapses: the safe area is its own.
             Surface(
                 shape = MaterialTheme.shapes.large,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                tonalElevation = 2.dp,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                tonalElevation = 0.dp,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(12.dp),

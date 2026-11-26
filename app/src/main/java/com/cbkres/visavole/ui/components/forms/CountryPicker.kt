@@ -25,7 +25,8 @@ import com.cbkres.visavole.ui.CountryRow
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.hazeAlphas
 
-/** Search + list of countries; tap toggles membership in [selected]. */
+/** Search + list of countries; tap toggles membership in [selected]. An [error] marks the
+ *  field and shows a supporting line, like any other outlined field. */
 @Composable
 internal fun CountryPicker(
     countries: Map<String, Country>,
@@ -34,6 +35,7 @@ internal fun CountryPicker(
     selected: Set<String>,
     onToggle: (String) -> Unit,
     label: String,
+    error: String? = null,
 ) {
     val listState = rememberLazyListState()
     // Blank query shows the full alphabetical list; otherwise the shared ranked matching
@@ -55,6 +57,8 @@ internal fun CountryPicker(
             value = query, onValueChange = onQuery,
             label = { Text(label) },
             singleLine = true,
+            isError = error != null,
+            supportingText = error?.let { err -> { Text(err) } },
             shape = MaterialTheme.shapes.large,
             modifier = Modifier.fillMaxWidth(),
         )

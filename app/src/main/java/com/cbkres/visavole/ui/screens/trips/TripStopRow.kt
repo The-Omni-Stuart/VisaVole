@@ -34,6 +34,7 @@ import com.cbkres.visavole.domain.passportCountsByIso
 import com.cbkres.visavole.domain.passportNumbers
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.hazeAlphas
+import com.cbkres.visavole.ui.screens.EmptyState
 import java.time.LocalDate
 
 /** The scrollable list of stop rows inside the trip dialog. */
@@ -66,11 +67,7 @@ internal fun TripStopList(
                 .verticalScroll(stopsScroll),
         ) {
             if (stops.isEmpty()) {
-                Text(
-                    "No stops yet.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                EmptyState("No stops yet.")
             }
             stops.forEach { stop ->
                 StopRow(

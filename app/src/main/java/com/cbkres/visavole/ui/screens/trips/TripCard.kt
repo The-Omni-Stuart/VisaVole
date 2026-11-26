@@ -27,6 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.cbkres.visavole.ui.LocalReducedMotion
+import com.cbkres.visavole.ui.Motion
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.Document
 import com.cbkres.visavole.domain.StayRule
@@ -225,10 +227,11 @@ internal fun TripCard(
                 }
             }
         }
+        val expandDur = if (LocalReducedMotion.current) 0 else Motion.ELEMENT
         AnimatedVisibility(
             visible = expanded,
-            enter = fadeIn(tween(150)) + expandVertically(tween(150)),
-            exit = fadeOut(tween(150)) + shrinkVertically(tween(150)),
+            enter = fadeIn(tween(expandDur)) + expandVertically(tween(expandDur)),
+            exit = fadeOut(tween(expandDur)) + shrinkVertically(tween(expandDur)),
         ) {
             Column {
                 Spacer(Modifier.height(12.dp))

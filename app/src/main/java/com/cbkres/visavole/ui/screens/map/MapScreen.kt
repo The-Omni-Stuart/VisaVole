@@ -44,6 +44,8 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.cbkres.visavole.ui.LocalReducedMotion
+import com.cbkres.visavole.ui.Motion
 import com.cbkres.visavole.domain.AccessLevel
 import com.cbkres.visavole.domain.AccessModel
 import com.cbkres.visavole.domain.DocAccess
@@ -304,10 +306,11 @@ internal fun MapScreen(
                 )
             }
         }
+        val dropDur = if (LocalReducedMotion.current) 0 else Motion.MICRO
         AnimatedVisibility(
             visible = query.isNotBlank(),
-            enter = fadeIn(tween(120)) + scaleIn(tween(120), initialScale = 0.95f),
-            exit = fadeOut(tween(120)) + scaleOut(tween(120), targetScale = 0.95f),
+            enter = fadeIn(tween(dropDur)) + scaleIn(tween(dropDur), initialScale = 0.95f),
+            exit = fadeOut(tween(dropDur)) + scaleOut(tween(dropDur), targetScale = 0.95f),
         ) {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,

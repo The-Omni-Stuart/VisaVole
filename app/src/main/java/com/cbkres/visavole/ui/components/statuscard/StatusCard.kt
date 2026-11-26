@@ -37,6 +37,7 @@ import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.LocalReducedMotion
 import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.ringColor
+import com.cbkres.visavole.ui.screens.EmptyState
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
 import kotlinx.coroutines.delay
 
@@ -60,7 +61,7 @@ internal fun StatusCard(
     titleRow: (@Composable RowScope.(AllowanceSnapshot) -> Unit)? = null,
 ) {
     if (allowances.isEmpty()) {
-        Text("No allowances to track yet.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        EmptyState("No allowances to track yet.")
         return
     }
     val faceMode = when {

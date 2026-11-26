@@ -151,6 +151,8 @@ internal fun StopEditorDialog(
                     selected = setOf(stop.countryIso2),
                     onToggle = { iso -> stop = stop.copy(countryIso2 = iso) },
                     label = "Country",
+                    error = if (countrySelected) null else
+                        if (stop.countryIso2.isBlank()) "Pick a country to continue" else "Country not found",
                 )
                 Spacer(Modifier.height(8.dp))
                 DateFieldButton("Arrival: ${stop.arrival}", onClick = { showArrival = true })
@@ -197,14 +199,6 @@ internal fun StopEditorDialog(
                     )
                 }
                 Spacer(Modifier.height(20.dp))
-                if (!countrySelected) {
-                    Text(
-                        if (stop.countryIso2.isBlank()) "Pick a country to continue" else "Country not found",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
                 Row(
                     Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,

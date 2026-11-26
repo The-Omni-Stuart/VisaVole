@@ -59,6 +59,7 @@ internal fun VisaDialog(
 ) {
     var shown by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { shown = true }
+    val pop = if (LocalReducedMotion.current) 0 else Motion.ELEMENT
     Dialog(
         // Back always closes, even a filled form: it is an explicit intent to leave, and
         // swallowing it read as a dead button. Only the scrim tap is gated by [dismissable].
@@ -84,7 +85,7 @@ internal fun VisaDialog(
                 visible = shown,
                 // There is no exit: closing unmounts the Dialog outright, so an exit transition
                 // here would never get to run.
-                enter = fadeIn(tween(160)) + scaleIn(tween(160), initialScale = 0.92f),
+                enter = fadeIn(tween(pop)) + scaleIn(tween(pop), initialScale = 0.92f),
             ) {
                 BoxWithConstraints {
                     val cap = (maxHeight - DIALOG_CHROME_RESERVE).coerceAtLeast(200.dp)

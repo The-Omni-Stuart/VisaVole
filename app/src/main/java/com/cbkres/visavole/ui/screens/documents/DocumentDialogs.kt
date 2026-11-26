@@ -112,7 +112,6 @@ internal fun MultiCountryConfirmDialog(
     VoleAlertDialog(
         confirmLabel = "Save anyway",
         onConfirm = onConfirm,
-        dismissLabel = "Back",
         onDismiss = onDismiss,
         content = {
             val warn = severityColor(
@@ -146,7 +145,6 @@ internal fun PendingMutationDialog(
         title = warn?.title ?: "Heads up",
         confirmLabel = "Confirm",
         onConfirm = onConfirm,
-        dismissLabel = "Back",
         onDismiss = onDismiss,
         content = { Text(warn?.message ?: "This action will also change another of your documents.") },
     )

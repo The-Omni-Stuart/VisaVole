@@ -70,7 +70,6 @@ internal fun OngoingConfirmDialog(
         onConfirm = onAddDeparture,
         neutralLabel = "Done",
         onNeutral = onDone,
-        dismissLabel = "Back",
         onDismiss = onDismiss,
         content = {
             Text(

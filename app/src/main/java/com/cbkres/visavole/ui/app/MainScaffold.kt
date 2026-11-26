@@ -2,6 +2,7 @@ package com.cbkres.visavole.ui.app
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -44,6 +45,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import com.cbkres.visavole.ui.LocalReducedMotion
+import com.cbkres.visavole.ui.Motion
 import com.cbkres.visavole.ui.AccessViewModel
 import com.cbkres.visavole.ui.VisaSnackbarHost
 import com.cbkres.visavole.ui.screens.documents.DocumentsScreen
@@ -139,11 +142,11 @@ internal fun MainScaffold(
                     // Settings wins first, so its bar never keeps the tab's header behind the
                     // back arrow; Documents/Trips carry their header here to start lists at top.
                     if (showSettings) {
-                        Text("Settings")
+                        Text("Settings", style = MaterialTheme.typography.titleLarge)
                     } else when (tab) {
                         1 -> BarHeader("Documents", "Manage your passports and permits, unlocking your map.")
                         2 -> BarHeader("Trips", "Record your trips and track visa allowance balances.")
-                        else -> Text("Visa Vole")
+                        else -> Text("Visa Vole", style = MaterialTheme.typography.titleLarge)
                     }
                 },
                 navigationIcon = {
@@ -169,10 +172,11 @@ internal fun MainScaffold(
             // padding tracks the bar's height frame-by-frame — the content area grows in sync and
             // returning to a tab doesn't pop. With no tabs visible, the top-bar back arrow is the
             // Settings exit ("tap a tab to leave" no longer applies).
+            val barDur = if (LocalReducedMotion.current) 0 else Motion.ELEMENT
             AnimatedVisibility(
                 visible = !showSettings,
-                enter = expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
-                exit = shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut(),
+                enter = expandVertically(tween(barDur), expandFrom = Alignment.Bottom) + fadeIn(tween(barDur)),
+                exit = shrinkVertically(tween(barDur), shrinkTowards = Alignment.Bottom) + fadeOut(tween(barDur)),
             ) {
                 NavigationBar {
                     NavigationBarItem(

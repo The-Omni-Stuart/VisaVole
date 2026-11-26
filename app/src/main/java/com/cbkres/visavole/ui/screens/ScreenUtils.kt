@@ -27,6 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.cbkres.visavole.ui.LocalReducedMotion
+import com.cbkres.visavole.ui.Motion
 import com.cbkres.visavole.ui.tapSink
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -47,10 +49,11 @@ internal fun SectionLabel(text: String, modifier: Modifier = Modifier) {
 internal fun AddFab(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     var visible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { visible = true }
+    val fabDur = if (LocalReducedMotion.current) 0 else Motion.SURFACE
     AnimatedVisibility(
         visible = visible,
-        enter = fadeIn(tween(300)) + slideInVertically(tween(300)) { it / 2 },
-        exit = fadeOut(tween(300)) + slideOutVertically(tween(300)) { it / 2 },
+        enter = fadeIn(tween(fabDur)) + slideInVertically(tween(fabDur)) { it / 2 },
+        exit = fadeOut(tween(fabDur)) + slideOutVertically(tween(fabDur)) { it / 2 },
         modifier = modifier,
     ) {
         Surface(

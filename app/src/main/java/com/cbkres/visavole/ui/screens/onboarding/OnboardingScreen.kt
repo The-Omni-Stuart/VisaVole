@@ -82,17 +82,14 @@ internal fun OnboardingScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            addError?.let { err ->
-                Spacer(Modifier.height(16.dp))
-                Text(err, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                Spacer(Modifier.height(8.dp))
-            }
             Spacer(Modifier.height(16.dp))
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
                 label = { Text("Search country") },
                 singleLine = true,
+                isError = addError != null,
+                supportingText = addError?.let { err -> { Text(err) } },
                 shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth(),
             )
