@@ -2,9 +2,7 @@ package com.cbkres.visavole.ui.screens.map
 
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.AccessLevel
 
 /**
@@ -110,10 +108,6 @@ internal fun statusTone(
     level == AccessLevel.COVERED && isOwn -> if (isDark) COVERED_OWN_DARK else COVERED_OWN_TONE
     else -> paletteFor(level).let { if (isDark) it.darkTone else it.tone }
 }
-
-/** The detail card's silhouette — rounded top, flush bottom. The screen clips the card's
- *  envelope with it and the card surface draws with it; one shape so they can never diverge. */
-val detailCardShape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp, bottomStart = 0.dp, bottomEnd = 0.dp)
 
 // Accessible text/pill tones derived from the map palette. The bright map fills are for the
 // canvas; these darker shades are for labels and tonal chips on theme-driven surfaces.

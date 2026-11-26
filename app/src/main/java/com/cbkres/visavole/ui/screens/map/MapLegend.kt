@@ -75,7 +75,7 @@ internal fun MapLegend(counts: Map<AccessLevel?, Int>, homeCount: Int = 1) {
                     .fillMaxWidth()
                     .horizontalScroll(legendScroll)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

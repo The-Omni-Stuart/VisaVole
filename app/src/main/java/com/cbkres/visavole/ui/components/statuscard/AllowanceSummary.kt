@@ -4,6 +4,7 @@ import com.cbkres.visavole.domain.AllowanceKind
 import com.cbkres.visavole.domain.AllowanceSnapshot
 import com.cbkres.visavole.domain.AllowanceStatus
 import com.cbkres.visavole.domain.ResetMode
+import com.cbkres.visavole.domain.formatHuman
 import com.cbkres.visavole.domain.isExpiredDoc
 import com.cbkres.visavole.ui.NO_VALID_DOC
 import com.cbkres.visavole.ui.entriesRemainingPhrase
@@ -17,7 +18,7 @@ import com.cbkres.visavole.ui.spoken
 internal fun allowanceSummary(a: AllowanceSnapshot): String = when {
     a.noValidDoc -> NO_VALID_DOC
     a.overstayDays > 0 -> "-${a.overstayDays} Days OVERSTAYING!"
-    a.isExpiredDoc -> "Expired on ${a.effectiveExpiry ?: "unknown"}"
+    a.isExpiredDoc -> "Expired on ${a.effectiveExpiry?.formatHuman() ?: "unknown"}"
     a.kind == AllowanceKind.ENTRY_COUNT -> buildList {
         a.remainingDays?.let {
             add(when {
@@ -46,7 +47,7 @@ internal fun allowanceAlternateLine(a: AllowanceSnapshot): String? {
     if (a.noValidDoc || a.overstayDays > 0) return null
     return when (a.kind) {
         AllowanceKind.ROLLING -> a.takeIf { it.currentTripId == null }?.recovery?.let {
-            regenerationPhrase(it.inProgress, it.firstSliceBackOn.toString(), it.sliceDays)
+            regenerationPhrase(it.inProgress, it.firstSliceBackOn.formatHuman(), it.sliceDays)
         }
         AllowanceKind.PER_ENTRY -> a.takeIf { it.currentTripId != null }?.let {
             when {

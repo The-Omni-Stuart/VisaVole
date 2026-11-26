@@ -6,7 +6,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,7 +27,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.Access
@@ -38,6 +36,7 @@ import com.cbkres.visavole.domain.DocAccess
 import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.hazeAlphas
+import com.cbkres.visavole.ui.theme.detailCardShape
 
 
 private const val MAX_VISIBLE_BREAKDOWN_ROWS = 5
@@ -95,9 +94,6 @@ internal fun CountryDetailCard(
                 StatusPill(
                     text = if (isHome) "Your country" else level.label(),
                     color = chipTone,
-                    style = MaterialTheme.typography.labelLarge,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                    fontWeight = FontWeight.Normal,
                 )
                 val shownDays = daysLabel ?: access?.days?.let { "$it days" }
                 if (!shownDays.isNullOrBlank()) {
@@ -107,7 +103,7 @@ internal fun CountryDetailCard(
             }
             val classSuffix = access?.residenceClass?.let { " (${it.label.lowercase()})" }.orEmpty()
             val subtext = when {
-                isHome -> "Passport: ${homePassport.orEmpty()}"
+                isHome -> "Passport · ${homePassport.orEmpty()}"
                 access == null || access.level == AccessLevel.UNKNOWN -> ""
                 // Freedom-of-movement outranks the permit in the merged access, so its reason
                 // would name the bloc; the teal pill promises the permit — name that instead.

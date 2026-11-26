@@ -70,6 +70,7 @@ import com.cbkres.visavole.ui.HazeBox
 import com.cbkres.visavole.ui.StatusPill
 import com.cbkres.visavole.ui.app.AppState
 import com.cbkres.visavole.ui.screens.map.LocalEffectiveDarkTheme
+import com.cbkres.visavole.ui.screens.map.STATUS_CHIP_ALPHA
 import com.cbkres.visavole.ui.screens.map.Severity
 import com.cbkres.visavole.ui.screens.map.severityColor
 import com.cbkres.visavole.ui.theme.ThemePrefs
@@ -126,7 +127,7 @@ internal fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(settingsScroll)
-                .padding(horizontal = 24.dp)
+                .padding(horizontal = 16.dp)
                 .padding(top = 8.dp, bottom = 48.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -191,7 +192,7 @@ internal fun SettingsScreen(
                         .padding(horizontal = 4.dp),
                 ) {
                     Text(
-                        "Dynamic color",
+                        "Dynamic colour",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f),
                     )
@@ -204,7 +205,7 @@ internal fun SettingsScreen(
                 onClick = { openUrl(context, SOURCE_URL) },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Source Code")
+                Text("Source code")
             }
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
@@ -213,7 +214,7 @@ internal fun SettingsScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Found a bug?", style = MaterialTheme.typography.titleSmall)
-                    Text("Report it here!", style = MaterialTheme.typography.bodySmall)
+                    Text("Report it here", style = MaterialTheme.typography.bodySmall)
                 }
             }
             Spacer(Modifier.height(40.dp))
@@ -223,7 +224,7 @@ internal fun SettingsScreen(
                 onClick = { exportLauncher.launch(BackupManager.BACKUP_FILE_NAME) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Export Data Backup")
+                Text("Export data backup")
             }
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
@@ -232,12 +233,12 @@ internal fun SettingsScreen(
                 onClick = { restoreLauncher.launch(arrayOf("application/json", "text/*")) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Restore from Backup")
+                Text("Restore from backup")
             }
             Spacer(Modifier.height(48.dp))
 
             Text(
-                "Thank you for using Visa Vole!\nMade with love in 🏴󠁧󠁢󠁳󠁣󠁴󠁿 and 🇨🇿.",
+                "Thank you for using Visa Vole.\nMade with love in 🏴󠁧󠁢󠁳󠁣󠁴󠁿 and 🇨🇿.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -373,7 +374,7 @@ private fun DataBuildFooter(ready: AppState.Ready) {
                 StatusPill(
                     text = pills.buildLabel,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    alpha = 0.10f,
+                    alpha = STATUS_CHIP_ALPHA,
                     fontWeight = MaterialTheme.typography.labelSmall.fontWeight,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
                     leading = {
@@ -394,7 +395,7 @@ private fun DataBuildFooter(ready: AppState.Ready) {
                 StatusPill(
                     text = label,
                     color = warnText,
-                    alpha = 0.12f,
+                    alpha = STATUS_CHIP_ALPHA,
                     fontWeight = MaterialTheme.typography.labelSmall.fontWeight,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 7.dp),
                     leading = {

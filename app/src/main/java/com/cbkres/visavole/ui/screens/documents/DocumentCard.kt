@@ -28,6 +28,7 @@ import com.cbkres.visavole.domain.EntryState
 import com.cbkres.visavole.domain.ExpiryReason
 import com.cbkres.visavole.domain.WorldData
 import com.cbkres.visavole.domain.entryType
+import com.cbkres.visavole.domain.formatHuman
 import com.cbkres.visavole.domain.residenceClassFor
 import com.cbkres.visavole.ui.PILL_MAX_WIDTH
 import com.cbkres.visavole.ui.StatusPill
@@ -98,7 +99,7 @@ internal fun DocumentCard(
         // country(ies) it applies to; a passport's stable "(N)" number trails the name.
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             StatusPill(typeLabel, typeTone)
             Text(
@@ -129,7 +130,7 @@ internal fun DocumentCard(
         if (status != null) {
             Row(
                 verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 val details = docDetailsAnnotated(
                     doc,
@@ -140,7 +141,7 @@ internal fun DocumentCard(
                 if (details != null) {
                     Text(
                         details,
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.bodySmall,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
@@ -183,11 +184,11 @@ private fun docDetailsAnnotated(doc: Document, world: WorldData, base: Color, is
     part(regime?.let { "bloc $it" })
     doc.entryType()?.let { type ->
         val (label, severity) = when (type) {
-            "single" -> "single" to Severity.BAD
-            "double" -> "double" to Severity.WARN
-            else -> "multiple" to Severity.OK
+            "single" -> "Single" to Severity.BAD
+            "double" -> "Double" to Severity.WARN
+            else -> "Multiple" to Severity.OK
         }
-        part("${label} entry",
+        part("$label entry",
             severityColor(severity, isDark)
         )
     } ?: run {
@@ -224,9 +225,9 @@ private fun ExpiryStatusPill(
             Triple("Replaced by $replacedBy", Severity.BAD, true)
         status?.expired == true && status.reason == ExpiryReason.ENTRIES ->
             Triple("Entries used up", Severity.BAD, true)
-        status?.expired == true -> Triple("Expired on $effective", Severity.BAD, true)
+        status?.expired == true -> Triple("Expired on ${effective?.formatHuman()}", Severity.BAD, true)
         status?.reason == ExpiryReason.SUPERSEDED ->
-            Triple("Replaced by $replacedBy from $effective", Severity.WARN, false)
+            Triple("Replaced by $replacedBy from ${effective?.formatHuman()}", Severity.WARN, false)
         entry?.total != null && entry.remaining != null && entry.remaining > 0 ->
             Triple("${entry.remaining} ${if (entry.remaining == 1) "entry" else "entries"} left", if (entry.remaining == 1) Severity.WARN else Severity.OK, false)
         days == null -> Triple("No expiry", Severity.OK, false)

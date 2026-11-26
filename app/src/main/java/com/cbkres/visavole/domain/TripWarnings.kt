@@ -227,14 +227,14 @@ internal object TripWarnings {
      * (whole trip) and the stop editor (a single stop) so both warn identically.
      */
     fun accessWarningFor(access: Access?, countryName: String, date: LocalDate): TripWarning? = when {
-        access == null -> TripWarning("trip.access.none", WarningSeverity.DANGER, "No valid entry grant", "No valid entry grant found for $countryName on $date.")
+        access == null -> TripWarning("trip.access.none", WarningSeverity.DANGER, "No valid entry grant", "No valid entry grant found for $countryName on ${date.formatHuman()}.")
         access.level == VISA_REQUIRED || access.level == REFUSED -> TripWarning(
             "trip.access.blocked",
             WarningSeverity.DANGER,
             "Entry blocked",
-            "$countryName is ${if (access.level == REFUSED) "entry refused" else "visa required"} on $date.",
+            "$countryName is ${if (access.level == REFUSED) "entry refused" else "visa required"} on ${date.formatHuman()}.",
         )
-        access.level == ETA || access.level == E_VISA -> TripWarning("trip.access.extraStep", WarningSeverity.WARNING, "Extra step required", "$countryName needs ${access.level.label()} on $date.")
+        access.level == ETA || access.level == E_VISA -> TripWarning("trip.access.extraStep", WarningSeverity.WARNING, "Extra step required", "$countryName needs ${access.level.label()} on ${date.formatHuman()}.")
         else -> null
     }
 

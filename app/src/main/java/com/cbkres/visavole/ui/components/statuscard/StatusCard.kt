@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -124,7 +123,7 @@ internal fun StatusCard(
     val switcherScroll = rememberScrollState()
     val (switcherStart, switcherEnd) = switcherScroll.hazeAlphas()
     HazeBox(switcherStart, switcherEnd, MaterialTheme.colorScheme.background, horizontal = true, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().horizontalScroll(switcherScroll), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(Modifier.fillMaxWidth().horizontalScroll(switcherScroll), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             allowances.forEach { a ->
                 AllowanceCard(a, focused = a.key == focusedKey, onClick = { onFocus(a.key) })
             }
@@ -132,16 +131,16 @@ internal fun StatusCard(
     }
 }
 
-/** One switchable card in the allowance card row (the focused one is tinted with the primary). */
+/** One switchable card in the allowance card row (the focused one takes the selection fill). */
 @Composable
 private fun AllowanceCard(a: AllowanceSnapshot, focused: Boolean, onClick: () -> Unit) {
     Surface(
-        color = if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(16.dp),
+        color = if (focused) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.medium,
         // Clip the ripple to the card shape; selectable carries the focused state to TalkBack.
         modifier = Modifier
             .width(168.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(MaterialTheme.shapes.medium)
             .selectable(selected = focused, role = Role.Tab, onClick = onClick),
     ) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

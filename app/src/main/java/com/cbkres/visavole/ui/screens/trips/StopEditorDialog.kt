@@ -186,14 +186,14 @@ internal fun StopEditorDialog(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "Counts toward: ${rule?.summary() ?: "No shared stay rule found"}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (TripModel.isShortStaySuppressed(stopAccess)) {
                     Text(
                         "Days here won't count against short-stay allowance.",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Spacer(Modifier.height(20.dp))

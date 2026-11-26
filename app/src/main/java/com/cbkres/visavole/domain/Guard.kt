@@ -331,7 +331,7 @@ object GuardEngine {
                 if (validFrom != null && stop.arrival.isBefore(validFrom)) {
                     findings += GuardFinding(
                         "doc.inUse.validity", GuardSeverity.BLOCK, "In use by a trip",
-                        "Trip to $country starts ${stop.arrival}, before this document became valid ($validFrom).",
+                        "Trip to $country starts ${stop.arrival.formatHuman()}, before this document became valid (${validFrom.formatHuman()}).",
                     )
                 }
                 // An expiry landing before a FUTURE stay starts is not caught by the whole-stay
@@ -340,15 +340,15 @@ object GuardEngine {
                 if (e != null && e.isBefore(stop.arrival)) {
                     findings += GuardFinding(
                         "doc.inUse.validity", GuardSeverity.BLOCK, "In use by a trip",
-                        "This document expires on $e, before the trip to $country starts on ${stop.arrival}.",
+                        "This document expires on ${e.formatHuman()}, before the trip to $country starts on ${stop.arrival.formatHuman()}.",
                     )
                 }
                 val end = stop.departure ?: ctx.today
                 if (e != null && !e.isBefore(stop.arrival) && end.isAfter(e)) {
                     findings += GuardFinding(
                         "doc.inUse.validity", GuardSeverity.BLOCK, "In use by a trip",
-                        "This document would no longer cover the whole stay of trip to $country (stay ends $end; " +
-                            "effective expiry $e).",
+                        "This document would no longer cover the whole stay of trip to $country (stay ends ${end.formatHuman()}; " +
+                            "effective expiry ${e.formatHuman()}).",
                     )
                 }
             }
@@ -489,11 +489,11 @@ object GuardEngine {
                 val usedTrips = ctx.trips.count { t -> t.stops.any { it.documentId == old.id } }
                 val tripNote = if (usedTrips > 0) {
                     " It is still used by ${if (usedTrips == 1) "1 trip" else "$usedTrips trips"} — " +
-                        "review those stops after saving, since they will lose access from $start."
+                        "review those stops after saving, since they will lose access from ${start.formatHuman()}."
                 } else ""
                 GuardFinding(
                     "doc.single.perCountry", GuardSeverity.WARN, "Replaces your existing document",
-                    "This will supersede your ${old.label} from $start, since you can only hold one valid " +
+                    "This will supersede your ${old.label} from ${start.formatHuman()}, since you can only hold one valid " +
                         "$category per country. It stays in your archive, marked as replaced.$tripNote"
                 )
             },
@@ -660,7 +660,7 @@ object GuardEngine {
             findings = listOf(
                 GuardFinding(
                     "trip.ongoing.cap", GuardSeverity.WARN, "Another trip is ongoing",
-                    "Another trip is still open, so saving this one will end it on $end. You can also keep both.",
+                    "Another trip is ongoing, so saving this one will end it on ${end.formatHuman()}. You can also keep both.",
                 ),
             ),
             mutations = listOf(GuardMutation.EndTrip(previous.id, end)),
@@ -696,13 +696,13 @@ object GuardEngine {
             daysUntil in 1..92 -> findings += GuardFinding(
                 "trip.passport.expiringSoon3", GuardSeverity.WARN,
                 "Passport expires within 3 months (${daysUntil} days remaining) — please renew now.",
-                "Your $name passport expires on $expiry.",
+                "Your $name passport expires on ${expiry.formatHuman()}.",
             )
             daysUntil in 93..183 -> findings += GuardFinding(
                 "trip.passport.expiringSoon6", GuardSeverity.WARN,
                 "Passport expires within 6 months (${daysUntil} days remaining) — please double-check " +
                     "validity for your destination.",
-                "Your $name passport expires on $expiry.",
+                "Your $name passport expires on ${expiry.formatHuman()}.",
             )
         }
         // use `!expiry.isBefore(start)` (expiry >= start) so a passport expiring exactly on
@@ -717,10 +717,10 @@ object GuardEngine {
             findings += GuardFinding(
                 "trip.passport.expiresDuringTrip", GuardSeverity.WARN, "Passport expires during trip",
                 if (end == null)
-                    "Your $name passport expires on $expiry — it may expire during this open-ended " +
+                    "Your $name passport expires on ${expiry.formatHuman()} — it may expire during this open-ended " +
                         "trip depending on how long you stay."
                 else
-                    "Your $name passport expires on $expiry, before this trip ends ($end).",
+                    "Your $name passport expires on ${expiry.formatHuman()}, before this trip ends (${end.formatHuman()}).",
             )
         }
         if (expiry.isBefore(start)) {
@@ -744,7 +744,7 @@ object GuardEngine {
                 // attribute it to the held passports collectively rather than to $name.
                 findings += GuardFinding(
                     "trip.passport.expiredBeforeTrip", GuardSeverity.WARN, "Passport expired",
-                    "Your $name passport expired on $expiry. It's still accepted for this trip because " +
+                    "Your $name passport expired on ${expiry.formatHuman()}. It's still accepted for this trip because " +
                         "your passports cover all your destinations.",
                 )
             }

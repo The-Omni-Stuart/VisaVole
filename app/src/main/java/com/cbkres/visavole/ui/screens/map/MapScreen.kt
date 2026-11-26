@@ -54,6 +54,7 @@ import com.cbkres.visavole.ui.app.AppState
 import com.cbkres.visavole.ui.hazeAlphas
 import com.cbkres.visavole.ui.screens.EmptyState
 import com.cbkres.visavole.ui.tapSink
+import com.cbkres.visavole.ui.theme.detailCardShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext

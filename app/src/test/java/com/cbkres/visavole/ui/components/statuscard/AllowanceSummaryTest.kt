@@ -53,7 +53,7 @@ class AllowanceSummaryTest {
             effectiveExpiry = LocalDate.of(2026, 9, 1),
             remainingDays = 0,
         )
-        assertEquals("Expired on 2026-09-01", allowanceSummary(visa))
+        assertEquals("Expired on 1 Sep 2026", allowanceSummary(visa))
 
         // A DANGER rolling zone is "out of days", not "expired" — windows keep the day-count line.
         val zone = snapshot(kind = AllowanceKind.ROLLING, status = AllowanceStatus.DANGER).copy(
@@ -70,10 +70,10 @@ class AllowanceSummaryTest {
             remainingDays = 12,
             entryRemaining = 3,
         )
-        assertEquals("12 days left · 3 entries remaining", allowanceSummary(visa))
+        assertEquals("12 days left · 3 entries left", allowanceSummary(visa))
 
         val last = visa.copy(remainingDays = 1, entryRemaining = 1)
-        assertEquals("1 day left · 1 entry remaining", allowanceSummary(last))
+        assertEquals("1 day left · 1 entry left", allowanceSummary(last))
 
         val today = visa.copy(remainingDays = 0, entryRemaining = 0)
         assertEquals("Expires today · no entries left", allowanceSummary(today))
@@ -82,7 +82,7 @@ class AllowanceSummaryTest {
     @Test
     fun anEntryCountDocumentWithoutDaysShowsJustTheEntriesHalf() {
         val visa = snapshot(kind = AllowanceKind.ENTRY_COUNT).copy(entryRemaining = 4)
-        assertEquals("4 entries remaining", allowanceSummary(visa))
+        assertEquals("4 entries left", allowanceSummary(visa))
     }
 
     @Test
@@ -126,7 +126,7 @@ class AllowanceSummaryTest {
     @Test
     fun recoveryLinePrintsBothDatesAtHomeAndGoesQuietInsideTheZone() {
         val atHome = recovering()
-        assertEquals("Regenerating from 2027-04-01 (2 days)", allowanceAlternateLine(atHome))
+        assertEquals("Regenerating from 1 Apr 2027 (2 days)", allowanceAlternateLine(atHome))
         assertEquals(null, allowanceAlternateLine(atHome.copy(currentTripId = "trip")))
         assertEquals(null, allowanceAlternateLine(atHome.copy(overstayDays = 1)))
     }

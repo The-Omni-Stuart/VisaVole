@@ -386,7 +386,7 @@ internal fun VisaSnackbarHost(hostState: SnackbarHostState, modifier: Modifier =
         snackbar = { data ->
             // Settings hides the nav bar, so the host's Scaffold inset collapses: the safe area is its own.
             Surface(
-                shape = RoundedCornerShape(16.dp),
+                shape = MaterialTheme.shapes.large,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 tonalElevation = 2.dp,
                 modifier = Modifier
@@ -464,12 +464,12 @@ internal const val NO_VALID_DOC = "No valid document"
 /** Pill-scale [NO_VALID_DOC]; the full case does not fit a pill's line. */
 internal const val NO_VALID_DOC_PILL = "no valid doc"
 
-/** "no entries left" / "1 entry remaining" / "n entries remaining" — the ring's in-use sub-line. */
+/** "no entries left" / "1 entry left" / "n entries left" — the ring's in-use sub-line. */
 internal fun entriesRemainingPhrase(remaining: Int?): String = when (remaining) {
-    null -> "no entries remaining"
+    null -> "no entries left"
     0 -> "no entries left"
-    1 -> "1 entry remaining"
-    else -> "$remaining entries remaining"
+    1 -> "1 entry left"
+    else -> "$remaining entries left"
 }
 
 /**

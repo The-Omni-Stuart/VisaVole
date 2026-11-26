@@ -73,7 +73,7 @@ internal fun OnboardingScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(20.dp),
+                .padding(16.dp),
         ) {
             Text("Welcome to Visa Vole", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))

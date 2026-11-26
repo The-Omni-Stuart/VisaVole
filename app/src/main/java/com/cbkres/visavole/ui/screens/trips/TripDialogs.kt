@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.cbkres.visavole.domain.Trip
 import com.cbkres.visavole.domain.WorldData
+import com.cbkres.visavole.domain.formatHuman
 import com.cbkres.visavole.ui.VoleAlertDialog
 import java.time.LocalDate
 
@@ -104,7 +105,7 @@ internal fun OngoingConflictDialog(
 ) {
     VoleAlertDialog(
         title = "Another trip is ongoing",
-        confirmLabel = "Close previous & add",
+        confirmLabel = "Close previous and add",
         onConfirm = onClosePrevious,
         neutralLabel = "Keep both",
         onNeutral = onKeepBoth,
@@ -112,7 +113,7 @@ internal fun OngoingConflictDialog(
         onDismiss = onDismiss,
         content = {
             Text(
-                "“${TripPresentation(conflict.previous, world)}” is still open. Close it on ${conflict.end} and add this trip, or keep both.",
+                "“${TripPresentation(conflict.previous, world)}” is ongoing. Close it on ${conflict.end.formatHuman()} and add this trip, or keep both.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

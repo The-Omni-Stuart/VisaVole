@@ -154,7 +154,7 @@ internal fun TripCard(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             StatusPill(
                 trip.statusAt(today).label,
@@ -190,7 +190,7 @@ internal fun TripCard(
         )
         Row(
             verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (row.zones.isNotEmpty()) {
                 Text(
