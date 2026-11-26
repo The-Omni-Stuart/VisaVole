@@ -49,6 +49,15 @@ class MapGeometryTest {
         assertEquals(true, labelFits(listOf(Rect(0f, 0f, 20f, 10f)), Rect(25f, 0f, 40f, 10f)))
     }
 
+    @Test fun wideStripLabelsAtItsMiddleNotItsEdge() {
+        // Antarctica's projected shape is a strip: clearance ties all along it, so the anchor
+        // must fall mid-width, not at the first grid point the sweep reaches.
+        val strip = floatArrayOf(0f, 0f, 100f, 0f, 100f, 10f, 0f, 10f)
+        val anchor = interiorLabelPoint(listOf(strip))!!
+        assertEquals(true, anchor.y in 3f..7f)
+        assertEquals(true, kotlin.math.abs(anchor.x - 50f) <= 6f)
+    }
+
     @Test fun sameWoundEnclaveIsReversedButOppositeWoundIsLeftAlone() {
         val outer = floatArrayOf(0f, 0f, 100f, 0f, 100f, 100f, 0f, 100f)
         val same = floatArrayOf(20f, 20f, 40f, 20f, 40f, 40f, 20f, 40f)

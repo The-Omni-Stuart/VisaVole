@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -81,7 +82,7 @@ internal fun CountryDetailCard(
                 ),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(countryName, style = MaterialTheme.typography.titleMedium)
+                Text(countryName, style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Filled.Close, contentDescription = "Close")
@@ -94,6 +95,8 @@ internal fun CountryDetailCard(
                 StatusPill(
                     text = if (isHome) "Your country" else level.label(),
                     color = chipTone,
+                    style = MaterialTheme.typography.labelLarge,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                 )
                 val shownDays = daysLabel ?: access?.days?.let { "$it days" }
                 if (!shownDays.isNullOrBlank()) {

@@ -93,27 +93,37 @@ internal fun labelFits(placed: List<Rect>, candidate: Rect): Boolean =
             candidate.top < it.bottom && candidate.bottom > it.top
     }
 
-/** An interior point of the largest landmass, furthest from its outline — a centroid can land in a neighbour. */
+/** An interior point of the largest landmass, furthest from its outline — a centroid can land in a
+ *  neighbour. Near-ties break toward the bbox centre so a wide low strip labels mid-width. */
 internal fun interiorLabelPoint(rings: List<FloatArray>, steps: Int = 21): Offset? {
     val ring = rings.maxByOrNull(::polygonArea) ?: return null
     val b = bboxOf(listOf(ring))
+    val cx = (b.minX + b.maxX) / 2f
+    val cy = (b.minY + b.maxY) / 2f
     var best: Offset? = null
-    var bestScore = -1f
+    var bestClear = -1f
+    var bestCentred = Float.MAX_VALUE
     for (i in 1 until steps) {
         for (j in 1 until steps) {
             val x = b.minX + (b.maxX - b.minX) * i / steps
             val y = b.minY + (b.maxY - b.minY) * j / steps
             if (!pointInRing(ring, x, y)) continue
-            var nearest = Float.MAX_VALUE
+            var clear = Float.MAX_VALUE
             for (k in ring.indices step 2) {
                 val dx = ring[k] - x
                 val dy = ring[k + 1] - y
                 val d = dx * dx + dy * dy
-                if (d < nearest) nearest = d
+                if (d < clear) clear = d
             }
-            if (nearest > bestScore) {
-                bestScore = nearest
-                best = Offset(x, y)
+            val centred = (x - cx) * (x - cx) + (y - cy) * (y - cy)
+            when {
+                best == null || clear > bestClear * 1.01f -> {
+                    bestClear = clear; bestCentred = centred; best = Offset(x, y)
+                }
+                // Within ~1% of the best clearance: the more central point wins.
+                clear >= bestClear * 0.99f && centred < bestCentred -> {
+                    bestCentred = centred; best = Offset(x, y)
+                }
             }
         }
     }

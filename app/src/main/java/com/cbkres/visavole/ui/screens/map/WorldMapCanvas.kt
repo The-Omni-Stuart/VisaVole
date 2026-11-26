@@ -631,7 +631,7 @@ private fun BoxScope.MapZoomControls(
         modifier = Modifier
             .align(Alignment.BottomEnd)
             .tapSink()
-            .padding(horizontal = 12.dp)
+            .padding(horizontal = 16.dp)
             .padding(top = 12.dp, bottom = controlsBottomPadding)
             .onSizeChanged { onHeightChanged(Dp(it.height / density.density)) },
     ) {

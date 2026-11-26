@@ -134,11 +134,11 @@ internal fun MapScreen(
         openBefore = seenSelected != null
         seenSelected = selected
     }
-    // The bottom padding the map's floating zoom controls keep: live card height plus 24dp,
-    // so the panel rides along with the card's morph.
+    // The bottom padding the map's floating zoom controls keep: live card height plus 16dp — the
+    // one edge margin every floating action keeps, card or legend below it alike.
     val controlsTargetBottomPadding =
-        if (cardVisible) cardH + 24.dp
-        else legendH + 8.dp
+        if (cardVisible) cardH + 16.dp
+        else legendH + 16.dp
     // Animated (same spring as the card slide). The map canvas is never shrunk for the card —
     // the card slides over the full-bleed map — so no dark band can appear between the map
     // edge and the card while the fixed 420dp drop exceeds the card's actual height.
@@ -163,7 +163,7 @@ internal fun MapScreen(
             ownVisaCountries = s.ownVisaCountries,
             residenceCountries = s.residenceCountries,
             controlsBottomPadding = controlsBottomPadding,
-            centeringInsetNow = { if (cardVisible) cardH + 24.dp else legendH + 8.dp },
+            centeringInsetNow = { if (cardVisible) cardH + 16.dp else legendH + 16.dp },
             topInset = searchBarH,
             modifier = Modifier.fillMaxSize(),
         )
