@@ -78,4 +78,6 @@ jobs:
 
       - name: Dump connected test results on failure
         if: failure()
-        run: find app/build/outputs/androidTest-results/connected -name '*.xml' -exec cat {} +
+        run: |
+          find app/build/outputs/androidTest-results/connected -name '*.xml' -exec cat {} +
+          adb logcat -d -v brief | grep -E "AndroidRuntime|FATAL|VisaVole" || true
