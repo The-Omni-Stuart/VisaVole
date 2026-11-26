@@ -55,12 +55,9 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.cbkres.visavole.ui.tapSink
 import com.cbkres.visavole.data.WorldMapData
 import com.cbkres.visavole.domain.Access
@@ -219,7 +216,7 @@ internal fun WorldMapCanvas(
     val textMeasurer = rememberTextMeasurer()
     val labelColor = Color.White.copy(alpha = 0.92f)
     val labelBacking = Color.Black.copy(alpha = 0.45f)
-    val labelStyle = remember { TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium) }
+    val labelStyle = MaterialTheme.typography.labelSmall
     val labelLayouts = remember { mutableMapOf<String, androidx.compose.ui.text.TextLayoutResult>() }
     fun layoutFor(text: String) = labelLayouts.getOrPut(text) { textMeasurer.measure(text, labelStyle) }
     val mapDraw: DrawScope.() -> Unit = remember(geometry, drawShapes, labelOrder, selected, canvasSize, zoom, centerWorld, ocean, textMeasurer, labelStyle) {

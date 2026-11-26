@@ -325,7 +325,7 @@ internal fun AddTripDialog(
             if (stops.isEmpty()) {
                 Text(
                     "Add at least one stop to save the trip",
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(8.dp))

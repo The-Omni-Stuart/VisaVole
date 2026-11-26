@@ -84,7 +84,7 @@ internal fun TripStopList(
             if (stops.size > 1) {
                 Text(
                     "Stops are kept in arrival order.",
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(6.dp))
