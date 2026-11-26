@@ -93,16 +93,15 @@ internal fun labelFits(placed: List<Rect>, candidate: Rect): Boolean =
             candidate.top < it.bottom && candidate.bottom > it.top
     }
 
-/** An interior point of the largest landmass, furthest from its outline — a centroid can land in a
- *  neighbour. Near-ties break toward the bbox centre so a wide low strip labels mid-width. */
+/** Interior point of the largest landmass farthest from its outline — a centroid can land in a
+ *  neighbour; central-leaning points ≥60% of the deepest clearance win, so strips label mid-width. */
 internal fun interiorLabelPoint(rings: List<FloatArray>, steps: Int = 21): Offset? {
     val ring = rings.maxByOrNull(::polygonArea) ?: return null
     val b = bboxOf(listOf(ring))
     val cx = (b.minX + b.maxX) / 2f
     val cy = (b.minY + b.maxY) / 2f
-    var best: Offset? = null
-    var bestClear = -1f
-    var bestCentred = Float.MAX_VALUE
+    val points = ArrayList<FloatArray>(steps * steps)
+    var bestClear = 0f
     for (i in 1 until steps) {
         for (j in 1 until steps) {
             val x = b.minX + (b.maxX - b.minX) * i / steps
@@ -115,19 +114,25 @@ internal fun interiorLabelPoint(rings: List<FloatArray>, steps: Int = 21): Offse
                 val d = dx * dx + dy * dy
                 if (d < clear) clear = d
             }
-            val centred = (x - cx) * (x - cx) + (y - cy) * (y - cy)
-            when {
-                best == null || clear > bestClear * 1.01f -> {
-                    bestClear = clear; bestCentred = centred; best = Offset(x, y)
-                }
-                // Within ~1% of the best clearance: the more central point wins.
-                clear >= bestClear * 0.99f && centred < bestCentred -> {
-                    bestCentred = centred; best = Offset(x, y)
-                }
-            }
+            points.add(floatArrayOf(x, y, clear))
+            if (clear > bestClear) bestClear = clear
         }
     }
-    return best
+    if (points.isEmpty()) return null
+    // Clearance is squared, so the 60% band is 0.6 * 0.6; real coastlines never tie exactly,
+    // so a strict deepest-point rule would just pick whichever coast spike comes first.
+    val band = bestClear * 0.36f
+    var best: FloatArray? = null
+    var bestCentred = Float.MAX_VALUE
+    for (p in points) {
+        if (p[2] < band) continue
+        val centred = (p[0] - cx) * (p[0] - cx) + (p[1] - cy) * (p[1] - cy)
+        if (centred < bestCentred) {
+            bestCentred = centred
+            best = p
+        }
+    }
+    return best?.let { Offset(it[0], it[1]) }
 }
 
 internal data class PlacedMapLabel(val iso: String, val text: String, val x: Float, val y: Float, val rect: Rect, val bbox: BBox)

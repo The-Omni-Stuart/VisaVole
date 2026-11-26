@@ -58,6 +58,17 @@ class MapGeometryTest {
         assertEquals(true, kotlin.math.abs(anchor.x - 50f) <= 6f)
     }
 
+    @Test fun jaggedStripStillLabelsNearItsMiddle() {
+        // Real coastlines never tie, so the centre preference needs a clearance band, not a
+        // tie: this strip's deepest point sits right of middle, yet the label belongs central.
+        val jag = floatArrayOf(
+            0f, 0f, 100f, 0f, 100f, 14f, 90f, 14f, 84f, 4f, 70f, 14f, 60f, 4f,
+            50f, 14f, 40f, 4f, 26f, 14f, 16f, 4f, 0f, 10f,
+        )
+        val anchor = interiorLabelPoint(listOf(jag))!!
+        assertEquals(true, kotlin.math.abs(anchor.x - 50f) <= 12f)
+    }
+
     @Test fun sameWoundEnclaveIsReversedButOppositeWoundIsLeftAlone() {
         val outer = floatArrayOf(0f, 0f, 100f, 0f, 100f, 100f, 0f, 100f)
         val same = floatArrayOf(20f, 20f, 40f, 20f, 40f, 40f, 20f, 40f)
