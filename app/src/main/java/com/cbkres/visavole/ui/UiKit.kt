@@ -49,6 +49,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -395,9 +397,12 @@ internal fun VisaSnackbarHost(hostState: SnackbarHostState, modifier: Modifier =
                 shape = MaterialTheme.shapes.large,
                 color = MaterialTheme.colorScheme.surfaceContainerHighest,
                 tonalElevation = 0.dp,
+                // The stock Snackbar self-announces for screen readers; this hand-drawn one must
+                // claim the live region itself so a save ("Trip saved") is spoken.
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp),
+                    .padding(12.dp)
+                    .semantics { liveRegion = LiveRegionMode.Polite },
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
