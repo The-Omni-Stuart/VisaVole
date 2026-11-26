@@ -44,7 +44,7 @@ jobs:
   emulator-tests:
     name: Android emulator tests
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     # Emulator minutes only on the shared branches and on PRs, not every feature push.
     if: >-
       github.event_name == 'pull_request' ||
@@ -70,6 +70,8 @@ jobs:
 
       - name: Run instrumented tests
         uses: reactivecircus/android-emulator-runner@v2
+        id: emu1
+        continue-on-error: true
         with:
           api-level: 36
           target: google_apis
@@ -77,8 +79,24 @@ jobs:
           script: |
             ./gradlew :app:connectedDebugAndroidTest --stacktrace || { adb logcat -d -v brief > /tmp/test-logcat.txt; exit 1; }
 
+      # Runner emulator-boot flakes leave zero test results; retry only those. A real failure
+      # wrote XML, so it is re-surfaced below instead of burning a second boot on it.
+      - name: Run instrumented tests (emulator boot retry)
+        if: steps.emu1.outcome == 'failure' && hashFiles('app/build/outputs/androidTest-results/connected/**/*.xml') == ''
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          script: |
+            ./gradlew :app:connectedDebugAndroidTest --stacktrace || { adb logcat -d -v brief > /tmp/test-logcat.txt; exit 1; }
+
+      - name: Surface the failed test run
+        if: steps.emu1.outcome == 'failure' && hashFiles('app/build/outputs/androidTest-results/connected/**/*.xml') != ''
+        run: exit 1
+
       - name: Dump connected test results on failure
         if: failure()
         run: |
-          find app/build/outputs/androidTest-results/connected -name '*.xml' -exec cat {} +
+          find app/build/outputs/androidTest-results/connected -name '*.xml' -exec cat {} + 2>/dev/null || true
           grep -E "AndroidRuntime|FATAL|ComposeUiTest|VisaVole" /tmp/test-logcat.txt | head -300 || true
