@@ -211,6 +211,10 @@ internal fun MapScreen(
                 // breakdown rows + exact stay label fill in a moment later.
                 var breakdown by remember(selected) { mutableStateOf<List<DocAccess>?>(null) }
                 var daysLabel by remember(selected) { mutableStateOf<String?>(null) }
+                // No rule for any passport: the card lands at header height, far below any
+                // held envelope — see the switch-only envelope below.
+                val barrenIncoming = selectedAccess == null ||
+                    selectedAccess.level == AccessLevel.UNKNOWN
 
                 LaunchedEffect(selected, s.homeCountries, s.access, s.world, s.docs, s.trips, validHomes) {
                     val (b, dl) = withContext(Dispatchers.Default) {
@@ -242,23 +246,22 @@ internal fun MapScreen(
                             MaterialTheme.colorScheme.surfaceContainerHigh
                         )
 
-                        // Switch-only envelope: when a card was already up, the new country
-                        // holds the settled height while its breakdown loads, then morphs into
-                        // place. Opening from closed stays the alpha04 snap.
+                        // Switch-only envelope: when a card was already up, a country whose final
+                        // height is comparable holds the settled height while its breakdown loads,
+                        // then morphs into place. A barren country (no rule for any passport —
+                        // Antarctica) always lands far below any held height, so holding it reads
+                        // as a blank stall then a late shrink; it animates down immediately
+                        // instead. animateContentSize covers every open path so a loaded card
+                        // never snaps between spinner height and final height.
                         .then(
-                            if (openBefore) {
-                                Modifier
-                                    .animateContentSize(
-                                        animationSpec = tween(250),
-                                        alignment = Alignment.TopCenter,
-                                    )
-                                    .then(
-                                        if (breakdown == null && stableCardH > 0.dp) {
-                                            Modifier.height(stableCardH)
-                                        } else {
-                                            Modifier
-                                        }
-                                    )
+                            Modifier.animateContentSize(
+                                animationSpec = tween(250),
+                                alignment = Alignment.TopCenter,
+                            ),
+                        )
+                        .then(
+                            if (openBefore && !barrenIncoming && breakdown == null && stableCardH > 0.dp) {
+                                Modifier.height(stableCardH)
                             } else {
                                 Modifier
                             }
