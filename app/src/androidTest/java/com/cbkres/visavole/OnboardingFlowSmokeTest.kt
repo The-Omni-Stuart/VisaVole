@@ -7,7 +7,6 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
@@ -38,27 +37,16 @@ class OnboardingFlowSmokeTest {
         composeRule.waitUntilExactlyOneExists(hasText("Next"), STEP_TIMEOUT_MS)
         composeRule.settlePop()
         composeRule.onNode(hasText("Next")).performClick()
-        // Distinguishes "expiry never opened" from "opened, then something dismissed it":
-        // sampled right after the click, long before the Done wait expires.
-        var elapsed = 0L
-        listOf(200L, 1000L, 3000L).forEach { at ->
-            composeRule.mainClock.advanceTimeBy(at - elapsed)
-            elapsed = at
-            Log.i(
-                "VisaVole", "t+$at Next=" + composeRule.onAllNodesWithText("Next").fetchSemanticsNodes().size +
-                    " Done=" + composeRule.onAllNodesWithText("Done").fetchSemanticsNodes().size +
-                    " ChooseDates=" + composeRule.onAllNodesWithText("Choose dates").fetchSemanticsNodes().size,
-            )
-        }
         try {
             composeRule.waitUntilExactlyOneExists(hasText("Done"), STEP_TIMEOUT_MS)
         } catch (e: Throwable) {
-            // CI has dropped this step twice; record where the flow actually landed before
-            // rethrowing: node counts per dialog label plus the visible text tree.
-            listOf("Choose dates", "Skip", "Next", "Done", "Cancel").forEach {
-                Log.i("VisaVole", "after-Next nodes[$it]=" + composeRule.onAllNodesWithText(it).fetchSemanticsNodes().size)
+            // Dialogs are separate semantics roots, so a dropped dialog shows as missing text
+            // and nothing else; the label counts name the surviving step (CI greps this tag).
+            val labels = listOf("Choose dates", "Skip", "Next", "Done", "Cancel")
+            val counts = labels.joinToString {
+                "$it=" + composeRule.onAllNodesWithText(it).fetchSemanticsNodes().size
             }
-            logNode(composeRule.onRoot().fetchSemanticsNode(), 0)
+            Log.i("VisaVole", "Done never opened; on-screen: $counts")
             throw e
         }
         composeRule.settlePop()
