@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -77,31 +78,37 @@ internal fun VisaVoleApp(
             BackHandler(enabled = onboardingSettings) { onboardingSettings = false }
             when (rootScreen(s.homeCountries.isEmpty(), onboardingSettings)) {
                 RootScreen.ONBOARDING -> {
-                    Box(Modifier.fillMaxSize()) {
-                        OnboardingScreen(countries = s.world.countries, today = s.today, onAddPassport = { iso, vfrom, expiry -> vm.addOnboardingPassport(iso, vfrom, expiry) })
-                        IconButton(
-                            onClick = { onboardingSettings = true },
-                            modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(8.dp),
-                        ) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
+                    // A theme Surface behind the phase: paints behind the status bar and colours
+                    // the floating gear — the window background follows neither.
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        Box(Modifier.fillMaxSize()) {
+                            OnboardingScreen(countries = s.world.countries, today = s.today, onAddPassport = { iso, vfrom, expiry -> vm.addOnboardingPassport(iso, vfrom, expiry) })
+                            IconButton(
+                                onClick = { onboardingSettings = true },
+                                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(8.dp),
+                            ) { Icon(Icons.Filled.Settings, contentDescription = "Settings") }
+                        }
                     }
                 }
                 RootScreen.SETTINGS -> {
-                    Column(Modifier.fillMaxSize().statusBarsPadding()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { onboardingSettings = false }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(onClick = { onboardingSettings = false }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                                }
+                                Text("Settings", style = MaterialTheme.typography.titleLarge)
                             }
-                            Text("Settings", style = MaterialTheme.typography.titleLarge)
+                            SettingsScreen(
+                                vm,
+                                s,
+                                themeMode = themeMode,
+                                dynamicColor = dynamicColor,
+                                onThemeModeChanged = onThemeModeChanged,
+                                onDynamicColorChanged = onDynamicColorChanged,
+                                modifier = Modifier.fillMaxSize(),
+                            )
                         }
-                        SettingsScreen(
-                            vm,
-                            s,
-                            themeMode = themeMode,
-                            dynamicColor = dynamicColor,
-                            onThemeModeChanged = onThemeModeChanged,
-                            onDynamicColorChanged = onDynamicColorChanged,
-                            modifier = Modifier.fillMaxSize(),
-                        )
                     }
                 }
                 RootScreen.MAIN -> MainScaffold(
