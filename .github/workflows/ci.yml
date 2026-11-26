@@ -74,10 +74,11 @@ jobs:
           api-level: 36
           target: google_apis
           arch: x86_64
-          script: ./gradlew :app:connectedDebugAndroidTest --stacktrace
+          script: |
+            ./gradlew :app:connectedDebugAndroidTest --stacktrace || { adb logcat -d -v brief > /tmp/test-logcat.txt; exit 1; }
 
       - name: Dump connected test results on failure
         if: failure()
         run: |
           find app/build/outputs/androidTest-results/connected -name '*.xml' -exec cat {} +
-          adb logcat -d -v brief | grep -E "AndroidRuntime|FATAL|VisaVole" || true
+          grep -E "AndroidRuntime|FATAL|ComposeUiTest|VisaVole" /tmp/test-logcat.txt | head -300 || true

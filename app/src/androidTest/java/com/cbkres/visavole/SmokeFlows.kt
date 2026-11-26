@@ -2,6 +2,10 @@
 
 package com.cbkres.visavole
 
+import android.util.Log
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -53,4 +57,15 @@ internal fun ComposeTestRule.onboardingPickGermany() {
 internal fun ComposeTestRule.onboardingFinishWithSkip() {
     onNode(hasText("Skip")).performClick()
     waitForAnyText("Visa Vole", timeoutMillis = LOAD_TIMEOUT_MS)
+}
+
+/** The node's text tree in logcat under VisaVole, for CI failure triage — printToPolish left
+ *  the compose-test API in 1.10, and the CI dump greps this tag. */
+internal fun logNode(node: SemanticsNode, depth: Int) {
+    val label = node.config.getOrNull(SemanticsProperties.Text)?.joinToString()
+        ?: node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString()
+        ?: node.config.getOrNull(SemanticsProperties.Role)?.toString()
+        ?: "-"
+    Log.i("VisaVole", " ".repeat(depth * 2) + label)
+    node.children.forEach { logNode(it, depth + 1) }
 }

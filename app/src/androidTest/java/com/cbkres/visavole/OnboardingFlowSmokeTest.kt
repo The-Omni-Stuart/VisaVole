@@ -2,10 +2,12 @@
 
 package com.cbkres.visavole
 
+import android.util.Log
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
@@ -36,7 +38,17 @@ class OnboardingFlowSmokeTest {
         composeRule.waitUntilExactlyOneExists(hasText("Next"), STEP_TIMEOUT_MS)
         composeRule.settlePop()
         composeRule.onNode(hasText("Next")).performClick()
-        composeRule.waitUntilExactlyOneExists(hasText("Done"), STEP_TIMEOUT_MS)
+        try {
+            composeRule.waitUntilExactlyOneExists(hasText("Done"), STEP_TIMEOUT_MS)
+        } catch (e: Throwable) {
+            // CI has dropped this step twice; record where the flow actually landed before
+            // rethrowing: node counts per dialog label plus the visible text tree.
+            listOf("Choose dates", "Skip", "Next", "Done", "Cancel").forEach {
+                Log.i("VisaVole", "after-Next nodes[$it]=" + composeRule.onAllNodesWithText(it).fetchSemanticsNodes().size)
+            }
+            logNode(composeRule.onRoot().fetchSemanticsNode(), 0)
+            throw e
+        }
         composeRule.settlePop()
         composeRule.onNode(hasText("Done")).performClick()
         // The passport triggers a home-country world reload; the scaffold's top bar lands after it.
