@@ -379,7 +379,9 @@ internal fun VisaDatePickerDialog(
         (maxDate == null || !selected.isAfter(maxDate))
     VisaDialog(onDismissRequest = onDismiss, width = 400.dp) {
         Column(Modifier.padding(20.dp)) {
-            DatePicker(state = state)
+            // Weighted: a wrapped calendar pushes the confirm row past the height-capped
+            // card's clip on short screens, and taps there fall through to the scrim instead.
+            DatePicker(state = state, modifier = Modifier.weight(1f, fill = false))
             Spacer(Modifier.height(20.dp))
             // The one confirm-row grammar, so the picker pops and sits like every other dialog.
             Row(
