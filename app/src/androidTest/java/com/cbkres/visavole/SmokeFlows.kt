@@ -29,6 +29,11 @@ internal fun ComposeTestRule.clickNavTab(label: String) {
     onNode(hasText(label) and isSelectable()).performClick()
 }
 
+/** Let a dialog's pop-in finish before injecting a click: mid-animation the button's on-screen
+ *  centre lags its layout bounds (0.92 scale-in around the dialog centre), so a fast follow-up
+ *  tap can miss. Advancing the test clock runs the tween deterministically. */
+internal fun ComposeTestRule.settlePop() = mainClock.advanceTimeBy(300)
+
 /** The one editable field on screen — the app's text fields also carry their label as merged
  *  text, but this avoids depending on that. */
 internal fun ComposeTestRule.editableField() = onNode(hasSetTextAction())

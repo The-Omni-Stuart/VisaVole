@@ -34,8 +34,10 @@ class OnboardingFlowSmokeTest {
         // Both pickers keep a legal default selection (valid-from = today, expiry = the earliest
         // legal date), so confirming without touching the calendar is deterministic.
         composeRule.waitUntilExactlyOneExists(hasText("Next"), STEP_TIMEOUT_MS)
+        composeRule.settlePop()
         composeRule.onNode(hasText("Next")).performClick()
         composeRule.waitUntilExactlyOneExists(hasText("Done"), STEP_TIMEOUT_MS)
+        composeRule.settlePop()
         composeRule.onNode(hasText("Done")).performClick()
         // The passport triggers a home-country world reload; the scaffold's top bar lands after it.
         composeRule.waitForAnyText("Visa Vole", timeoutMillis = LOAD_TIMEOUT_MS)
