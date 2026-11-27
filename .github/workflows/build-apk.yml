@@ -77,7 +77,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release:
-    name: Build signed AAB
+    name: Build signed release artifacts
     # Opt-in: needs repo variable RELEASE_ENABLED=true plus the RELEASE_KEYSTORE_BASE64 and RELEASE_KEYSTORE_PASSWORD secrets.
     needs: build
     if: startsWith(github.ref, 'refs/tags/v') && vars.RELEASE_ENABLED == 'true'
@@ -102,12 +102,13 @@ jobs:
             "${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" \
             "${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" > keystore.properties
 
-      - name: Build signed AAB
-        run: ./gradlew :app:bundleRelease --stacktrace
+      - name: Build signed AAB and APK
+        run: ./gradlew :app:bundleRelease :app:assembleRelease --stacktrace
 
-      - name: Rename AAB
+      - name: Rename artifacts
         run: |
           cp app/build/outputs/bundle/release/app-release.aab "VisaVole-${{ needs.build.outputs.name }}.aab"
+          cp app/build/outputs/apk/release/app-release.apk "VisaVole-${{ needs.build.outputs.name }}.apk"
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
@@ -116,9 +117,11 @@ jobs:
           path: VisaVole-*.aab
           if-no-files-found: error
 
-      - name: Attach AAB to the tag release
+      - name: Attach signed artifacts to the tag release
         uses: softprops/action-gh-release@v2
         with:
-          files: VisaVole-*.aab
+          files: |
+            VisaVole-*.aab
+            VisaVole-*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
